@@ -1,0 +1,11 @@
+interface:
+  display_name: "연예인 뉴스 블로그"
+  short_description: "글감 선정부터 이미지 수집·배치와 글쓰기까지 진행합니다"
+  default_prompt: "Use $01-celebrity-news-blog to find current celebrity news topics, collect images for my selection, and write a Naver blog post with image placements."
+policy:
+  products:
+    - chatgpt
+    - codex
+    - api
+    - atlas
+  allow_implicit_invocation: true

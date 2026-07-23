@@ -1,0 +1,11 @@
+interface:
+  display_name: "\uC1FC\uD551\uCEE4\uB125\uD2B8 \uBE14\uB85C\uADF8 \uAE00\uC4F0\uAE30"
+  short_description: "\uC0C1\uD488 \uB9C1\uD06C\uB97C \uBD84\uC11D\uD574 \uB124\uC774\uBC84\uC6A9 \uC18C\uAC1C \uAE00\uACFC \uC774\uBBF8\uC9C0 \uAD6C\uC131\uC744 \uC791\uC131"
+  default_prompt: Use $02-naver-shopping-connect-blog to turn this Shopping Connect product link into a Naver blog post.
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

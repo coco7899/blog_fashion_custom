@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>네이버 블로그 자동화</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="wrap header-inner">
+      <h1>📝 네이버 블로그 자동화</h1>
+      <div class="login-area">
+        <span id="envBadge" class="badge" hidden></span>
+        <span id="loginBadge" class="badge badge-off">확인 중...</span>
+        <button id="loginBtn" class="btn btn-green">네이버 로그인</button>
+        <button id="logoutBtn" class="btn btn-ghost" hidden>세션 삭제</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- 글쓰기 모드 선택 -->
+    <section class="card">
+      <h2>✍️ 글쓰기 모드 선택</h2>
+      <div class="row" style="margin-bottom:12px">
+        <select id="runMode" title="임시저장할지 바로 발행할지">
+          <option value="draft">임시저장 (직접 발행)</option>
+          <option value="publish">바로 발행</option>
+        </select>
+        <select id="runVisibility" title="발행 시 공개 설정">
+          <option value="public">공개</option>
+          <option value="private">비공개</option>
+        </select>
+      </div>
+      <div class="mode-grid">
+        <div class="mode-box">
+          <h3>📰 연예인 뉴스 글</h3>
+          <p class="hint">최신 연예인 패션·뷰티·생활용품·건강·방송/SNS 화제에서 AI가 글감을 찾아 글을 씁니다.<br />글 맨 아래에 <b>출처 링크</b>가 달립니다.</p>
+          <button id="newsModeBtn" class="btn btn-primary">글감 찾기</button>
+          <div class="row" style="margin-top:10px; width:100%">
+            <input id="linkInput" type="text" placeholder="또는 뉴스 기사 링크 붙여넣기 (https://...)" style="flex:1; min-width:180px" />
+            <button id="linkModeBtn" class="btn btn-ghost">링크로 글쓰기</button>
+          </div>
+          <p id="newsModeStatus" class="status" hidden></p>
+        </div>
+        <div class="mode-box">
+          <h3>🛒 쇼핑커넥트 소개 글</h3>
+          <p class="hint">쇼핑커넥트에서 <b>지금 반응 좋은 상품 1개</b>를 자동 선정해 소개 글을 씁니다.<br />상세페이지 사진 사용, 맨 아래 <b>제휴 링크</b>가 달립니다.</p>
+          <button id="productModeBtn" class="btn btn-green">상품 자동 선정 글쓰기</button>
+          <div class="row" style="margin-top:10px; width:100%">
+            <input id="productLinkInput" type="text" placeholder="또는 상품 링크 붙여넣기 (쇼핑커넥트/스마트스토어)" style="flex:1; min-width:180px" />
+            <button id="productLinkBtn" class="btn btn-ghost">이 상품으로 글쓰기</button>
+          </div>
+          <p id="productModeStatus" class="status" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 글감 목록 (연예인 뉴스 모드) -->
+    <section class="card" id="topicsCard" hidden>
+      <h2>글감 선택 <span class="hint-inline">— 선택하면 AI 작성 후 네이버 블로그에 자동 진행</span>
+        <button id="clearTopicsBtn" class="btn btn-ghost btn-sm" style="float:right">모든 글감 삭제</button>
+      </h2>
+      <div id="topicsList" class="topics"></div>
+    </section>
+
+    <!-- 진행 상황 -->
+    <section class="card progress-card" id="progressCard" hidden>
+      <h2>진행 상황
+        <button id="stopBtn" class="btn btn-danger btn-sm" style="float:right">■ 진행 중지</button>
+      </h2>
+      <div class="progress-steps" id="progressSteps"></div>
+      <p id="progressMsg" class="status"></p>
+      <p id="progressResult" hidden></p>
+    </section>
+
+    <!-- 작업 이력 -->
+    <section class="card">
+      <h2>작업 이력
+        <button id="clearDraftsBtn" class="btn btn-ghost btn-sm" style="float:right">모든 작업 삭제</button>
+      </h2>
+      <div id="draftsList" class="drafts"><p class="hint">아직 기록이 없습니다.</p></div>
+    </section>
+  </main>
+
+  <!-- 미리보기 모달 -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
+      <button id="modalClose" class="modal-close">✕</button>
+      <div id="modalBody" class="preview"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "naver-blog-auto-custom",
+  "version": "0.1.0",
+  "private": true,
+  "description": "네이버 블로그 자동화 대시보드 (커스텀 사본) - 원본과 별개로 3001 포트에서 실행",
+  "scripts": {
+    "start": "node server-custom.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "image-size": "^1.1.1",
+    "playwright": "^1.45.0"
+  }
+}
