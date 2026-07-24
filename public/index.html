@@ -37,7 +37,10 @@
         <div class="mode-box">
           <h3>📰 연예인 뉴스 글</h3>
           <p class="hint">최신 연예인 패션·뷰티·생활용품·건강·방송/SNS 화제에서 AI가 글감을 찾아 글을 씁니다.<br />글 맨 아래에 <b>출처 링크</b>가 달립니다.</p>
-          <button id="newsModeBtn" class="btn btn-primary">글감 찾기</button>
+          <div class="row" style="gap:8px">
+            <button id="newsModeBtn" class="btn btn-primary">글감 찾기</button>
+            <button id="newsStopBtn" class="btn btn-danger" hidden>■ 중지</button>
+          </div>
           <div class="row" style="margin-top:10px; width:100%">
             <input id="linkInput" type="text" placeholder="또는 뉴스 기사 링크 붙여넣기 (https://...)" style="flex:1; min-width:180px" />
             <button id="linkModeBtn" class="btn btn-ghost">링크로 글쓰기</button>

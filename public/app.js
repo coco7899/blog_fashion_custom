@@ -11,6 +11,34 @@ const api = async (url, opts = {}) => {
   return data;
 };
 
+// 브라우저 내장 confirm()은 일부 환경(임베디드 미리보기 등)에서 차단되어
+// 버튼이 "안 눌리는" 것처럼 보인다. 어디서나 동작하는 자체 확인창으로 대체한다.
+function uiConfirm(message) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'ui-confirm-overlay';
+    ov.innerHTML =
+      '<div class="ui-confirm-box">' +
+      '<div class="ui-confirm-msg"></div>' +
+      '<div class="ui-confirm-actions">' +
+      '<button class="btn btn-ghost ui-confirm-no">취소</button>' +
+      '<button class="btn btn-green ui-confirm-yes">확인</button>' +
+      '</div></div>';
+    ov.querySelector('.ui-confirm-msg').textContent = message;
+    const done = (v) => {
+      ov.remove();
+      resolve(v);
+    };
+    ov.querySelector('.ui-confirm-yes').onclick = () => done(true);
+    ov.querySelector('.ui-confirm-no').onclick = () => done(false);
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) done(false);
+    });
+    document.body.appendChild(ov);
+    ov.querySelector('.ui-confirm-yes').focus();
+  });
+}
+
 const STEPS = [
   { key: 'collecting', label: '자료 수집' },
   { key: 'writing', label: 'AI 글 작성' },
@@ -93,30 +121,45 @@ $('loginBtn').onclick = async () => {
 };
 
 $('logoutBtn').onclick = async () => {
-  if (!confirm('저장된 네이버 로그인 세션을 삭제할까요?')) return;
+  if (!(await uiConfirm('저장된 네이버 로그인 세션을 삭제할까요?'))) return;
   await api('/api/logout', { method: 'POST' });
   refreshStatus();
 };
 
-// ── 모드 1: 연예인 뉴스 글 — 글감 찾기 ────────
+// ── 모드 1: 연예인 뉴스 글 — 글감 찾기 (중지 가능) ────────
+let topicsAbort = null;
 $('newsModeBtn').onclick = async () => {
   const btn = $('newsModeBtn');
+  const stopBtn = $('newsStopBtn');
   btn.disabled = true;
+  stopBtn.hidden = false;
   const st = $('newsModeStatus');
   st.hidden = false;
   st.className = 'status';
-  st.textContent = '최신 연예인 뉴스를 수집하고 AI가 글감을 뽑는 중... (1~2분)';
+  st.textContent = '최신 연예인 뉴스를 수집하고 AI가 글감을 뽑는 중... (1~2분) — 오른쪽 중지 버튼으로 취소할 수 있어요.';
+  topicsAbort = new AbortController();
   try {
-    const data = await api('/api/schedule/topics', { method: 'POST' });
+    const data = await api('/api/schedule/topics', { method: 'POST', signal: topicsAbort.signal });
     currentSearch = data;
     renderTopics(data);
     st.textContent = `글감 ${data.topics.length}개를 찾았습니다. 아래에서 선택하세요.`;
   } catch (e) {
-    st.className = 'status err';
-    st.textContent = '실패: ' + e.message;
+    if (e.name === 'AbortError') {
+      st.className = 'status';
+      st.textContent = '글감 찾기를 중지했습니다.';
+    } else {
+      st.className = 'status err';
+      st.textContent = '실패: ' + e.message;
+    }
   } finally {
     btn.disabled = false;
+    stopBtn.hidden = true;
+    topicsAbort = null;
   }
+};
+// 글감 찾기 중지 — 진행 중인 요청을 취소한다
+$('newsStopBtn').onclick = () => {
+  if (topicsAbort) topicsAbort.abort();
 };
 
 // ── 모드 1-b: 뉴스 링크로 바로 글쓰기 ─────────
@@ -126,7 +169,7 @@ $('linkModeBtn').onclick = async () => {
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
-  if (!confirm(`이 기사 링크를 바탕으로 AI가 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}\n시작할까요?`)) return;
+  if (!(await uiConfirm(`이 기사 링크를 바탕으로 AI가 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}\n시작할까요?`))) return;
   const btn = $('linkModeBtn');
   btn.disabled = true;
   const st = $('newsModeStatus');
@@ -150,7 +193,7 @@ $('productModeBtn').onclick = async () => {
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
-  if (!confirm(`쇼핑커넥트에서 지금 반응 좋은 상품 1개를 자동으로 골라 소개 글을 쓰고 ${actLabel}까지 진행합니다.\n시작할까요?`)) return;
+  if (!(await uiConfirm(`쇼핑커넥트에서 지금 반응 좋은 상품 1개를 자동으로 골라 소개 글을 쓰고 ${actLabel}까지 진행합니다.\n시작할까요?`))) return;
   const btn = $('productModeBtn');
   btn.disabled = true;
   const st = $('productModeStatus');
@@ -176,7 +219,7 @@ $('productLinkBtn').onclick = async () => {
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
-  if (!confirm(`이 상품 링크로 소개 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}\n시작할까요?`)) return;
+  if (!(await uiConfirm(`이 상품 링크로 소개 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}\n시작할까요?`))) return;
   const btn = $('productLinkBtn');
   btn.disabled = true;
   const st = $('productModeStatus');
@@ -204,7 +247,7 @@ $('clearTopicsBtn').onclick = () => {
 
 // ── 모든 작업 삭제 (#7) ───────────────────────
 $('clearDraftsBtn').onclick = async () => {
-  if (!confirm('작업 이력의 모든 작업 기록을 삭제할까요? (네이버 블로그에 저장된 글은 지워지지 않습니다)')) return;
+  if (!(await uiConfirm('작업 이력의 모든 작업 기록을 삭제할까요? (네이버 블로그에 저장된 글은 지워지지 않습니다)'))) return;
   try {
     await api('/api/drafts', { method: 'DELETE' });
     loadDrafts();
@@ -269,7 +312,7 @@ async function startRun(topicIndex, visOverride, btnEl) {
   const visibility = visOverride || $('runVisibility').value;
   const mode = $('runMode').value; // 'draft' | 'publish'
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '네이버 블로그에 임시저장';
-  if (!confirm(`"${currentSearch.topics[topicIndex].title}"\n\n이 글감으로 AI가 글을 쓰고 ${actLabel}까지 자동 진행합니다.\n시작할까요?`)) return;
+  if (!(await uiConfirm(`"${currentSearch.topics[topicIndex].title}"\n\n이 글감으로 AI가 글을 쓰고 ${actLabel}까지 자동 진행합니다.\n시작할까요?`))) return;
   // 선택한 글감만 오렌지(실행 중), 나머지 대기 글감은 초록 유지, 완료 글감은 연회색 유지
   runningTopicIndex = topicIndex;
   refreshTopicButtons();
@@ -372,7 +415,7 @@ function resetProgressUI() {
 // 진행 중지 버튼 — 진행을 멈추고 UI를 초기화(흰색) 상태로 되돌린다
 $('stopBtn').onclick = async () => {
   if (!watchingDraft) return;
-  if (!confirm('진행 중인 작업을 중지할까요?')) return;
+  if (!(await uiConfirm('진행 중인 작업을 중지할까요?'))) return;
   const id = watchingDraft;
   $('stopBtn').disabled = true;
   $('stopBtn').textContent = '중지 중…';
@@ -469,7 +512,7 @@ async function loadDrafts() {
     if (retryBtn) {
       retryBtn.onclick = async () => {
         const noun = d.mode === 'publish' ? '발행' : '임시저장';
-        if (!confirm(`작성된 글 그대로 ${noun}만 다시 시도할까요?`)) return;
+        if (!(await uiConfirm(`작성된 글 그대로 ${noun}만 다시 시도할까요?`))) return;
         try {
           await api(`/api/drafts/${d.id}/retry-publish`, { method: 'POST', body: { mode: d.mode || 'draft' } });
           watchDraft(d.id);
