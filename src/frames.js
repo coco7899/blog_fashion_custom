@@ -34,6 +34,7 @@ const CELEB_FRAMES = [
     key: 'key-points',
     label: '핵심 포인트형',
     weight: 3,
+    thinWeight: 5, // 자료가 얇을 때 우선 — 구체 포인트를 강제하는 프레임
     fits: () => true,
     skeleton: [
       '① 이 룩의 핵심을 3가지로 먼저 제시(짧은 문단 3개)',
@@ -65,6 +66,7 @@ const CELEB_FRAMES = [
     key: 'scene-story',
     label: '장면 스토리형',
     weight: 3,
+    thinWeight: 1, // 감성 위주 — 자료가 얇으면 공허해지므로 가중치 낮춤
     fits: () => true,
     skeleton: [
       '① 사진이 공개된 장면·상황 서술',
@@ -80,6 +82,7 @@ const CELEB_FRAMES = [
     key: 'get-the-look',
     label: '따라 입기형',
     weight: 3,
+    thinWeight: 5, // 자료가 얇을 때 우선 — 활용 팁으로 알맹이를 채우는 프레임
     fits: () => true,
     skeleton: [
       '① 이 룩을 이루는 핵심 요소 정리',
@@ -237,12 +240,24 @@ function recentFrameKeys(type, limit = RECENT_AVOID) {
   }
 }
 
+/** 참고자료가 얇은지 판정 — 얇으면 감성 위주 프레임을 피하고 구체형을 우선한다 */
+function isThinMaterial(type, ctx) {
+  const text = type === 'product' ? ctx.detailText : ctx.refText;
+  return String(text || '').length < 800;
+}
+
+/** 프레임의 유효 가중치 — 자료가 얇으면 thinWeight를 우선 사용 */
+function effectiveWeight(f, thin) {
+  if (thin && typeof f.thinWeight === 'number') return f.thinWeight;
+  return f.weight || 1;
+}
+
 /** 가중치 기반 무작위 1개 선택 */
-function weightedPick(list) {
-  const total = list.reduce((s, f) => s + (f.weight || 1), 0);
+function weightedPick(list, thin) {
+  const total = list.reduce((s, f) => s + effectiveWeight(f, thin), 0);
   let r = Math.random() * total;
   for (const f of list) {
-    r -= f.weight || 1;
+    r -= effectiveWeight(f, thin);
     if (r <= 0) return f;
   }
   return list[list.length - 1];
@@ -272,9 +287,10 @@ function pickFrame(type, ctx = {}) {
   const fresh = usable.filter((f) => !recent.includes(f.key));
   const pool = fresh.length ? fresh : usable;
 
-  const picked = weightedPick(pool);
+  const thin = isThinMaterial(type, ctx);
+  const picked = weightedPick(pool, thin);
   console.log(
-    `[frames] ${type} 프레임 선택: ${picked.label} (후보 ${pool.length}/${all.length}, 최근 회피 ${recent.length}건)`
+    `[frames] ${type} 프레임 선택: ${picked.label} (후보 ${pool.length}/${all.length}, 최근 회피 ${recent.length}건${thin ? ', 자료 얇음→구체형 우선' : ''})`
   );
   return picked;
 }
@@ -289,6 +305,12 @@ function renderFrameInstruction(frame) {
     `- 도입: ${frame.intro}`,
     `- 구간 구절(quote) 표현: ${frame.quoteStyle}`,
     `- 마무리: ${frame.outro}`,
+    '',
+    '【알맹이 규칙 — 읽고 나서 남는 게 있어야 합니다 (프레임보다 우선)】',
+    '- 구체 우선: 자료에서 확인된 사실(색·소재·아이템·장소·상황·수치)을 먼저 서술하세요. 두루뭉술한 인상평("존재감이 느껴졌다", "여유가 묻어났다" 류)으로 문단을 채우지 마세요.',
+    '- 자료에 없는 사실을 지어내지 마세요. 근거가 부족하면 인상 묘사를 늘리는 대신, 독자가 바로 써먹을 정보(따라 하기 팁·상황별 활용법·고를 때 기준·주의점)로 확장하세요.',
+    '- 한 문단에 최소 하나는 "구체적 정보나 팁"이 들어가게 하세요. 감상만 있는 문단을 연속으로 두지 마세요.',
+    '- 마무리는 "인상이 오래 남을 것 같아요" 같은 빈 문장 대신, 독자가 바로 적용할 한 가지를 제안하며 끝내세요.',
   ];
   if (frame.guard) lines.push(frame.guard);
   return lines.join('\n');
