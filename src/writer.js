@@ -1,13 +1,17 @@
 // 참고자료 → claude -p 로 자연스러운 블로그 글 재작성 (구조화 블록 출력)
 const claude = require('./claude');
 const skills = require('./skills');
+const frames = require('./frames');
 
 const BLOCK_TYPES = new Set(['heading', 'paragraph', 'quote', 'divider', 'image']);
 
-const MIN_CHARS = 1300; // 본문 최소 글자 수
-const MIN_IMAGES = 4;   // 최소 이미지(사진) 개수
+const MIN_CHARS = 1300;         // 연예인 글 본문 최소 글자 수
+// 상품 글은 짧은 줄바꿈 문체라 자연 분량이 ~1,000~1,200자다. 목표를 너무 높이면
+// 매 글마다 재작성(5분+타임아웃)이 걸리므로, 잘리거나 깨진 결과만 걸러내는 안전선으로 둔다.
+const MIN_PRODUCT_CHARS = 1000;
+const MIN_IMAGES = 4;           // 최소 이미지(사진) 개수
 
-function buildPrompt(topic, refText, retryNote) {
+function buildPrompt(topic, refText, frame, retryNote) {
   const skill = skills.loadSkill('01-celebrity-news-blog');
   return `아래는 "연예인 뉴스 블로그" 스킬 지침입니다. 이 지침을 반드시 따라 블로그 글을 작성하세요.
 
@@ -33,7 +37,10 @@ ${skill}
    예: "김민하 블루 아이섀도우, 네일까지 맞춘 여름 포인트 메이크업"
 6. ★**문장 끝맺음을 다양하게 섞으세요.** 한 글이 전부 "~요"로 끝나면 안 됩니다. "~습니다 / ~예요 / ~죠 / ~더라고요 / ~네요 / ~거든요 / ~답니다"처럼 여러 어미를 실제 말하듯 자연스럽게 번갈아 쓰세요. **같은 어미("~요" 포함)를 2번 연속 쓰지 말고**, 특히 "~요"로 끝나는 문장이 전체의 절반을 넘지 않게 하세요. 굵게(**)는 꼭 필요한 1~3곳만.
 7. 본문 글자 수는 공백 포함 **1,500~1,800자 (반드시 1,400자 이상)**. 줄이 짧은 만큼 문단 수로 분량을 채우세요. 소재가 부족하면 스타일 분석·따라 하기 팁·비슷한 상황 활용법으로 구체적으로 확장하세요.
-8. 도입은 독자의 상황·고민에서 시작(과장·낚시 금지), 마지막은 독자에게 말 거는 1~2줄.
+8. 과장·낚시 금지. 자료로 확인되지 않은 브랜드·가격·사실은 단정하지 마세요.
+
+${frames.renderFrameInstruction(frame)}
+※ 위 구성 프레임은 이번 글에만 적용됩니다. 도입 문구·구간 구절·마무리 표현을 이전 글에서 쓰던 상투적 표현("오늘은 ~에 대해 알아볼게요" 등) 대신 이 프레임 흐름에 맞게 새로 지으세요.
 
 【글감】
 제목: ${topic.title}
@@ -107,19 +114,25 @@ async function writeArticle(topic, refs) {
     )
     .join('\n\n');
 
-  let article = await claude.invokeJson(buildPrompt(topic, refText), { timeoutMs: 300000 });
+  // 이번 글의 구성 프레임 선택 (부적합 제외 → 최근 사용 회피 → 가중 랜덤)
+  const frame = frames.pickFrame('celeb', { refText });
+
+  let article = await claude.invokeJson(buildPrompt(topic, refText, frame), { timeoutMs: 300000 });
   if (!article || !article.title || !Array.isArray(article.blocks)) {
     throw new Error('글 작성 결과 형식이 올바르지 않습니다.');
   }
   article = normalize(article);
 
-  // 최소 글자수/이미지/구간(인용구) 미달 시 1회 보강 재작성
+  // 최소 글자수/이미지/구간(인용구) 미달 + 프레임 고유 요건 미달 시 1회 보강 재작성
   const m = measure(article);
-  if (m.chars < MIN_CHARS || m.images < MIN_IMAGES || m.quotes < 3) {
-    console.log(`[writer] 기준 미달(글자 ${m.chars}, 이미지 ${m.images}, 인용구 ${m.quotes}) → 재작성`);
-    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(글자 ${m.chars}자, 이미지 ${m.images}, 인용구 ${m.quotes}). 반드시: 글자 수 1,400자 이상, quote 블록(구간 구절) 4개 이상, 이미지 5장 이상(시작 2장 포함).\n`;
+  const frameIssue = frame.check ? frame.check(article) : null;
+  if (m.chars < MIN_CHARS || m.images < MIN_IMAGES || m.quotes < 3 || frameIssue) {
+    console.log(
+      `[writer] 기준 미달(글자 ${m.chars}, 이미지 ${m.images}, 인용구 ${m.quotes}${frameIssue ? `, ${frameIssue}` : ''}) → 재작성`
+    );
+    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(글자 ${m.chars}자, 이미지 ${m.images}, 인용구 ${m.quotes}${frameIssue ? `, ${frameIssue}` : ''}). 반드시: 글자 수 1,400자 이상, quote 블록(구간 구절) 4개 이상, 이미지 5장 이상(시작 2장 포함).\n`;
     try {
-      let retry = await claude.invokeJson(buildPrompt(topic, refText, note), { timeoutMs: 300000 });
+      let retry = await claude.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: 300000 });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
         retry = normalize(retry);
         const rm = measure(retry);
@@ -135,6 +148,9 @@ async function writeArticle(topic, refs) {
     }
   }
 
+  // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
+  article.frameKey = frame.key;
+  article.frameLabel = frame.label;
   return article;
 }
 
@@ -190,12 +206,11 @@ function enforceSpecQuote(article, product) {
  * @param {object} detail {description, images}
  * @returns {object} {title, titleAlternatives, tags, blocks}
  */
-async function writeProductArticle(product, detail) {
+function buildProductPrompt(product, detail, frame, imgCount, retryNote) {
   const skill = skills.loadSkill('02-naver-shopping-connect-blog');
   if (!skill) throw new Error('쇼핑커넥트 스킬(skills/02-naver-shopping-connect-blog/SKILL.md)을 찾을 수 없습니다.');
-  const imgCount = Math.min(Math.max((detail.images || []).length, 2), 6);
 
-  const prompt = `아래는 "네이버 쇼핑커넥트 블로그" 스킬 지침입니다. 이 지침을 반드시 따라 상품 소개 글을 작성하세요.
+  return `아래는 "네이버 쇼핑커넥트 블로그" 스킬 지침입니다. 이 지침을 반드시 따라 상품 소개 글을 작성하세요.
 
 ═══════════ 스킬 지침 시작 ═══════════
 ${skill}
@@ -207,16 +222,21 @@ ${skill}
 - 상품 링크는 시스템이 글 마지막에 자동으로 붙입니다. 마지막 문단에서 "아래 링크에서 확인해보세요"로 자연스럽게 유도만 하세요.
 
 【이 블로그의 실제 발행 글 스타일 — 반드시 이 형태로 쓸 것】
-1. 블록 순서: ① image slot 1(대표) → ② **quote 블록 하나에 스펙 요약 전체**. 스펙 quote의 **첫 줄은 반드시 "{상품명} 상품 스펙"** 형태로 쓰세요(상품명은 브랜드+핵심 제품명 위주로 자연스럽게 줄여서. 예: "샤넬 향수 상품 스펙", "토니모리 세라마이드 모찌 토너 상품 스펙"). 그다음 줄부터 "· 상품명: ...\\n· 형태: ...\\n· 핵심 특징: ...\\n· 활용: ...\\n· 가격: ...원 (작성 시점 기준)" 처럼 4~6항목(줄바꿈 \\n). → ③ 문제 상황 도입 문단 → 본문. **광고·제휴 고지 문구는 시스템이 맨 위에 자동 삽입하므로 쓰지 마세요.**
+1. 블록 순서: ① image slot 1(대표) → ② **quote 블록 하나에 스펙 요약 전체**. 스펙 quote의 **첫 줄은 반드시 "{상품명} 상품 스펙"** 형태로 쓰세요(상품명은 브랜드+핵심 제품명 위주로 자연스럽게 줄여서. 예: "샤넬 향수 상품 스펙", "토니모리 세라마이드 모찌 토너 상품 스펙"). 그다음 줄부터 "· 상품명: ...\\n· 형태: ...\\n· 핵심 특징: ...\\n· 활용: ...\\n· 가격: ...원 (작성 시점 기준)" 처럼 4~6항목(줄바꿈 \\n). → ③ 그 다음부터는 아래 【이번 글의 구성 프레임】의 흐름을 따르세요. **광고·제휴 고지 문구는 시스템이 맨 위에 자동 삽입하므로 쓰지 마세요.**
 2. **소제목(heading) 블록을 쓰지 마세요.** 구간 전환은 **quote 블록(8~20자 짧은 구절)**로 합니다.
    예: "섬유항균제는 세탁세제와 역할이 달라요", "공간에 따라 다르게 쓸 수 있는 2in1 구조"
    스펙 quote 외에 구간 quote를 3~5개 쓰세요. "구매 전 체크"도 quote 구절 + 항목 문단으로.
 3. 문단(paragraph 블록)은 **1~2문장, 최대 3줄**. 각 줄은 10~35자에서 줄바꿈 문자(\\n)로 끊으세요.
    **각 quote 구간마다 paragraph 블록을 3~4개씩** 넣어 내용을 충분히 풀어주세요. (전체 paragraph 블록 20개 이상)
 4. 이미지는 대표 1장 + 구간 사이사이 배치.
-5. 제목: "독자 문제 + 해결 실마리, 상품명" 흐름. 예: "실내건조 빨래 냄새가 고민이라면, 랩신 섬유항균제 사용법과 구성"
+5. 제목: 이번 글의 구성 프레임 성격에 맞게 짓되 상품명이 들어가게 하세요. 매번 같은 "~라면, 상품명" 틀을 반복하지 말고 프레임에 맞춰 변형하세요.
+   (문제 해결형 예: "실내건조 빨래 냄새가 고민이라면, 랩신 섬유항균제 사용법과 구성" / 비교·선택형 예: "○○ 사이즈 어떤 걸 골라야 할까, 모델별 차이 정리" / 체크리스트형 예: "○○ 구매 전 확인할 5가지")
 6. ★**문장 끝맺음을 다양하게 섞으세요.** 한 글이 전부 "~요"로 끝나면 안 됩니다. "~습니다 / ~예요 / ~죠 / ~더라고요 / ~네요 / ~거든요 / ~답니다"처럼 여러 어미를 실제 말하듯 자연스럽게 번갈아 쓰세요. **같은 어미("~요" 포함)를 2번 연속 쓰지 말고**, 특히 "~요"로 끝나는 문장이 전체의 절반을 넘지 않게 하세요. 굵게(**)는 꼭 필요한 1~3곳만.
 7. 본문 **1,400~1,700자 (반드시 1,300자 이상)**. 줄이 짧은 만큼 문단 수로 분량을 채우세요. 모든 글 왼쪽 정렬.
+
+${frames.renderFrameInstruction(frame)}
+※ 위 구성 프레임은 이번 글에만 적용됩니다. 도입 문구·구간 구절·마무리 표현을 상투적인 틀 대신 이 프레임 흐름에 맞게 새로 지으세요.
+※ 상세페이지에서 확인되지 않는 성능·효과·수치는 단정하지 마세요.
 
 【상품 정보 (상세페이지에서 수집)】
 상품명: ${product.name}
@@ -245,18 +265,59 @@ ${String(detail.description || '').slice(0, 2200)}
     {"type":"paragraph","text":"마무리와 링크 유도 문단"}
   ]
 }
-tags는 5~10개. 본문(제목 제외) 1,300자 이상.`;
+tags는 5~10개. 본문(제목 제외) 1,300자 이상.
+${retryNote || ''}`;
+}
 
-  let article = await claude.invokeJson(prompt, { timeoutMs: 300000 });
-  if (!article || !article.title || !Array.isArray(article.blocks)) {
-    throw new Error('상품 글 작성 결과 형식이 올바르지 않습니다.');
+/**
+ * 쇼핑커넥트 상품 소개 글 작성 — skills/02-naver-shopping-connect-blog 스킬 지침 구동.
+ * @param {object} product {name, price, commission, reviews, rating, query}
+ * @param {object} detail {description, images}
+ * @returns {object} {title, titleAlternatives, tags, blocks}
+ */
+async function writeProductArticle(product, detail) {
+  const imgCount = Math.min(Math.max((detail.images || []).length, 2), 6);
+
+  // 이번 글의 구성 프레임 선택 — 상세페이지 내용으로 적합성을 판정한다
+  const detailText = `${product.name || ''}\n${String(detail.description || '')}`;
+  const frame = frames.pickFrame('product', { detailText });
+
+  const run = async (note) => {
+    const raw = await claude.invokeJson(buildProductPrompt(product, detail, frame, imgCount, note), {
+      timeoutMs: 300000,
+    });
+    if (!raw || !raw.title || !Array.isArray(raw.blocks)) {
+      throw new Error('상품 글 작성 결과 형식이 올바르지 않습니다.');
+    }
+    const alts = (Array.isArray(raw.titleAlternatives) ? raw.titleAlternatives : []).map(String).slice(0, 3);
+    const a = enforceSpecQuote(normalize(raw), product); // 스펙 인용구 형식/위치 보장
+    a.titleAlternatives = alts;
+    return a;
+  };
+
+  let article = await run();
+
+  // 분량·프레임 요건 미달 시 1회 보강 재작성 (연예인 글과 동일한 품질 기준 적용)
+  const m = measure(article);
+  const frameIssue = frame.check ? frame.check(article) : null;
+  if (m.chars < MIN_PRODUCT_CHARS || frameIssue) {
+    console.log(`[writer] 상품 글 기준 미달(글자 ${m.chars}${frameIssue ? `, ${frameIssue}` : ''}) → 재작성`);
+    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(본문 ${m.chars}자${frameIssue ? `, ${frameIssue}` : ''}). 반드시 본문 ${MIN_PRODUCT_CHARS}자 이상으로, 각 구간마다 문단을 3~4개씩 넣어 충분히 풀어서 쓰세요.\n`;
+    try {
+      const retry = await run(note);
+      const rm = measure(retry);
+      if (rm.chars > m.chars) {
+        article = retry;
+        console.log(`[writer] 상품 글 재작성 채택(글자 ${rm.chars})`);
+      }
+    } catch (e) {
+      console.log(`[writer] 상품 글 재작성 실패(원본 사용): ${e.message}`);
+    }
   }
-  const titleAlternatives = (Array.isArray(article.titleAlternatives) ? article.titleAlternatives : [])
-    .map(String)
-    .slice(0, 3);
-  article = normalize(article);
-  article = enforceSpecQuote(article, product); // 스펙 인용구 형식/위치 보장
-  article.titleAlternatives = titleAlternatives;
+
+  // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
+  article.frameKey = frame.key;
+  article.frameLabel = frame.label;
   return article;
 }
 

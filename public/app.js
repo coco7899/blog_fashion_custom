@@ -461,6 +461,7 @@ async function loadDrafts() {
     div.querySelector('.d-title').textContent = d.title || d.topic?.title || d.keyword;
     div.querySelector('.d-sub').textContent =
       `${new Date(d.createdAt).toLocaleString('ko-KR')} · ${d.keyword} · ${d.visibility === 'private' ? '비공개' : '공개'}` +
+      (d.frameLabel ? ` · 구성: ${d.frameLabel}` : '') +
       (d.status === 'error' ? ` · ${d.error || ''}` : '');
     div.querySelector('.btn-preview').onclick = () => openPreview(d.id);
     if (running) div.querySelector('.btn-preview').onclick = () => watchDraft(d.id);

@@ -110,7 +110,11 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     setStep('writing', `AI가 글 작성 중 (참고자료 ${refs.length}건) — 수 분 걸릴 수 있어요`);
     const article = await writer.writeArticle(topic, refs);
     store.saveArticle(draftId, article);
-    store.updateDraft(draftId, { title: article.title });
+    store.updateDraft(draftId, {
+      title: article.title,
+      frameKey: article.frameKey,
+      frameLabel: article.frameLabel,
+    });
 
     // 3. 이미지 수집 + AI 판정
     //    ※ 타인 블로그 이미지는 절대 사용 금지 — 뉴스 이미지에서만.
@@ -223,7 +227,11 @@ async function runProduct(draftId, visibility, opts = {}) {
     setStep('writing', 'AI가 상품 소개 글 작성 중 — 수 분 걸릴 수 있어요');
     const article = await writer.writeProductArticle(product, detail);
     store.saveArticle(draftId, article);
-    store.updateDraft(draftId, { title: article.title });
+    store.updateDraft(draftId, {
+      title: article.title,
+      frameKey: article.frameKey,
+      frameLabel: article.frameLabel,
+    });
 
     // 4. 상세페이지 이미지 다운로드 → 슬롯에 순서대로 배치 (전부 해당 상품 사진이므로 AI 판정 불필요)
     setStep('images', '상품 이미지 다운로드 중');
