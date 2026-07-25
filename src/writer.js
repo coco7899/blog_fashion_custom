@@ -5,6 +5,14 @@ const frames = require('./frames');
 
 const BLOCK_TYPES = new Set(['heading', 'paragraph', 'quote', 'divider', 'image']);
 
+// AI 글쓰기 제한 시간. 이 프롬프트(스킬 지침+참고자료+구조화 JSON 출력)는 실측 4~7분이
+// 걸려서 5분 제한으로는 절반 가까이 실패했다. 여유를 둬 타임아웃 실패를 없앤다.
+const WRITE_TIMEOUT_MS = 600000; // 10분
+
+// 재작성을 건너뛰는 여유폭. 기준에 이만큼 이내로 근접했으면 굳이 다시 쓰지 않는다.
+// (재작성은 한 번에 수 분이 더 들고, 대개 원본과 큰 차이가 없다)
+const CHARS_TOLERANCE = 150;
+
 const MIN_CHARS = 1300;         // 연예인 글 본문 최소 글자 수
 // 상품 글은 짧은 줄바꿈 문체라 자연 분량이 ~1,000~1,200자다. 목표를 너무 높이면
 // 매 글마다 재작성(5분+타임아웃)이 걸리므로, 잘리거나 깨진 결과만 걸러내는 안전선으로 둔다.
@@ -117,22 +125,26 @@ async function writeArticle(topic, refs) {
   // 이번 글의 구성 프레임 선택 (부적합 제외 → 최근 사용 회피 → 가중 랜덤)
   const frame = frames.pickFrame('celeb', { refText });
 
-  let article = await claude.invokeJson(buildPrompt(topic, refText, frame), { timeoutMs: 300000 });
+  let article = await claude.invokeJson(buildPrompt(topic, refText, frame), { timeoutMs: WRITE_TIMEOUT_MS });
   if (!article || !article.title || !Array.isArray(article.blocks)) {
     throw new Error('글 작성 결과 형식이 올바르지 않습니다.');
   }
   article = normalize(article);
 
-  // 최소 글자수/이미지/구간(인용구) 미달 + 프레임 고유 요건 미달 시 1회 보강 재작성
+  // 보강 재작성 판단.
+  // 글자 수가 기준에 근접(오차 CHARS_TOLERANCE 이내)하면 재작성하지 않는다 —
+  // 재작성은 수 분이 더 걸리는데 결과가 원본과 크게 다르지 않은 경우가 많다.
+  // 이미지·인용구 부족이나 프레임 요건 미달은 글의 형태 자체가 어긋난 것이므로 그대로 재작성한다.
   const m = measure(article);
   const frameIssue = frame.check ? frame.check(article) : null;
-  if (m.chars < MIN_CHARS || m.images < MIN_IMAGES || m.quotes < 3 || frameIssue) {
+  const charsTooShort = m.chars < MIN_CHARS - CHARS_TOLERANCE;
+  if (charsTooShort || m.images < MIN_IMAGES || m.quotes < 3 || frameIssue) {
     console.log(
       `[writer] 기준 미달(글자 ${m.chars}, 이미지 ${m.images}, 인용구 ${m.quotes}${frameIssue ? `, ${frameIssue}` : ''}) → 재작성`
     );
     const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(글자 ${m.chars}자, 이미지 ${m.images}, 인용구 ${m.quotes}${frameIssue ? `, ${frameIssue}` : ''}). 반드시: 글자 수 1,400자 이상, quote 블록(구간 구절) 4개 이상, 이미지 5장 이상(시작 2장 포함).\n`;
     try {
-      let retry = await claude.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: 300000 });
+      let retry = await claude.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
         retry = normalize(retry);
         const rm = measure(retry);
@@ -146,6 +158,8 @@ async function writeArticle(topic, refs) {
     } catch (e) {
       console.log(`[writer] 재작성 실패(원본 사용): ${e.message}`);
     }
+  } else if (m.chars < MIN_CHARS) {
+    console.log(`[writer] 글자 ${m.chars}자 — 기준(${MIN_CHARS})에 근접해 재작성 생략`);
   }
 
   // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
@@ -284,7 +298,7 @@ async function writeProductArticle(product, detail) {
 
   const run = async (note) => {
     const raw = await claude.invokeJson(buildProductPrompt(product, detail, frame, imgCount, note), {
-      timeoutMs: 300000,
+      timeoutMs: WRITE_TIMEOUT_MS,
     });
     if (!raw || !raw.title || !Array.isArray(raw.blocks)) {
       throw new Error('상품 글 작성 결과 형식이 올바르지 않습니다.');
@@ -300,7 +314,7 @@ async function writeProductArticle(product, detail) {
   // 분량·프레임 요건 미달 시 1회 보강 재작성 (연예인 글과 동일한 품질 기준 적용)
   const m = measure(article);
   const frameIssue = frame.check ? frame.check(article) : null;
-  if (m.chars < MIN_PRODUCT_CHARS || frameIssue) {
+  if (m.chars < MIN_PRODUCT_CHARS - CHARS_TOLERANCE || frameIssue) {
     console.log(`[writer] 상품 글 기준 미달(글자 ${m.chars}${frameIssue ? `, ${frameIssue}` : ''}) → 재작성`);
     const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(본문 ${m.chars}자${frameIssue ? `, ${frameIssue}` : ''}). 반드시 본문 ${MIN_PRODUCT_CHARS}자 이상으로, 각 구간마다 문단을 3~4개씩 넣어 충분히 풀어서 쓰세요.\n`;
     try {
@@ -313,6 +327,8 @@ async function writeProductArticle(product, detail) {
     } catch (e) {
       console.log(`[writer] 상품 글 재작성 실패(원본 사용): ${e.message}`);
     }
+  } else if (m.chars < MIN_PRODUCT_CHARS) {
+    console.log(`[writer] 상품 글 ${m.chars}자 — 기준(${MIN_PRODUCT_CHARS})에 근접해 재작성 생략`);
   }
 
   // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
