@@ -2,15 +2,59 @@
 // (blog_fashion-01 "연예인 뉴스 블로그" 스킬 명세 반영: 분야 확대·최신성·팩트체크·추천)
 const claude = require('./claude');
 
+// 글감으로 쓸 수 있는 뉴스의 최대 나이(일). 이보다 오래된 기사는 후보에서 제외한다.
+// 검색 결과에 몇 년 전 기사가 섞여 들어와 "옛날 소식"이 글감으로 뽑히는 것을 막는다.
+const MAX_SOURCE_AGE_DAYS = 30;
+
+/** 'YYYY.MM.DD' → 오늘 기준 경과 일수. 파싱 불가면 null */
+function ageInDays(dateStr) {
+  const m = String(dateStr || '').match(/(\d{4})\.(\d{1,2})\.(\d{1,2})/);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  return Math.floor((today - d) / 86400000);
+}
+
+/**
+ * 오래된 뉴스 소스를 걸러낸다 (날짜 없는 항목과 블로그는 통과 — 판단 근거가 없으므로).
+ * refs 인덱스는 호출부에서 "원본 배열" 기준으로 사용하므로 원본 인덱스를 함께 돌려준다.
+ * @returns {Array} [{ source, originalIndex }]
+ */
+function filterStaleSources(sources) {
+  const kept = [];
+  const dropped = [];
+  sources.forEach((s, originalIndex) => {
+    const age = s && s.kind === 'news' ? ageInDays(s.date) : null;
+    if (age !== null && age > MAX_SOURCE_AGE_DAYS) dropped.push(s);
+    else kept.push({ source: s, originalIndex });
+  });
+  if (dropped.length) {
+    console.log(
+      `[topics] 오래된 뉴스 ${dropped.length}건 제외(${MAX_SOURCE_AGE_DAYS}일 초과): ` +
+        dropped.map((s) => `${s.date} ${String(s.title).slice(0, 24)}`).join(' / ')
+    );
+  }
+  return kept;
+}
+
 /**
  * @param {string} keyword 관심분야 키워드
  * @param {Array} sources searchNaver 결과를 합친 목록 [{kind,title,url,source}]
  * @param {object} opts {avoidTitles: 이미 발행한 제목들(중복 회피)}
  * @returns {Array} [{title, field, fact, angle, refs:[index], keywords:[], recommended}]
  */
-async function suggestTopics(keyword, sources, { avoidTitles = [] } = {}) {
-  const list = sources
-    .map((s, i) => `${i}. [${s.kind === 'news' ? '뉴스' : '블로그'}] ${s.title}${s.source ? ` (${s.source})` : ''}`)
+async function suggestTopics(keyword, allSources, { avoidTitles = [] } = {}) {
+  // 오래된 기사는 AI에게 아예 넘기지 않는다 (프롬프트 부탁만으로는 걸러지지 않음).
+  // kept[i] = { source, originalIndex } — AI에게는 0..n 로 보여주고, refs는 원본 인덱스로 되돌린다.
+  const kept = filterStaleSources(allSources);
+  if (!kept.length) throw new Error('최근 자료가 없습니다. 오래된 기사만 검색되었습니다.');
+
+  const list = kept
+    .map(
+      ({ source: s }, i) =>
+        `${i}. [${s.kind === 'news' ? '뉴스' : '블로그'}] ${s.title}${s.source ? ` (${s.source})` : ''}${s.date ? ` — ${s.date}` : ''}`
+    )
     .join('\n');
 
   const avoid = avoidTitles.length
@@ -59,35 +103,54 @@ ${avoid}
   const out = arr
     .filter((t) => t && t.title)
     .slice(0, 5)
-    .map((t) => ({
-      title: String(t.title),
-      field: String(t.field || ''),
-      fact: String(t.fact || ''),
-      angle: String(t.angle || ''),
-      refs: (Array.isArray(t.refs) ? t.refs : [])
+    .map((t) => {
+      // AI가 준 번호는 kept 기준 → 실제 원본 배열 인덱스로 변환해서 저장한다.
+      const keptIdx = (Array.isArray(t.refs) ? t.refs : [])
         .map(Number)
-        .filter((i) => Number.isInteger(i) && i >= 0 && i < sources.length),
-      keywords: (Array.isArray(t.keywords) ? t.keywords : []).map(String).slice(0, 8),
-      recommended: !!t.recommended,
-      // 참고한 뉴스 중 날짜가 있는 첫 항목의 날짜를 표시.
-      // refs에서 못 찾으면 뉴스 소스 중 날짜가 있는 첫 항목으로 폴백 → 항상 날짜가 보이게.
-      date: (() => {
-        const refIdx = Array.isArray(t.refs) ? t.refs.map(Number) : [];
-        for (const i of refIdx) {
-          if (sources[i] && sources[i].kind === 'news' && sources[i].date) return sources[i].date;
-        }
-        const anyNews = sources.find((s) => s.kind === 'news' && s.date);
-        return anyNews ? anyNews.date : '';
-      })(),
-    }));
+        .filter((i) => Number.isInteger(i) && i >= 0 && i < kept.length);
+      return {
+        title: String(t.title),
+        field: String(t.field || ''),
+        fact: String(t.fact || ''),
+        angle: String(t.angle || ''),
+        refs: keptIdx.map((i) => kept[i].originalIndex),
+        keywords: (Array.isArray(t.keywords) ? t.keywords : []).map(String).slice(0, 8),
+        recommended: !!t.recommended,
+        // 참고한 뉴스 중 날짜가 있는 첫 항목의 날짜를 표시.
+        // refs에서 못 찾으면 남아 있는 뉴스 중 가장 최근 날짜로 폴백 → 항상 날짜가 보이게.
+        date: (() => {
+          for (const i of keptIdx) {
+            const s = kept[i].source;
+            if (s && s.kind === 'news' && s.date) return s.date;
+          }
+          const newsDates = kept
+            .map(({ source: s }) => (s && s.kind === 'news' ? s.date : ''))
+            .filter(Boolean)
+            .sort()
+            .reverse();
+          return newsDates[0] || '';
+        })(),
+      };
+    });
+  // 안전망: 소스 필터를 통과했더라도 결과 날짜가 오래된 글감은 버린다.
+  const fresh = out.filter((t) => {
+    const age = ageInDays(t.date);
+    if (age !== null && age > MAX_SOURCE_AGE_DAYS) {
+      console.log(`[topics] 오래된 글감 제외(${t.date}): ${t.title.slice(0, 30)}`);
+      return false;
+    }
+    return true;
+  });
+  const result = fresh.length ? fresh : out; // 전부 걸리면 빈 목록 대신 원본 유지
+
   // 추천은 정확히 1개만 (없으면 첫 번째)
-  if (!out.some((t) => t.recommended) && out.length) out[0].recommended = true;
+  if (!result.some((t) => t.recommended) && result.length) result[0].recommended = true;
   let seen = false;
-  for (const t of out) {
+  for (const t of result) {
     if (t.recommended && seen) t.recommended = false;
     if (t.recommended) seen = true;
   }
-  return out;
+  return result;
 }
 
 module.exports = { suggestTopics };
