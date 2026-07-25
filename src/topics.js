@@ -4,7 +4,7 @@ const claude = require('./claude');
 
 // 글감으로 쓸 수 있는 뉴스의 최대 나이(일). 이보다 오래된 기사는 후보에서 제외한다.
 // 검색 결과에 몇 년 전 기사가 섞여 들어와 "옛날 소식"이 글감으로 뽑히는 것을 막는다.
-const MAX_SOURCE_AGE_DAYS = 30;
+const MAX_SOURCE_AGE_DAYS = 5;
 
 /** 'YYYY.MM.DD' → 오늘 기준 경과 일수. 파싱 불가면 null */
 function ageInDays(dateStr) {
