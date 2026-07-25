@@ -10,6 +10,7 @@ const collector = require('./src/collector');
 const topics = require('./src/topics');
 const pipeline = require('./src/pipeline');
 const scheduler = require('./src/scheduler');
+const shortform = require('./src/shortform');
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -319,6 +320,90 @@ app.get('/api/drafts/:id/images/:file', (req, res) => {
   const file = path.basename(req.params.file);
   res.sendFile(path.join(store.imagesDir(req.params.id), 'raw', file), (err) => {
     if (err) res.status(404).end();
+  });
+});
+
+// ── 숏폼(세로 영상) ─────────────────────────────────────────
+// 대본 생성은 시간이 걸리므로 백그라운드로 돌리고 UI는 GET 폴링으로 진행을 본다.
+app.post('/api/drafts/:id/shortform', (req, res) => {
+  const id = req.params.id;
+  const meta = store.getMeta(id);
+  if (!meta) return res.status(404).json({ error: '초안을 찾을 수 없습니다.' });
+  if (!store.getArticle(id)) return res.status(400).json({ error: '작성된 원고가 없습니다. 글쓰기를 먼저 완료해주세요.' });
+
+  const cur = store.getShortform(id);
+  if (cur && cur.status === 'building') return res.status(400).json({ error: '이미 숏폼을 만드는 중입니다.' });
+
+  const opts = {
+    sceneCount: req.body && req.body.sceneCount,
+    totalSeconds: req.body && req.body.totalSeconds,
+    imageMode: req.body && req.body.imageMode,
+    style: req.body && req.body.style,
+  };
+  shortform.generate(id, opts); // 백그라운드
+  res.json({ ok: true, draftId: id });
+});
+
+app.get('/api/drafts/:id/shortform', (req, res) => {
+  const sf = store.getShortform(req.params.id);
+  if (!sf) return res.status(404).json({ error: 'not found' });
+  res.json(sf);
+});
+
+// 편집 내용 저장 (후킹/자막/길이/스타일)
+app.put('/api/drafts/:id/shortform', (req, res) => {
+  const cur = store.getShortform(req.params.id);
+  if (!cur) return res.status(404).json({ error: 'not found' });
+  const body = req.body || {};
+  const patch = {};
+  if (typeof body.hook === 'string') patch.hook = body.hook.slice(0, 40);
+  if (typeof body.hookSub === 'string') patch.hookSub = body.hookSub.slice(0, 60);
+  if (typeof body.caption === 'string') patch.caption = body.caption.slice(0, 600);
+  if (body.style && typeof body.style === 'object') patch.style = { ...cur.style, ...body.style };
+  if (Array.isArray(body.scenes)) {
+    // 장면 순서·개수는 서버 것을 신뢰하고, 편집 가능한 필드만 덮어쓴다
+    patch.scenes = cur.scenes.map((s, i) => {
+      const b = body.scenes[i] || {};
+      return {
+        ...s,
+        text: typeof b.text === 'string' ? b.text.slice(0, 80) : s.text,
+        narration: typeof b.narration === 'string' ? b.narration.slice(0, 300) : s.narration,
+        seconds: Math.min(8, Math.max(2, Number(b.seconds) || s.seconds)),
+      };
+    });
+  }
+  res.json(store.updateShortform(req.params.id, patch));
+});
+
+// 장면 1개 배경 이미지 AI 재생성
+app.post('/api/drafts/:id/shortform/scenes/:index/image', async (req, res) => {
+  const id = req.params.id;
+  const idx = Number(req.params.index);
+  const sf = store.getShortform(id);
+  if (!sf || !sf.scenes || !sf.scenes[idx]) return res.status(404).json({ error: 'not found' });
+  try {
+    const scene = sf.scenes[idx];
+    if (req.body && typeof req.body.imageDesc === 'string' && req.body.imageDesc.trim()) {
+      scene.imageDesc = req.body.imageDesc.trim().slice(0, 120);
+    }
+    const made = await shortform.regenerateSceneImage(id, scene);
+    const scenes = sf.scenes.slice();
+    scenes[idx] = { ...scene, ...made };
+    res.json(store.updateShortform(id, { scenes }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 숏폼 배경 이미지 서빙 — 숏폼 폴더 우선, 없으면 원고 이미지(raw)
+app.get('/api/drafts/:id/shortform/media/:file', (req, res) => {
+  const file = path.basename(req.params.file);
+  const sfPath = path.join(store.shortformDir(req.params.id), file);
+  res.sendFile(sfPath, (err) => {
+    if (!err) return;
+    res.sendFile(path.join(store.imagesDir(req.params.id), 'raw', file), (err2) => {
+      if (err2) res.status(404).end();
+    });
   });
 });
 

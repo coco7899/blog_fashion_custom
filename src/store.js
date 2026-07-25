@@ -23,6 +23,11 @@ function imagesDir(id) {
   return path.join(draftDir(id), 'images');
 }
 
+// 숏폼(세로 영상) 대본·장면 이미지 보관 폴더
+function shortformDir(id) {
+  return path.join(draftDir(id), 'shortform');
+}
+
 function readJson(file, fallback = null) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -77,6 +82,22 @@ function getJudgments(id) {
   return readJson(path.join(imagesDir(id), 'judgments.json'), []);
 }
 
+function saveShortform(id, data) {
+  writeJson(path.join(shortformDir(id), 'shortform.json'), data);
+  return data;
+}
+
+function getShortform(id) {
+  return readJson(path.join(shortformDir(id), 'shortform.json'));
+}
+
+// 숏폼 문서를 부분 갱신 (진행 상태/장면 이미지 등)
+function updateShortform(id, patch) {
+  const cur = getShortform(id);
+  if (!cur) return null;
+  return saveShortform(id, { ...cur, ...patch, updatedAt: new Date().toISOString() });
+}
+
 function listDrafts() {
   if (!fs.existsSync(DRAFTS_DIR)) return [];
   return fs
@@ -115,6 +136,7 @@ module.exports = {
   SESSION_DIR,
   draftDir,
   imagesDir,
+  shortformDir,
   readJson,
   writeJson,
   createDraft,
@@ -124,6 +146,9 @@ module.exports = {
   getArticle,
   saveJudgments,
   getJudgments,
+  saveShortform,
+  getShortform,
+  updateShortform,
   listDrafts,
   clearDrafts,
   saveSearch,

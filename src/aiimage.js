@@ -20,23 +20,28 @@ function scenePrompt(desc, category) {
  * @param {string} desc 장면 설명(글의 상황/공간)
  * @param {string} destPath 저장 경로(.jpg)
  * @param {string} category 카테고리 힌트(선택)
+ * @param {object} opts {base, width, height} — 숏폼(9:16) 등 다른 비율/화풍이 필요할 때
  */
-async function generate(desc, destPath, category = '') {
-  const prompt = scenePrompt(desc, category);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
+// 이미지 1장 받아오기. 크로미움을 띄우지 않는 fetch를 먼저 쓰고(빠름),
+// 막히면 playwright 요청으로 폴백한다. 429(호출 제한)는 잠시 쉬었다 재시도.
+async function fetchImage(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(120000) });
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
+    if (r.status === 429) return 429;
+    console.log(`[aiimage] fetch 실패 HTTP ${r.status} — 브라우저로 재시도`);
+  } catch (e) {
+    console.log(`[aiimage] fetch 오류(${e.message.split('\n')[0]}) — 브라우저로 재시도`);
+  }
   const browser = await chromium.launch({ headless: true });
   try {
     const ctx = await browser.newContext();
-    const resp = await ctx.request.get(url, { timeout: 90000 });
+    const resp = await ctx.request.get(url, { timeout: 120000 });
     if (!resp.ok()) {
       console.log(`[aiimage] 생성 실패 HTTP ${resp.status()}`);
-      return null;
+      return resp.status() === 429 ? 429 : null;
     }
-    const buf = await resp.body();
-    if (buf.length < 8 * 1024) return null; // 너무 작으면 실패로 간주
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    fs.writeFileSync(destPath, buf);
-    return destPath;
+    return await resp.body();
   } catch (e) {
     console.log(`[aiimage] 생성 오류: ${e.message.split('\n')[0]}`);
     return null;
@@ -45,18 +50,44 @@ async function generate(desc, destPath, category = '') {
   }
 }
 
+async function generate(desc, destPath, category = '', opts = {}) {
+  const prompt = opts.base
+    ? `${String(desc || category || '').slice(0, 80)}, ${opts.base}`
+    : scenePrompt(desc, category);
+  const width = opts.width || 768;
+  const height = opts.height || 768;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
+
+  // 무료 서비스라 호출 제한(429)이 잦다 — 간격을 늘려가며 최대 3번 시도
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const buf = await fetchImage(url);
+    if (buf === 429) {
+      const wait = 5000 * (attempt + 1);
+      console.log(`[aiimage] 호출 제한(429) — ${wait / 1000}초 후 재시도`);
+      await sleep(wait);
+      continue;
+    }
+    if (!buf || buf.length < 8 * 1024) return null; // 너무 작으면 실패로 간주
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.writeFileSync(destPath, buf);
+    return destPath;
+  }
+  return null;
+}
+
 /**
  * 필요한 개수만큼 AI 연출 이미지를 생성해 파일 정보 배열로 반환.
  * @returns {Array} [{file, ai:true, caption}]
  */
-async function generateMany(descs, destDir, { prefix = 'ai', category = '' } = {}) {
+async function generateMany(descs, destDir, { prefix = 'ai', category = '', base, width, height, onProgress } = {}) {
   const out = [];
   for (let i = 0; i < descs.length; i++) {
     const file = `${prefix}-${i + 1}.jpg`;
     const full = path.join(destDir, file);
-    const ok = await generate(descs[i], full, category);
+    if (onProgress) onProgress(i + 1, descs.length);
+    const ok = await generate(descs[i], full, category, { base, width, height });
     if (ok) out.push({ file, ai: true, caption: descs[i] });
-    await sleep(500);
+    await sleep(1500); // 무료 서비스 호출 제한(429) 완화
   }
   return out;
 }
