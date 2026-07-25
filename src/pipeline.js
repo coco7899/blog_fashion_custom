@@ -1,11 +1,10 @@
-// 수집 → AI 작성 → 이미지 판정(본문 곳곳 배치) → 자동 발행 → 메일 알림 파이프라인
+// 수집 → AI 작성 → 이미지 판정(본문 곳곳 배치) → 임시저장/발행 파이프라인
 const path = require('path');
 const store = require('./store');
 const collector = require('./collector');
 const writer = require('./writer');
 const images = require('./images');
 const publisher = require('./publisher');
-const mailer = require('./mailer');
 const brandconnect = require('./brandconnect');
 const aiimage = require('./aiimage');
 
@@ -33,9 +32,9 @@ function buildImageQueries(topic, article) {
   return out.slice(0, 3);
 }
 
-// 임시저장 + 알림 메일 (파이프라인 마지막 단계 — 저장만 재시도할 때도 사용)
+// 임시저장/발행 (파이프라인 마지막 단계 — 저장만 재시도할 때도 사용)
 // mode 기본값 'draft'(임시저장). 'publish'면 즉시 발행.
-async function publishAndNotify(draftId, article, judgments, visibility, notifyEmail, mode = 'draft') {
+async function publishAndNotify(draftId, article, judgments, visibility, mode = 'draft') {
   const savingLabel = mode === 'publish' ? '발행' : '임시저장';
   store.updateDraft(draftId, { status: 'publishing', step: `네이버 블로그 에디터에 작성/${savingLabel} 중` });
   // 출처: 참고한 뉴스 기사 링크 (글 맨 아래에 클릭 가능한 링크로 추가)
@@ -59,23 +58,6 @@ async function publishAndNotify(draftId, article, judgments, visibility, notifyE
   store.updateDraft(draftId, { status: doneStatus, step: doneLabel, postUrl, savedAsDraft, error: null });
   console.log(`[pipeline] ${draftId} ${doneLabel}: ${postUrl}`);
 
-  if (notifyEmail) {
-    store.updateDraft(draftId, { step: `${doneLabel} · 알림 메일 발송 중` });
-    const when = new Date().toLocaleString('ko-KR', { hour12: false });
-    const subject = savedAsDraft
-      ? `[블로그 임시저장] ${article.title}`
-      : `[블로그 자동발행] ${article.title}`;
-    const body = savedAsDraft
-      ? `"${article.title}" 글이 ${when}에 네이버 블로그에 임시저장되었습니다.\n\n네이버 블로그 글쓰기에서 "이어쓰기"로 열어 검토 후 직접 발행하세요.\n글쓰기 화면: ${postUrl}`
-      : `"${article.title}" 글이 ${when}에 발행되었습니다.\n\n글 주소: ${postUrl}\n공개설정: ${visibility === 'private' ? '비공개' : '공개'}`;
-    try {
-      await mailer.sendMail(notifyEmail, subject, body);
-      store.updateDraft(draftId, { step: `${doneLabel} · 메일 알림 발송됨`, mailedTo: notifyEmail, mailedAt: new Date().toISOString() });
-    } catch (e) {
-      console.error(`[pipeline] 알림 메일 실패: ${e.message}`);
-      store.updateDraft(draftId, { step: `${doneLabel} (메일 알림 실패: ${e.message})`, mailError: e.message });
-    }
-  }
   return postUrl;
 }
 
@@ -85,7 +67,7 @@ async function publishAndNotify(draftId, article, judgments, visibility, notifyE
  * @param {object} search {sources}
  * @param {object} topic {title, angle, refs, keywords}
  * @param {string} visibility 'public'|'private'
- * @param {object} opts {notifyEmail}
+ * @param {object} opts {mode}
  */
 // 중지 요청 감지 — 단계 전환마다 호출. 요청됐으면 예외를 던져 파이프라인을 멈춘다.
 function checkStop(draftId) {
@@ -155,9 +137,9 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     }
     store.saveJudgments(draftId, judgments);
 
-    // 4~5. 임시저장(기본) 또는 발행 + 알림 메일
+    // 4~5. 임시저장(기본) 또는 발행
     //      (연예인 뉴스 글은 상품 링크 없이 출처 링크만 — 상품 소개는 runProduct 별도 모드)
-    const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.notifyEmail, opts.mode || 'draft');
+    const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.mode || 'draft');
     return { ok: true, postUrl };
   } catch (e) {
     const stopped = e.message && e.message.includes('중지');
@@ -169,7 +151,7 @@ async function run(draftId, search, topic, visibility, opts = {}) {
 
 /**
  * 상품 소개 파이프라인: 반응 좋은 쇼핑커넥트 상품 1개 선정 → 소개 글 작성
- * → 상세페이지 이미지 본문 배치 → 제휴 링크 발급 → 임시저장/발행 + 메일.
+ * → 상세페이지 이미지 본문 배치 → 제휴 링크 발급 → 임시저장/발행.
  * 예외를 던지지 않고 {ok, postUrl?, error?} 반환.
  */
 async function runProduct(draftId, visibility, opts = {}) {
@@ -273,8 +255,8 @@ async function runProduct(draftId, visibility, opts = {}) {
     });
     store.saveJudgments(draftId, judgments);
 
-    // 5. 임시저장/발행 + 메일 (products는 meta에서 읽힘, 뉴스 출처는 없음)
-    const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.notifyEmail, opts.mode || 'draft');
+    // 5. 임시저장/발행 (products는 meta에서 읽힘, 뉴스 출처는 없음)
+    const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.mode || 'draft');
     return { ok: true, postUrl };
   } catch (e) {
     const stopped = e.message && e.message.includes('중지');

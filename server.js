@@ -103,9 +103,8 @@ app.post('/api/run', async (req, res) => {
     visibility: visibility === 'private' ? 'private' : 'public',
     mode,
   });
-  // 백그라운드 실행 (알림 메일은 스케줄 설정의 주소 사용)
+  // 백그라운드 실행
   pipeline.run(meta.id, search, topic, meta.visibility, {
-    notifyEmail: scheduler.getStatus().settings.notifyEmail,
     mode,
   });
   res.json({ draftId: meta.id });
@@ -127,7 +126,6 @@ app.post('/api/run-product', async (req, res) => {
 
   const meta = store.createDraft({ type: 'product', keyword: '쇼핑커넥트 상품', visibility, mode, sourceUrl: url || undefined });
   pipeline.runProduct(meta.id, visibility, {
-    notifyEmail: scheduler.getStatus().settings.notifyEmail,
     mode,
     productUrl: url || undefined, // 지정 링크가 있으면 그 상품으로
   });
@@ -171,7 +169,6 @@ app.post('/api/run-link', async (req, res) => {
     };
     const meta = store.createDraft({ keyword: '링크 글쓰기', topic, visibility, mode, sourceUrl: url });
     pipeline.run(meta.id, { ...search, id: searchId }, topic, visibility, {
-      notifyEmail: scheduler.getStatus().settings.notifyEmail,
       mode,
     });
     res.json({ draftId: meta.id, title });
@@ -241,10 +238,9 @@ app.post('/api/drafts/:id/retry-publish', async (req, res) => {
   if (!login.loggedIn) return res.status(401).json({ error: '네이버 로그인이 필요합니다.' });
 
   const judgments = store.getJudgments(id);
-  const notifyEmail = scheduler.getStatus().settings.notifyEmail;
   // 백그라운드 실행 — UI는 드래프트 폴링으로 진행 확인
   pipeline
-    .publishAndNotify(id, article, judgments, meta.visibility || 'public', notifyEmail, mode)
+    .publishAndNotify(id, article, judgments, meta.visibility || 'public', mode)
     .catch((e) => {
       console.error(`[retry-publish] ${id} 실패:`, e.message);
       store.updateDraft(id, { status: 'error', step: '재시도 실패: ' + e.message, error: e.message });
@@ -265,13 +261,12 @@ app.post('/api/drafts/:id/retry', async (req, res) => {
   const login = await auth.verify();
   if (!login.loggedIn) return res.status(401).json({ error: '네이버 로그인이 필요합니다.' });
 
-  const notifyEmail = scheduler.getStatus().settings.notifyEmail;
   // 재시도 시작 — 중지 플래그/오류 초기화
   store.updateDraft(id, { status: 'collecting', step: '재시도 준비 중', error: null, stopRequested: false, mode });
 
   if (meta.type === 'product') {
     // 상품 글: 저장된 상품 링크(있으면)로, 없으면 자동 재선정
-    pipeline.runProduct(id, meta.visibility || 'public', { notifyEmail, mode, productUrl: meta.sourceUrl || undefined });
+    pipeline.runProduct(id, meta.visibility || 'public', { mode, productUrl: meta.sourceUrl || undefined });
     return res.json({ ok: true, draftId: id });
   }
 
@@ -280,7 +275,7 @@ app.post('/api/drafts/:id/retry', async (req, res) => {
   if (!sources.length) return res.status(400).json({ error: '재사용할 참고자료가 없어 글감을 다시 찾아야 합니다.' });
   const search = { keyword: meta.keyword, sources };
   const topic = Object.assign({}, meta.topic, { refs: sources.map((_, i) => i) });
-  pipeline.run(id, search, topic, meta.visibility || 'public', { notifyEmail, mode });
+  pipeline.run(id, search, topic, meta.visibility || 'public', { mode });
   res.json({ ok: true, draftId: id });
 });
 

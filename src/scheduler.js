@@ -18,7 +18,6 @@ const DEFAULT_SETTINGS = {
   // 글감 주제 (돌아가며 사용) — 패션·뷰티·생활용품·건강·방송/SNS 화제·셀럽 제품
   keywords: ['연예인 패션', '연예인 뷰티', '연예인 생활용품', '연예인 건강식품', '연예인 SNS 화제', '연예인 애용템'],
   visibility: 'public',
-  notifyEmail: 'eurekajubu@naver.com',
 };
 
 let running = false;
@@ -103,7 +102,6 @@ function updateSettings(patch) {
   }
   if (patch.visibility !== undefined) s.visibility = patch.visibility === 'private' ? 'private' : 'public';
   if (patch.mode !== undefined) s.mode = patch.mode === 'publish' ? 'publish' : 'draft';
-  if (patch.notifyEmail !== undefined) s.notifyEmail = String(patch.notifyEmail).trim();
   data.settings = s;
   save(data);
   return getStatus();
@@ -144,7 +142,6 @@ async function autoPublishOnce() {
 
   const meta = store.createDraft({ keyword, topic, visibility: settings.visibility, mode: settings.mode, auto: true });
   const result = await pipeline.run(meta.id, { sources }, topic, settings.visibility, {
-    notifyEmail: settings.notifyEmail,
     mode: settings.mode,
   });
   if (!result.ok) throw new Error(result.error);
