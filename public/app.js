@@ -52,6 +52,21 @@ let watchingDraft = null;
 let loginPolling = false;
 let runningTopicIndex = null;        // 현재 실행 중인 글감 인덱스 (오렌지)
 const completedTopics = new Set();   // 이미 실행 완료한 글감 인덱스 (연회색)
+let runQueue = [];                   // 대기 중인 글감 인덱스 (순서대로 자동 처리)
+
+// 세션 파일은 있어도 실제 로그인이 만료됐을 수 있어, 유효성을 따로 확인해 배지에 반영한다.
+// (서버 verify는 10분 캐시라 자주 호출해도 부담이 적지만, 클라이언트도 2분 간격으로 throttle)
+let loginValidity = { at: 0, expired: false, checking: false };
+function checkLoginValidity() {
+  if (loginValidity.checking || Date.now() - loginValidity.at < 120000) return;
+  loginValidity.checking = true;
+  api('/api/login/status')
+    .then((r) => {
+      loginValidity = { at: Date.now(), expired: r && r.loggedIn === false && r.expired === true, checking: false };
+      refreshStatus();
+    })
+    .catch(() => { loginValidity.checking = false; });
+}
 
 // ── 로그인 상태 ──────────────────────────────
 async function refreshStatus() {
@@ -70,10 +85,18 @@ async function refreshStatus() {
       $('envBadge').hidden = true;
     }
     if (s.session) {
-      badge.className = 'badge';
-      badge.textContent = s.blogId ? `로그인됨 (${s.blogId})` : '로그인됨';
-      $('loginBtn').textContent = '다시 로그인';
-      $('logoutBtn').hidden = false;
+      checkLoginValidity(); // 실제 유효성(만료 여부) 확인
+      if (loginValidity.expired) {
+        badge.className = 'badge badge-off';
+        badge.textContent = '⚠ 로그인 만료 — 다시 로그인 필요';
+        $('loginBtn').textContent = '다시 로그인';
+        $('logoutBtn').hidden = false;
+      } else {
+        badge.className = 'badge';
+        badge.textContent = s.blogId ? `로그인됨 (${s.blogId})` : '로그인됨';
+        $('loginBtn').textContent = '다시 로그인';
+        $('logoutBtn').hidden = false;
+      }
     } else if (s.loginError && !s.loginInProgress) {
       badge.className = 'badge badge-off';
       badge.textContent = '로그인 실패: ' + s.loginError;
@@ -93,6 +116,7 @@ async function refreshStatus() {
 
 $('loginBtn').onclick = async () => {
   $('loginBtn').disabled = true;
+  loginValidity = { at: 0, expired: false, checking: false }; // 재로그인 시 유효성 재확인
   try {
     await api('/api/login', { method: 'POST' });
     $('loginBadge').className = 'badge badge-warn';
@@ -160,6 +184,40 @@ $('newsModeBtn').onclick = async () => {
 // 글감 찾기 중지 — 진행 중인 요청을 취소한다
 $('newsStopBtn').onclick = () => {
   if (topicsAbort) topicsAbort.abort();
+};
+
+// ── 모드 1-c: 키워드로 관련 기사 찾아 글감 만들기 ──────
+$('keywordModeBtn').onclick = async () => {
+  const keyword = $('keywordInput').value.trim();
+  if (!keyword) return alert('찾을 키워드를 입력하세요. (예: 아이유 공항패션)');
+  const btn = $('keywordModeBtn');
+  const stopBtn = $('newsStopBtn');
+  btn.disabled = true;
+  stopBtn.hidden = false;
+  const st = $('newsModeStatus');
+  st.hidden = false;
+  st.className = 'status';
+  st.textContent = `"${keyword}" 관련 최신 기사를 찾고 AI가 글감을 뽑는 중... (1~2분)`;
+  topicsAbort = new AbortController();
+  try {
+    const data = await api('/api/topics', { method: 'POST', body: { keyword }, signal: topicsAbort.signal });
+    currentSearch = data;
+    renderTopics(data);
+    const n = (data.sources || []).length;
+    st.textContent = `"${keyword}" 관련 기사 ${n}건에서 글감 ${data.topics.length}개를 찾았습니다. 아래에서 선택하세요.`;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      st.className = 'status';
+      st.textContent = '키워드 찾기를 중지했습니다.';
+    } else {
+      st.className = 'status err';
+      st.textContent = '실패: ' + e.message;
+    }
+  } finally {
+    btn.disabled = false;
+    stopBtn.hidden = true;
+    topicsAbort = null;
+  }
 };
 
 // ── 모드 1-b: 뉴스 링크로 바로 글쓰기 ─────────
@@ -241,9 +299,11 @@ $('productLinkBtn').onclick = async () => {
 // ── 모든 글감 삭제 (#5) ───────────────────────
 $('clearTopicsBtn').onclick = () => {
   currentSearch = null;
+  runQueue = [];
   $('topicsList').innerHTML = '';
   $('topicsCard').hidden = true;
 };
+$('runAllBtn').onclick = () => runAllTopics();
 
 // ── 모든 작업 삭제 (#7) ───────────────────────
 $('clearDraftsBtn').onclick = async () => {
@@ -262,6 +322,7 @@ function renderTopics(data, visOverride) {
   // 새 글감 목록 → 실행 상태 초기화 (모두 대기=초록)
   runningTopicIndex = null;
   completedTopics.clear();
+  runQueue = [];
   const list = $('topicsList');
   list.innerHTML = '';
   data.topics.forEach((t, i) => {
@@ -305,17 +366,40 @@ function renderTopics(data, visOverride) {
   $('topicsCard').scrollIntoView({ behavior: 'smooth' });
 }
 
-// ── 파이프라인 실행 & 진행 표시 ──────────────
-async function startRun(topicIndex, visOverride, btnEl) {
+// ── 파이프라인 실행: 여러 글감을 대기열에 쌓아 하나씩 자동 처리 ──
+// (동시 발행은 네이버 로그인 브라우저·세션이 충돌하고 스팸 감지 위험이 커서,
+//  안전하게 순서대로 처리한다. 사용자는 여러 개를 눌러두고 자리를 비워도 된다.)
+async function startRun(topicIndex, visOverride) {
   if (!currentSearch) return;
-  // 발행 방식·공개 설정은 상단 "글쓰기 모드 선택"의 설정을 따른다
-  const visibility = visOverride || $('runVisibility').value;
+  if (completedTopics.has(topicIndex) || runningTopicIndex === topicIndex) return;
+  // 대기 중인 글감을 다시 누르면 대기 취소
+  if (runQueue.includes(topicIndex)) {
+    runQueue = runQueue.filter((x) => x !== topicIndex);
+    refreshTopicButtons();
+    return;
+  }
   const mode = $('runMode').value; // 'draft' | 'publish'
+  const visibility = visOverride || $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '네이버 블로그에 임시저장';
-  if (!(await uiConfirm(`"${currentSearch.topics[topicIndex].title}"\n\n이 글감으로 AI가 글을 쓰고 ${actLabel}까지 자동 진행합니다.\n시작할까요?`))) return;
-  // 선택한 글감만 오렌지(실행 중), 나머지 대기 글감은 초록 유지, 완료 글감은 연회색 유지
+  const busy = runningTopicIndex !== null || runQueue.length > 0;
+  const msg = busy
+    ? `"${currentSearch.topics[topicIndex].title}"\n\n대기열에 추가합니다. 앞의 작업이 끝나면 이어서 ${actLabel}까지 자동 진행합니다.\n추가할까요?`
+    : `"${currentSearch.topics[topicIndex].title}"\n\n이 글감으로 AI가 글을 쓰고 ${actLabel}까지 자동 진행합니다.\n시작할까요?`;
+  if (!(await uiConfirm(msg))) return;
+  runQueue.push(topicIndex);
+  refreshTopicButtons();
+  processQueue(visOverride);
+}
+
+// 대기열에서 다음 글감을 꺼내 실행 (한 번에 하나씩)
+async function processQueue(visOverride) {
+  if (runningTopicIndex !== null) return; // 이미 하나 실행 중이면 대기
+  if (!runQueue.length) return;
+  const topicIndex = runQueue.shift();
   runningTopicIndex = topicIndex;
   refreshTopicButtons();
+  const visibility = visOverride || $('runVisibility').value;
+  const mode = $('runMode').value;
   try {
     const { draftId } = await api('/api/run', {
       method: 'POST',
@@ -323,19 +407,45 @@ async function startRun(topicIndex, visOverride, btnEl) {
     });
     watchDraft(draftId, topicIndex);
   } catch (e) {
+    // 네이버 로그인 만료(401)면 대기열을 멈추고 재로그인을 안내한다 (계속하면 전부 실패)
+    if (/로그인/.test(e.message)) {
+      runningTopicIndex = null;
+      runQueue = [];
+      refreshTopicButtons();
+      loginValidity = { at: 0, expired: true, checking: false };
+      refreshStatus();
+      alert('네이버 로그인이 만료되어 실행할 수 없어요.\n우측 상단 "다시 로그인"으로 네이버에 다시 로그인한 뒤 실행해주세요.');
+      return;
+    }
     alert(e.message);
-    // 실패 시 실행 중 상태 해제 → 초록으로 원복
     runningTopicIndex = null;
     refreshTopicButtons();
+    processQueue(visOverride); // 그 외 오류는 다음 글감으로 진행
   }
 }
 
-// 글감 실행 버튼 색상을 상태에 맞게 다시 그린다
-//  - 완료: 연회색 '실행완료'  · 실행 중: 오렌지  · 그 외 대기: 초록
+// 남은 글감(완료·실행·대기 제외)을 모두 대기열에 추가해 순서대로 처리
+async function runAllTopics() {
+  if (!currentSearch) return;
+  const pending = currentSearch.topics
+    .map((_, i) => i)
+    .filter((i) => !completedTopics.has(i) && i !== runningTopicIndex && !runQueue.includes(i));
+  if (!pending.length) return alert('대기열에 추가할 글감이 없습니다.');
+  const mode = $('runMode').value;
+  const visibility = $('runVisibility').value;
+  const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
+  if (!(await uiConfirm(`글감 ${pending.length}개를 대기열에 넣고 하나씩 차례대로 ${actLabel}까지 자동 진행합니다.\n(동시가 아니라 안전하게 순서대로 처리됩니다)\n시작할까요?`))) return;
+  runQueue.push(...pending);
+  refreshTopicButtons();
+  processQueue();
+}
+
+// 글감 실행 버튼 상태 표시
+//  - 완료: 연회색 '실행완료' · 실행 중: 오렌지 · 대기: 파랑 '대기 N·취소' · 그 외: 초록
 function refreshTopicButtons() {
-  const anyRunning = runningTopicIndex !== null;
   document.querySelectorAll('.topic-run-btn').forEach((b, i) => {
-    b.classList.remove('btn-green', 'btn-running', 'btn-done', 'btn-primary', 'btn-ghost');
+    b.classList.remove('btn-green', 'btn-running', 'btn-done', 'btn-primary', 'btn-ghost', 'btn-queued');
+    b.disabled = false;
     if (completedTopics.has(i)) {
       b.disabled = true;
       b.classList.add('btn-done');
@@ -344,12 +454,20 @@ function refreshTopicButtons() {
       b.disabled = true;
       b.classList.add('btn-running');
       b.innerHTML = '이 글감으로<br>실행 중…';
+    } else if (runQueue.includes(i)) {
+      // 대기 순번 표시 — 클릭하면 대기 취소
+      b.classList.add('btn-queued');
+      b.innerHTML = `대기 ${runQueue.indexOf(i) + 1}<br>(취소)`;
     } else {
-      b.disabled = anyRunning; // 다른 글감 실행 중엔 클릭 방지, 색은 초록 유지
       b.classList.add('btn-green');
       b.innerHTML = '이 글감으로<br>실행';
     }
   });
+  const allBtn = $('runAllBtn');
+  if (allBtn) {
+    const q = runQueue.length + (runningTopicIndex !== null ? 1 : 0);
+    allBtn.textContent = q ? `⚡ 전체 실행 (진행·대기 ${q})` : '⚡ 전체 실행';
+  }
 }
 
 function renderSteps(status, mode) {
@@ -415,7 +533,11 @@ function resetProgressUI() {
 // 진행 중지 버튼 — 진행을 멈추고 UI를 초기화(흰색) 상태로 되돌린다
 $('stopBtn').onclick = async () => {
   if (!watchingDraft) return;
-  if (!(await uiConfirm('진행 중인 작업을 중지할까요?'))) return;
+  const hadQueue = runQueue.length > 0;
+  const confirmMsg = hadQueue
+    ? `진행 중인 작업과 대기 중인 글감 ${runQueue.length}개를 모두 중지할까요?`
+    : '진행 중인 작업을 중지할까요?';
+  if (!(await uiConfirm(confirmMsg))) return;
   const id = watchingDraft;
   $('stopBtn').disabled = true;
   $('stopBtn').textContent = '중지 중…';
@@ -425,8 +547,9 @@ $('stopBtn').onclick = async () => {
     // 백엔드 중지 요청이 실패해도 UI는 초기화한다
     console.warn('중지 요청 실패:', e.message);
   }
-  // 폴링 중단 + 화면 초기화 (버튼 전부 흰색)
+  // 폴링 중단 + 대기열 비우기 + 화면 초기화 (버튼 전부 흰색)
   watchingDraft = null;
+  runQueue = [];
   resetProgressUI();
   resetTopicButtons();
   $('progressMsg').className = 'status err';
@@ -457,17 +580,25 @@ function watchDraft(draftId, topicIndex = null) {
         resetTopicButtons();
         const r = $('progressResult');
         r.hidden = false;
-        if (meta.status === 'saved') {
-          r.innerHTML = `✅ 임시저장 완료! 네이버 블로그 글쓰기에서 "이어쓰기"로 열어 검토 후 발행하세요. <a href="${meta.postUrl}" target="_blank" style="color:#03c75a;font-weight:700">글쓰기 열기 →</a>`;
-        } else {
-          r.innerHTML = `🎉 발행 완료! <a href="${meta.postUrl}" target="_blank" style="color:#03c75a;font-weight:700">발행된 글 보기 →</a>`;
-        }
+        // 글쓰기가 끝나면 '이 글로 숏폼 만들기'를 주 동작으로 노출한다.
+        const doneLabel = meta.status === 'saved' ? '글 작성 완료' : '발행 완료';
+        const linkLabel = meta.status === 'saved' ? '글쓰기 열기 →' : '발행된 글 보기 →';
+        r.innerHTML = `
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-weight:700">✅ ${doneLabel}</span>
+            <button id="goShortformBtn" class="btn btn-shorts">🎬 숏폼 제작하기</button>
+            ${meta.postUrl ? `<a href="${meta.postUrl}" target="_blank" style="color:#03c75a;font-weight:700;font-size:13px">${linkLabel}</a>` : ''}
+          </div>`;
+        const goBtn = document.getElementById('goShortformBtn');
+        if (goBtn) goBtn.onclick = () => sfOpenPanel(draftId, meta.title || '');
         loadDrafts();
+        processQueue(); // 대기열에 다음 글감이 있으면 이어서 자동 실행
       } else if (meta.status === 'error') {
         clearInterval(poll);
         $('stopBtn').hidden = true;
         resetTopicButtons();
         loadDrafts();
+        processQueue(); // 실패해도 다음 글감으로 진행
       }
     } catch {}
   }, 3000);
@@ -499,8 +630,11 @@ async function loadDrafts() {
         <span class="tag-status ${tag}">${tagText}</span>
         ${d.status === 'error' && d.title ? `<button class="btn btn-primary btn-retry">${d.mode === 'publish' ? '발행' : '임시저장'} 재시도</button>` : ''}
         <button class="btn btn-ghost btn-preview">미리보기</button>
+        ${d.title ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
         ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
       </div>`;
+    const sfBtn = div.querySelector('.btn-shortform');
+    if (sfBtn) sfBtn.onclick = () => sfOpenPanel(d.id, d.title || (d.topic && d.topic.title) || d.keyword);
     div.querySelector('.d-title').textContent = d.title || d.topic?.title || d.keyword;
     div.querySelector('.d-sub').textContent =
       `${new Date(d.createdAt).toLocaleString('ko-KR')} · ${d.keyword} · ${d.visibility === 'private' ? '비공개' : '공개'}` +
@@ -638,6 +772,219 @@ function escapeHtml(s) {
 }
 $('modalClose').onclick = () => ($('modal').hidden = true);
 $('modal').onclick = (e) => { if (e.target === $('modal')) $('modal').hidden = true; };
+
+// ═══════════════ 대시보드 인라인 숏폼 ═══════════════
+// 글쓰기 완료 → '숏폼 제작하기' → 여기서 바로 생성하고 작은 미리보기를 보여준다.
+// 큰 화면은 '미리보기' 버튼(모달)에서. 렌더링은 공용 SF(shortform-render.js) 사용.
+const sfS = { draftId: null, sf: null, imgCache: new Map(), playing: false, playT: 0, poll: null };
+const sfMiniCanvas = $('sfMiniStage');
+const sfMiniCtx = sfMiniCanvas.getContext('2d');
+const sfBigCanvas = $('sfBigStage');
+const sfBigCtx = sfBigCanvas.getContext('2d');
+
+function sfDefaultsStyle(data) {
+  data.style = { offsetY: 10, hookY: 172, hookSize: 76, hookBoxed: true, textSize: 60, theme: 'dark', boxed: true, kenBurns: true, narration: true, ...(data.style || {}) };
+  return data;
+}
+
+function sfRender() {
+  if (!sfS.sf) return;
+  SF.drawFrame(sfMiniCtx, sfS.sf, sfS.playT, sfS.imgCache);
+  if (!$('sfModal').hidden) {
+    SF.drawFrame(sfBigCtx, sfS.sf, sfS.playT, sfS.imgCache);
+    const total = SF.totalSec(sfS.sf);
+    $('sfBigSeek').value = total ? Math.round((sfS.playT / total) * 1000) : 0;
+    $('sfBigTime').textContent = `${sfS.playT.toFixed(1)} / ${total.toFixed(1)}초`;
+  }
+}
+
+function sfUpdatePlayBtns() {
+  $('sfMiniPlay').textContent = sfS.playing ? '❚❚' : '▶';
+  $('sfBigPlay').textContent = sfS.playing ? '❚❚ 정지' : '▶ 재생';
+}
+
+async function sfStartLoop() {
+  const total = SF.totalSec(sfS.sf);
+  if (sfS.playT >= total - 0.05) sfS.playT = 0;
+  const t0 = performance.now() - sfS.playT * 1000;
+  sfS.playing = true;
+  sfUpdatePlayBtns();
+  while (sfS.playing) {
+    sfS.playT = Math.min(total, (performance.now() - t0) / 1000);
+    sfRender();
+    if (sfS.playT >= total) break;
+    await SF.nextTick();
+  }
+  sfS.playing = false;
+  sfUpdatePlayBtns();
+}
+function sfStop() { sfS.playing = false; sfUpdatePlayBtns(); }
+
+// 진행 상태 문자열 → 진행률(%) 추정
+function sfProcPct(step) {
+  const m = /\((\d+)\s*\/\s*(\d+)\)/.exec(step || '');
+  if (m) return 20 + Math.round((Number(m[1]) / Number(m[2])) * 72); // 이미지 단계 20~92%
+  if (/대본/.test(step || '')) return 12;
+  if (/준비/.test(step || '')) return 16;
+  return 8;
+}
+
+function sfShowProcess(step) {
+  $('sfMakeRow').hidden = true;
+  $('sfResult').hidden = true;
+  $('sfProcess').hidden = false;
+  $('sfProcStep').textContent = step || '준비 중…';
+  $('sfProcFill').style.width = sfProcPct(step) + '%';
+}
+
+async function sfShowResult(data) {
+  sfS.sf = sfDefaultsStyle(data);
+  sfS.playT = 0;
+  $('sfProcess').hidden = true;
+  $('sfMakeRow').hidden = true;
+  $('sfResult').hidden = false;
+  const secs = SF.totalSec(sfS.sf).toFixed(0);
+  const imgN = sfS.sf.scenes.filter((s) => s.file).length;
+  $('sfMeta').innerHTML = `후킹: <b>${escapeHtml(sfS.sf.hook || '')}</b> · ${sfS.sf.scenes.length}장면 · 약 ${secs}초 · 이미지 ${imgN}장`;
+  await SF.ensureFont();
+  await SF.preloadAll(sfS.imgCache, sfS.draftId, sfS.sf);
+  sfS.playT = 0.35;
+  sfRender();
+}
+
+function sfPollStatus() {
+  clearInterval(sfS.poll);
+  sfS.poll = setInterval(async () => {
+    const data = await api(`/api/drafts/${sfS.draftId}/shortform`).catch(() => null);
+    if (!data) return;
+    if (data.status === 'ready') {
+      clearInterval(sfS.poll);
+      sfShowResult(data);
+    } else if (data.status === 'error') {
+      clearInterval(sfS.poll);
+      $('sfProcess').hidden = true;
+      $('sfMakeRow').hidden = false;
+      alert('숏폼 생성 실패: ' + (data.error || '알 수 없는 오류'));
+    } else {
+      sfShowProcess(data.step);
+    }
+  }, 2500);
+}
+
+async function sfGenerate() {
+  sfStop();
+  sfShowProcess('AI가 숏폼 대본을 쓰는 중…');
+  try {
+    await api(`/api/drafts/${sfS.draftId}/shortform`, {
+      method: 'POST',
+      body: {
+        sceneCount: Number($('sfSceneCount').value),
+        totalSeconds: Number($('sfTotalSeconds').value),
+        imageMode: $('sfImageMode').value,
+      },
+    });
+    sfPollStatus();
+  } catch (e) {
+    $('sfProcess').hidden = true;
+    $('sfMakeRow').hidden = false;
+    alert('시작 실패: ' + e.message);
+  }
+}
+
+// 패널 열기 — 이미 만들어진 숏폼이 있으면 결과로, 생성 중이면 진행으로, 없으면 옵션 표시
+function sfOpenPanel(draftId, title) {
+  sfStop();
+  clearInterval(sfS.poll);
+  sfS.draftId = draftId;
+  sfS.sf = null;
+  sfS.imgCache = new Map();
+  sfS.playT = 0;
+  $('shortformCard').hidden = false;
+  $('sfForTitle').textContent = title ? '— ' + title : '';
+  $('sfProcess').hidden = true;
+  $('sfResult').hidden = true;
+  $('sfMakeRow').hidden = false;
+  $('sfExportStatus').hidden = true;
+  $('sfExportBarWrap').hidden = true;
+  $('shortformCard').scrollIntoView({ behavior: 'smooth' });
+  api(`/api/drafts/${draftId}/shortform`)
+    .then((data) => {
+      if (data && data.status === 'ready') sfShowResult(data);
+      else if (data && data.status === 'building') { sfShowProcess(data.step); sfPollStatus(); }
+    })
+    .catch(() => {}); // 아직 숏폼 없음 → 옵션 표시 상태 유지
+}
+
+$('sfMakeBtn').onclick = sfGenerate;
+$('sfRemakeBtn').onclick = async () => {
+  if (!(await uiConfirm('현재 숏폼을 버리고 AI가 다시 만들까요?'))) return;
+  $('sfResult').hidden = true;
+  $('sfMakeRow').hidden = false;
+};
+$('sfCloseBtn').onclick = () => { sfStop(); clearInterval(sfS.poll); $('shortformCard').hidden = true; };
+$('sfMiniPlay').onclick = () => (sfS.playing ? sfStop() : sfStartLoop());
+$('sfEditBtn').onclick = () => (location.href = `shortform.html?id=${sfS.draftId}`);
+
+// 큰 미리보기 모달
+$('sfPreviewBtn').onclick = () => {
+  $('sfModal').hidden = false;
+  sfRender();
+};
+$('sfModalClose').onclick = () => { sfStop(); $('sfModal').hidden = true; };
+$('sfModal').onclick = (e) => { if (e.target === $('sfModal')) { sfStop(); $('sfModal').hidden = true; } };
+$('sfBigPlay').onclick = () => (sfS.playing ? sfStop() : sfStartLoop());
+$('sfBigSeek').oninput = (e) => { sfStop(); sfS.playT = (Number(e.target.value) / 1000) * SF.totalSec(sfS.sf); sfRender(); };
+
+// 영상 다운로드 (진행률 표시)
+$('sfVideoBtn').onclick = async () => {
+  const btn = $('sfVideoBtn');
+  btn.disabled = true;
+  sfStop();
+  $('sfExportBarWrap').hidden = false;
+  $('sfExportStatus').hidden = false;
+  $('sfExportStatus').className = 'status';
+  $('sfExportStatus').textContent = '녹화 준비 중…';
+  try {
+    const total = SF.totalSec(sfS.sf);
+    // 녹화는 미니 캔버스에 그려 담는다(화면 표시 상태와 무관하게 프레임 확보)
+    const { blob, ext } = await SF.exportVideo(sfMiniCanvas, sfMiniCtx, sfS.sf, sfS.imgCache, sfS.draftId, {
+      onProgress: (t) => {
+        $('sfExportFill').style.width = Math.round((t / total) * 100) + '%';
+        $('sfExportStatus').textContent = `녹화 중… ${t.toFixed(1)} / ${total.toFixed(1)}초`;
+      },
+    });
+    sfS.playT = 0.35; sfRender();
+    const name = `shortform-${(sfS.sf.title || sfS.draftId).replace(/[\\/:*?"<>|]/g, '').slice(0, 30)}.${ext}`;
+    SF.download(blob, name);
+    $('sfExportStatus').textContent = `✅ ${name} (${(blob.size / 1024 / 1024).toFixed(1)}MB) 다운로드 완료`;
+  } catch (e) {
+    $('sfExportStatus').className = 'status err';
+    $('sfExportStatus').textContent = '실패: ' + e.message;
+  } finally {
+    $('sfExportBarWrap').hidden = true;
+    btn.disabled = false;
+  }
+};
+
+// 사용 이미지 전체 ZIP
+$('sfZipBtn').onclick = async () => {
+  const btn = $('sfZipBtn');
+  btn.disabled = true;
+  $('sfExportStatus').hidden = false;
+  $('sfExportStatus').className = 'status';
+  $('sfExportStatus').textContent = '이미지 압축 중…';
+  try {
+    const blob = await SF.buildImagesZip(sfS.draftId, sfS.sf);
+    const name = `shortform-images-${(sfS.sf.title || sfS.draftId).replace(/[\\/:*?"<>|]/g, '').slice(0, 30)}.zip`;
+    SF.download(blob, name);
+    $('sfExportStatus').textContent = `✅ 이미지 ${sfS.sf.scenes.filter((s) => s.file).length}장 ZIP 다운로드 완료`;
+  } catch (e) {
+    $('sfExportStatus').className = 'status err';
+    $('sfExportStatus').textContent = '실패: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 // 초기화
 refreshStatus();

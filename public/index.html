@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>네이버 블로그 자동화</title>
+  <title>네이버 블로그 자동화 + 숏폼 (커스텀)</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
     <div class="wrap header-inner">
-      <h1>📝 네이버 블로그 자동화</h1>
+      <h1>📝 네이버 블로그 자동화 <span style="color:#7c3aed">+ 🎬 숏폼</span> <span style="font-size:11px;background:#f3e8ff;color:#7c3aed;padding:2px 8px;border-radius:999px;vertical-align:middle;font-weight:700">커스텀 · 4000</span></h1>
       <div class="login-area">
         <span id="envBadge" class="badge" hidden></span>
         <span id="loginBadge" class="badge badge-off">확인 중...</span>
@@ -38,10 +38,15 @@
           <h3>📰 연예인 뉴스 글</h3>
           <p class="hint">최신 연예인 패션·뷰티·생활용품·건강·방송/SNS 화제에서 AI가 글감을 찾아 글을 씁니다.<br />글 맨 아래에 <b>출처 링크</b>가 달립니다.</p>
           <div class="row" style="gap:8px">
-            <button id="newsModeBtn" class="btn btn-primary">글감 찾기</button>
+            <button id="newsModeBtn" class="btn btn-primary">🎲 자동 글감 찾기</button>
             <button id="newsStopBtn" class="btn btn-danger" hidden>■ 중지</button>
           </div>
           <div class="row" style="margin-top:10px; width:100%">
+            <input id="keywordInput" type="text" placeholder="키워드로 관련 기사 찾기 (예: 아이유 공항패션)" style="flex:1; min-width:180px"
+              onkeydown="if(event.key==='Enter'){document.getElementById('keywordModeBtn').click();}" />
+            <button id="keywordModeBtn" class="btn btn-primary">🔎 키워드로 찾기</button>
+          </div>
+          <div class="row" style="margin-top:8px; width:100%">
             <input id="linkInput" type="text" placeholder="또는 뉴스 기사 링크 붙여넣기 (https://...)" style="flex:1; min-width:180px" />
             <button id="linkModeBtn" class="btn btn-ghost">링크로 글쓰기</button>
           </div>
@@ -62,8 +67,9 @@
 
     <!-- 글감 목록 (연예인 뉴스 모드) -->
     <section class="card" id="topicsCard" hidden>
-      <h2>글감 선택 <span class="hint-inline">— 선택하면 AI 작성 후 네이버 블로그에 자동 진행</span>
+      <h2>글감 선택 <span class="hint-inline">— 여러 개를 눌러 대기열에 쌓으면 하나씩 자동 진행돼요</span>
         <button id="clearTopicsBtn" class="btn btn-ghost btn-sm" style="float:right">모든 글감 삭제</button>
+        <button id="runAllBtn" class="btn btn-primary btn-sm" style="float:right; margin-right:6px">⚡ 전체 실행</button>
       </h2>
       <div id="topicsList" class="topics"></div>
     </section>
@@ -76,6 +82,73 @@
       <div class="progress-steps" id="progressSteps"></div>
       <p id="progressMsg" class="status"></p>
       <p id="progressResult" hidden></p>
+    </section>
+
+    <!-- 숏폼 (인라인) — 글쓰기 완료 후 '숏폼 제작하기'로 여기서 바로 생성·미리보기 -->
+    <section class="card" id="shortformCard" hidden>
+      <h2>🎬 숏폼 <span class="hint-inline" id="sfForTitle"></span>
+        <button id="sfCloseBtn" class="btn btn-ghost btn-sm" style="float:right">닫기</button>
+      </h2>
+
+      <!-- 생성 옵션 + 버튼 -->
+      <div id="sfMakeRow">
+        <div class="row" style="margin-bottom:10px">
+          <label class="sf-field">장면 수
+            <select id="sfSceneCount">
+              <option value="5">5장면</option>
+              <option value="6" selected>6장면</option>
+              <option value="7">7장면</option>
+              <option value="8">8장면</option>
+            </select>
+          </label>
+          <label class="sf-field">전체 길이
+            <select id="sfTotalSeconds">
+              <option value="20">약 20초</option>
+              <option value="30" selected>약 30초</option>
+              <option value="40">약 40초</option>
+              <option value="50">약 50초</option>
+            </select>
+          </label>
+          <label class="sf-field">배경 이미지
+            <select id="sfImageMode">
+              <option value="article" selected>원고 사진 우선</option>
+              <option value="ai">전부 AI 생성</option>
+            </select>
+          </label>
+        </div>
+        <button id="sfMakeBtn" class="btn btn-shorts">🎬 숏폼 제작하기</button>
+      </div>
+
+      <!-- 제작 과정 (진행률) -->
+      <div id="sfProcess" class="sf-process" hidden>
+        <div class="sf-proc-row">
+          <span class="sf-spin"></span>
+          <span id="sfProcStep">준비 중…</span>
+        </div>
+        <div class="sf-proc-bar"><div id="sfProcFill"></div></div>
+      </div>
+
+      <!-- 결과: 인라인 작은 미리보기 + 버튼 -->
+      <div id="sfResult" class="sf-inline" hidden>
+        <div class="sf-inline-stage">
+          <canvas id="sfMiniStage" width="1080" height="1920"></canvas>
+          <button id="sfMiniPlay" class="sf-mini-play" title="재생/정지">▶</button>
+        </div>
+        <div class="sf-inline-side">
+          <div id="sfMeta" class="hint" style="margin:0 0 6px"></div>
+          <div class="sf-inline-btns">
+            <button id="sfPreviewBtn" class="btn btn-primary">🔍 미리보기(크게)</button>
+            <button id="sfVideoBtn" class="btn btn-green">⬇ 영상 다운로드</button>
+            <button id="sfZipBtn" class="btn btn-ghost">🖼 이미지 전체 ZIP</button>
+            <button id="sfEditBtn" class="btn btn-ghost">✏ 편집기에서 자세히</button>
+            <button id="sfRemakeBtn" class="btn btn-ghost btn-sm">↻ 다시 만들기</button>
+          </div>
+          <div class="sf-export">
+            <div class="sf-proc-bar" id="sfExportBarWrap" hidden><div id="sfExportFill"></div></div>
+            <p id="sfExportStatus" class="status" hidden></p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- 작업 이력 -->
@@ -95,6 +168,22 @@
     </div>
   </div>
 
+  <!-- 숏폼 큰 미리보기 모달 -->
+  <div id="sfModal" class="modal" hidden>
+    <div class="modal-box sf-modal-box">
+      <button id="sfModalClose" class="modal-close">✕</button>
+      <div class="sf-modal-stage">
+        <canvas id="sfBigStage" width="1080" height="1920"></canvas>
+      </div>
+      <div class="sf-transport" style="margin-top:12px">
+        <button id="sfBigPlay" class="btn btn-primary">▶ 재생</button>
+        <input id="sfBigSeek" type="range" min="0" max="1000" value="0" />
+        <span id="sfBigTime" class="hint" style="margin:0;min-width:74px;text-align:right">0.0 / 0.0초</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="shortform-render.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

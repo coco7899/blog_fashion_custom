@@ -1,4 +1,5 @@
 // 네이버 블로그 자동화 대시보드 서버
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 
@@ -11,10 +12,11 @@ const topics = require('./src/topics');
 const pipeline = require('./src/pipeline');
 const scheduler = require('./src/scheduler');
 const shortform = require('./src/shortform');
+const tts = require('./src/tts');
 
 const PORT = process.env.PORT || 3000;
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '30mb' })); // 장면 배경 이미지 업로드(base64)를 받기 위해 넉넉히
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── 환경/로그인 상태 ─────────────────────────────────────────
@@ -74,7 +76,8 @@ app.post('/api/topics', async (req, res) => {
       return res.status(500).json({ error: '검색 결과를 수집하지 못했습니다. 키워드를 바꿔보세요.' });
     }
     console.log(`[topics] 뉴스 ${news.length}건 + 블로그 ${blogs.length}건 → 글감 생성 중`);
-    const list = await topics.suggestTopics(keyword, sources);
+    // 사용자가 직접 키워드로 찾는 경우이므로, 최신 뉴스가 없어도 관련 기사(오래된 것 포함)로 글감을 만든다.
+    const list = await topics.suggestTopics(keyword, sources, { allowStale: true });
     const searchId = store.saveSearch({ keyword, sources, topics: list, at: new Date().toISOString() });
     res.json({ searchId, keyword, sources, topics: list });
   } catch (e) {
@@ -388,6 +391,72 @@ app.post('/api/drafts/:id/shortform/scenes/:index/image', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// 장면 배경으로 외부 이미지 업로드 (base64 dataUrl로 전송)
+app.post('/api/drafts/:id/shortform/scenes/:index/upload', (req, res) => {
+  const id = req.params.id;
+  const idx = Number(req.params.index);
+  const sf = store.getShortform(id);
+  if (!sf || !sf.scenes || !sf.scenes[idx]) return res.status(404).json({ error: 'not found' });
+  const dataUrl = req.body && req.body.dataUrl;
+  const m = /^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/i.exec(String(dataUrl || ''));
+  if (!m) return res.status(400).json({ error: '이미지 파일이 아닙니다. (png/jpg/webp/gif)' });
+  const ext = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
+  let buf;
+  try { buf = Buffer.from(m[2], 'base64'); } catch { return res.status(400).json({ error: '이미지 데이터를 읽지 못했습니다.' }); }
+  if (buf.length < 1024) return res.status(400).json({ error: '이미지가 너무 작습니다.' });
+  if (buf.length > 25 * 1024 * 1024) return res.status(400).json({ error: '이미지가 너무 큽니다. (25MB 이하)' });
+  const dir = store.shortformDir(id);
+  fs.mkdirSync(dir, { recursive: true });
+  const file = `up-${Date.now().toString(36)}-${idx}.${ext}`;
+  try {
+    fs.writeFileSync(path.join(dir, file), buf);
+  } catch (e) {
+    return res.status(500).json({ error: '저장 실패: ' + e.message });
+  }
+  const scenes = sf.scenes.slice();
+  scenes[idx] = { ...scenes[idx], file, ai: false, source: 'upload' };
+  console.log(`[shortform] ${id} 장면 ${idx + 1} 이미지 업로드: ${file} (${(buf.length / 1024).toFixed(0)}KB)`);
+  res.json(store.updateShortform(id, { scenes }));
+});
+
+// 무료 자동 TTS — 장면별 내레이션 음성(mp3) 생성. 백그라운드로 돌리고 UI는 GET 폴링.
+app.post('/api/drafts/:id/shortform/tts', (req, res) => {
+  const id = req.params.id;
+  const sf = store.getShortform(id);
+  if (!sf || !sf.scenes) return res.status(404).json({ error: 'not found' });
+  if (sf.ttsStatus === 'building') return res.status(400).json({ error: '이미 음성을 만드는 중입니다.' });
+
+  store.updateShortform(id, { ttsStatus: 'building', ttsStep: '내레이션 음성 생성 준비 중', ttsError: null });
+  (async () => {
+    try {
+      const cur = store.getShortform(id);
+      const scenes = cur.scenes.slice();
+      let made = 0;
+      for (let i = 0; i < scenes.length; i++) {
+        const narr = String(scenes[i].narration || '').trim();
+        store.updateShortform(id, { ttsStep: `내레이션 음성 생성 중 (${i + 1}/${scenes.length})` });
+        if (!narr) { scenes[i] = { ...scenes[i], ttsFile: null }; continue; }
+        const buf = await tts.synthesize(narr);
+        if (buf) {
+          const file = `tts-${i}-${Date.now().toString(36)}.mp3`;
+          fs.writeFileSync(path.join(store.shortformDir(id), file), buf);
+          scenes[i] = { ...scenes[i], ttsFile: file };
+          made++;
+        } else {
+          scenes[i] = { ...scenes[i], ttsFile: null };
+        }
+        store.updateShortform(id, { scenes });
+      }
+      store.updateShortform(id, { scenes, ttsStatus: 'ready', ttsStep: `내레이션 음성 ${made}개 생성 완료`, ttsError: null });
+      console.log(`[shortform] ${id} TTS ${made}개 생성 완료`);
+    } catch (e) {
+      console.error(`[shortform] ${id} TTS 실패:`, e.message);
+      store.updateShortform(id, { ttsStatus: 'error', ttsStep: '실패: ' + e.message, ttsError: e.message });
+    }
+  })();
+  res.json({ ok: true, draftId: id });
 });
 
 // 숏폼 배경 이미지 서빙 — 숏폼 폴더 우선, 없으면 원고 이미지(raw)

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>숏폼 생성기</title>
+  <title>숏폼 생성기 (커스텀 · 4000)</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -56,35 +56,89 @@
     <div class="sf-layout" id="editor" hidden>
       <!-- 왼쪽: 미리보기 -->
       <section class="card sf-preview-card">
-        <h2>미리보기 <span class="hint-inline">1080 × 1920 (9:16)</span></h2>
-        <div class="sf-stage">
-          <canvas id="stage" width="1080" height="1920"></canvas>
-        </div>
-        <div class="sf-transport">
-          <button id="playBtn" class="btn btn-primary">▶ 재생</button>
-          <input id="seek" type="range" min="0" max="1000" value="0" />
-          <span id="timeLabel" class="hint" style="margin:0; min-width:74px; text-align:right">0.0 / 0.0초</span>
+        <h2>미리보기 <span class="hint-inline">9:16</span>
+          <button id="foldBtn" class="sf-fold" title="미리보기 접기/펼치기">접기 ▲</button>
+        </h2>
+        <div id="previewBody">
+          <div class="sf-stage">
+            <canvas id="stage" width="1080" height="1920"></canvas>
+          </div>
+          <div class="sf-transport">
+            <button id="playBtn" class="btn btn-primary">▶ 재생</button>
+            <input id="seek" type="range" min="0" max="1000" value="0" />
+            <span id="timeLabel" class="hint" style="margin:0; min-width:70px; text-align:right">0.0 / 0.0초</span>
+          </div>
+          <div class="sf-scenenav">
+            <button id="prevSceneBtn" class="btn btn-ghost btn-sm" title="이전 장면">◀</button>
+            <span class="sf-cur" id="curSceneLabel">장면 1 / 1</span>
+            <button id="nextSceneBtn" class="btn btn-ghost btn-sm" title="다음 장면">▶</button>
+          </div>
         </div>
         <div class="row" style="margin-top:12px">
           <button id="exportBtn" class="btn btn-green">⬇ 영상 다운로드</button>
-          <button id="pngBtn" class="btn btn-ghost">현재 장면 PNG</button>
+          <button id="zipBtn" class="btn btn-ghost">🖼 이미지 ZIP</button>
+          <button id="pngBtn" class="btn btn-ghost">장면 PNG</button>
           <button id="txtBtn" class="btn btn-ghost">대본 TXT</button>
+          <button id="narrTxtBtn" class="btn btn-ghost">🎙 내레이션 TXT</button>
         </div>
         <p id="exportStatus" class="status" hidden></p>
         <p class="hint" style="margin-top:10px">
-          영상은 브라우저에서 직접 인코딩합니다. 녹화는 영상 길이만큼 실시간으로 진행되고,
-          <b>녹화 중 이 탭을 계속 켜두면</b> 가장 부드럽게 나옵니다.
-          소리는 들어가지 않으므로 편집 앱에서 음악·내레이션을 얹으세요.
+          🔴 <b>녹화 중엔 이 탭을 켜두세요</b> — 영상 길이만큼 실시간으로 녹화됩니다.
         </p>
+
+        <!-- 오디오: 더빙(무료 TTS) + 배경음악 -->
+        <div class="sf-audio">
+          <h3 class="sf-subhead" style="margin-top:14px">🔊 오디오 (더빙 · 배경음악)</h3>
+
+          <div class="sf-audio-row">
+            <button id="ttsBtn" class="btn btn-primary btn-sm">🎙 내레이션 자동생성(무료 TTS)</button>
+            <button id="narrDlBtn" class="btn btn-ghost btn-sm" disabled>내레이션 WAV</button>
+          </div>
+          <p id="ttsStatus" class="status" hidden></p>
+          <label class="sf-arow"><span>내레이션 볼륨</span>
+            <input id="narrGain" type="range" min="0" max="150" value="100" /><b id="narrGainVal">100%</b>
+          </label>
+
+          <div class="sf-audio-row" style="margin-top:10px">
+            <select id="bgmStyle">
+              <option value="calm">잔잔한 (기본)</option>
+              <option value="lofi">로파이</option>
+              <option value="bright">밝은</option>
+            </select>
+            <button id="bgmBtn" class="btn btn-primary btn-sm">🎵 배경음악 생성</button>
+            <button id="bgmDlBtn" class="btn btn-ghost btn-sm" disabled>배경음악 WAV</button>
+          </div>
+          <label class="sf-arow"><span>배경음악 볼륨</span>
+            <input id="bgmGain" type="range" min="0" max="60" value="18" /><b id="bgmGainVal">18%</b>
+          </label>
+          <p id="audioStatus" class="hint" style="margin-top:6px">영상 다운로드를 누르면 생성한 소리가 함께 들어갑니다. 아직 없으면 무음으로 저장됩니다.</p>
+        </div>
       </section>
 
       <!-- 오른쪽: 대본 편집 -->
       <section class="sf-edit-col">
         <div class="card">
           <h2>상단 후킹</h2>
-          <p class="hint">영상 내내 화면 맨 위에 고정으로 노출됩니다. 짧을수록 좋습니다.</p>
+          <p class="hint">영상 내내 고정으로 노출됩니다. 짧을수록 좋습니다.</p>
           <input id="hookInput" type="text" maxlength="24" placeholder="후킹 한 줄 (16자 이내 권장)" style="width:100%" />
           <input id="hookSubInput" type="text" maxlength="30" placeholder="보조 문구 (선택)" style="width:100%; margin-top:8px" />
+
+          <h3 class="sf-subhead">후킹 디자인</h3>
+          <div class="sf-style-grid">
+            <label class="sf-field">세로 위치 <span class="hint-inline">위 ↔ 아래</span>
+              <span class="sf-range"><input id="hookY" type="range" min="80" max="1760" step="5" /><b id="hookYVal">172px</b></span>
+            </label>
+            <label class="sf-field">글자 크기
+              <span class="sf-range"><input id="hookSize" type="range" min="44" max="120" step="2" /><b id="hookSizeVal">76</b></span>
+            </label>
+            <label class="sf-field">배경 색
+              <span class="sf-crow"><input id="hookColor" type="color" class="sf-color" /><button id="hookColorReset" class="btn btn-ghost btn-sm" title="테마 기본색으로">기본</button></span>
+            </label>
+            <label class="sf-field">글자 색
+              <span class="sf-crow"><input id="hookTextColor" type="color" class="sf-color" /></span>
+            </label>
+            <label class="sf-check"><input id="hookBoxed" type="checkbox" /> 후킹 배경 박스</label>
+          </div>
         </div>
 
         <div class="card">
@@ -92,9 +146,6 @@
           <div class="sf-style-grid">
             <label class="sf-field">대본 위치 <span class="hint-inline">가운데 기준 +아래</span>
               <span class="sf-range"><input id="offsetY" type="range" min="-300" max="500" step="5" /><b id="offsetYVal">10px</b></span>
-            </label>
-            <label class="sf-field">후킹 크기
-              <span class="sf-range"><input id="hookSize" type="range" min="44" max="110" step="2" /><b id="hookSizeVal">76</b></span>
             </label>
             <label class="sf-field">대본 크기
               <span class="sf-range"><input id="textSize" type="range" min="36" max="96" step="2" /><b id="textSizeVal">60</b></span>
@@ -107,17 +158,17 @@
               </select>
             </label>
             <label class="sf-check"><input id="boxed" type="checkbox" /> 자막 뒤 반투명 박스</label>
-            <label class="sf-check"><input id="kenBurns" type="checkbox" /> 배경 천천히 확대</label>
+            <label class="sf-check"><input id="kenBurns" type="checkbox" /> 배경 확대 · 훅 시네마틱 모션</label>
+            <label class="sf-check"><input id="narrationChk" type="checkbox" /> 내레이션 하단 자막</label>
           </div>
         </div>
 
         <div class="card">
-          <h2>장면 대본
-            <button id="saveBtn" class="btn btn-green btn-sm" style="float:right">저장</button>
+          <h2>장면 대본 <span class="hint-inline">— 장면을 클릭하면 미리보기가 그 장면으로 이동</span>
+            <span id="saveState" class="hint" style="float:right; margin:0">자동 저장됨</span>
           </h2>
-          <p class="hint">자막은 <b>한 줄 16자 이내, 최대 2줄</b>이 잘 읽힙니다. 줄바꿈은 Enter.</p>
+          <p class="hint">자막은 <b>한 줄 16자 이내, 최대 2줄</b>이 잘 읽힙니다. 줄바꿈은 Enter. 수정하면 <b>자동 저장</b>됩니다.</p>
           <div id="scenesList" class="sf-scenes"></div>
-          <p id="saveStatus" class="status" hidden></p>
         </div>
 
         <div class="card">
@@ -133,6 +184,7 @@
     </div>
   </main>
 
+  <script src="shortform-render.js"></script>
   <script src="shortform.js"></script>
 </body>
 </html>

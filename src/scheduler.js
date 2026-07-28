@@ -15,8 +15,15 @@ const DEFAULT_SETTINGS = {
   postsPerDay: 2,             // 하루 처리 개수
   startTime: '09:00',         // 첫 실행 시각
   intervalMin: 180,           // 실행 간격(분)
-  // 글감 주제 (돌아가며 사용) — 패션·뷰티·생활용품·건강·방송/SNS 화제·셀럽 제품
-  keywords: ['연예인 패션', '연예인 뷰티', '연예인 생활용품', '연예인 건강식품', '연예인 SNS 화제', '연예인 애용템'],
+  // 글감 주제 (돌아가며 사용) — 출처 기반의 안전하고 트래픽 잘 나오는 각도 위주.
+  // 자극적 신상 폭로 대신 '정리·소개' 각도(드라마 시청률, 종목 이슈, 핫딜, 건강 상식 등).
+  keywords: [
+    '드라마 시청률 화제', '화제의 드라마', '예능 프로그램 화제', '나는솔로 화제', '넷플릭스 인기 콘텐츠',
+    '연예인 근황', '연예인 패션', '연예인 뷰티',
+    '프로야구 이적 트레이드',
+    '다이소 신상 화제', '편의점 신상',
+    '건강 상식 정보', '몸에 좋은 음식',
+  ],
   visibility: 'public',
 };
 
@@ -98,7 +105,7 @@ function updateSettings(patch) {
     const arr = (Array.isArray(patch.keywords) ? patch.keywords : String(patch.keywords).split(','))
       .map((k) => String(k).trim())
       .filter(Boolean);
-    if (arr.length) s.keywords = arr.slice(0, 10);
+    if (arr.length) s.keywords = arr.slice(0, 30);
   }
   if (patch.visibility !== undefined) s.visibility = patch.visibility === 'private' ? 'private' : 'public';
   if (patch.mode !== undefined) s.mode = patch.mode === 'publish' ? 'publish' : 'draft';

@@ -13,18 +13,26 @@ const claude = require('./claude');
 const store = require('./store');
 const aiimage = require('./aiimage');
 
-// 숏폼 배경으로 쓸 AI 이미지 화풍 — 세로 컷, 자막이 얹히므로 가운데는 비교적 단순하게
+// 숏폼 배경으로 쓸 AI 이미지 화풍 — 세로 컷, 자막이 얹히므로 가운데는 단순하게.
+// ※ coco 방식 반영: 자막이 배경 위에 깔리므로 무조건 '밝은 하이키 조명'으로.
+//    어두운 저조도/야간 장면은 자막이 안 보여 금지. 글자·로고·상표는 넣지 않는다.
 const AI_BASE =
-  'vertical 9:16 cinematic photo, shallow depth of field, soft natural light, ' +
-  'clean composition with empty space in the middle, no text, no watermark, no logo, no captions';
+  'vertical 9:16 cinematic photo, bright airy high-key lighting, natural daylight, ' +
+  'shallow depth of field, clean composition with empty space in the middle, ' +
+  'no text, no letters, no watermark, no logo, no brand, no icons, no captions';
 
 const DEFAULT_STYLE = {
   offsetY: 10,      // 화면 정가운데 기준 대본 위치(아래로 +px, 1080x1920 기준)
+  hookY: 172,       // 상단 후킹 세로 위치(px)
   hookSize: 76,     // 상단 후킹 글자 크기
+  hookColor: '',    // 후킹 배경(박스) 색 — 빈 값이면 테마 기본색
+  hookTextColor: '',// 후킹 글자 색 — 빈 값이면 테마 기본색
+  hookBoxed: true,  // 후킹 배경 박스 표시
   textSize: 60,     // 대본 자막 글자 크기
   theme: 'dark',    // dark | light | vivid
   boxed: true,      // 자막 뒤 반투명 박스
-  kenBurns: true,   // 배경 천천히 확대
+  kenBurns: true,   // 배경 확대 + 훅 시네마틱 모션
+  narration: true,  // 내레이션을 하단 자막으로 표시 (coco 방식)
 };
 
 // 원고(article.blocks)를 AI에게 넘길 평문으로
@@ -61,20 +69,24 @@ ${articleToText(article)}
 - 화면 정가운데 살짝 아래: 장면별 "대본 자막"이 한 장면씩 바뀌며 나옵니다.
 - 배경: 사진 한 장이 천천히 확대됩니다. 소리(내레이션)는 시청자가 나중에 입힐 수 있습니다.
 
-작성 규칙:
-1. hook(후킹): **공백 포함 16자 이내**, 궁금증이나 반전을 자극하는 한 줄. 원고의 핵심을 찌르되 낚시성 거짓말은 금지.
+작성 규칙 (조회수 잘 나오는 한국 릴스/쇼츠 공식):
+1. hook(후킹): **공백 포함 16자 이내**, 0~3초 안에 스크롤을 멈추게 하는 한 문장. 가격·후회·"사기 전엔 몰랐던 것"·의외의 반전 등으로 궁금증을 자극. 원고의 핵심을 찌르되 낚시성 거짓말은 금지.
 2. hookSub: 후킹 아래 아주 작게 붙는 보조 문구. 공백 포함 20자 이내. 필요 없으면 빈 문자열.
 3. scenes: 정확히 ${sceneCount}개. 전체 길이 합계가 약 ${totalSeconds}초가 되도록 각 장면 seconds를 3~6 사이로 배분하세요.
-   - text(화면 자막): **한 줄 16자 이내, 최대 2줄**. 줄바꿈이 필요하면 \\n 을 넣으세요. 읽자마자 이해되는 짧은 구어체.
-   - narration(내레이션 원고): 그 장면에서 말할 문장 1~2개. 자막보다 자연스럽고 길어도 됩니다.
-   - imageDesc: 그 장면 배경 사진을 AI로 만들 때 쓸 장면 묘사(한글, 40자 내외). **인물의 얼굴·실존 인물·상표·글자는 넣지 마세요.** 분위기/장소/사물 위주.
+   - text(화면 자막): **한 줄 16자 이내, 최대 2줄**. 줄바꿈이 필요하면 \\n 을 넣으세요. 읽자마자 이해되는 짧은 구어체. 조사는 생략해도 됩니다.
+   - **자막 안에 핵심 단어(숫자·%·금액, 또는 진짜/꿀팁/단점/후회/필수 같은 강조어)를 자연스럽게 넣으면** 영상에서 그 단어가 색으로 강조됩니다.
+   - narration(내레이션 원고): 그 장면에서 말할 문장 1~2개. 자막보다 자연스럽고 길어도 됩니다(영상 하단에 자막으로도 깔립니다).
+   - imageDesc: 그 장면 배경 사진을 AI로 만들 때 쓸 장면 묘사(한글, 40자 내외). **밝고 화사한 낮/자연광 장면**으로. 인물의 얼굴·실존 인물·상표·글자는 넣지 말고 분위기/장소/사물 위주. (어두운 야간·저조도 장면은 자막이 안 보이므로 금지)
    - keyword: 그 장면과 관련된 검색 키워드 1개.
-4. 흐름: 1번 장면은 후킹을 이어받는 문제제기, 마지막 장면은 마무리 + 행동 유도(저장/댓글${isProduct ? '/링크 확인' : ''}).
+4. 흐름: 1번 장면은 후킹을 이어받는 문제제기(Before/불편), 중간은 ${isProduct ? '개봉→사용→Before/After→장단점' : '핵심 정보를 단계별로'} 전개.
+   - **솔직한 단점·주의점 장면을 최소 1개** 넣어 신뢰를 주세요.
+   - **마지막 장면은 CTA**: 저장/공유/팔로우 유도 + ${isProduct ? '자세한 후기·구매는 프로필 링크 안내' : '더 자세한 내용은 블로그 글에서 확인 안내'}.
 5. 원고에 없는 사실을 지어내지 마세요. 숫자·이름은 원고에 있는 것만 사용합니다.
-6. caption: 업로드 시 쓸 설명글 2~3문장. hashtags: 해시태그 8개(# 없이 단어만).
+6. title: 영상 상단에 쓸 짧은 제목(공백 포함 20자 이내, 없으면 hook과 달라도 됨). caption: 업로드 시 쓸 설명글 2~3문장. hashtags: 해시태그 8개(# 없이 단어만).
 
 다음 JSON 형식으로만 출력하세요:
 {
+  "title": "...",
   "hook": "...",
   "hookSub": "...",
   "caption": "...",
@@ -105,6 +117,7 @@ function normalizeScript(raw, { sceneCount = 7 } = {}) {
     }));
   if (!scenes.length) throw new Error('AI가 장면을 만들지 못했습니다. 다시 시도해주세요.');
   return {
+    videoTitle: cut(raw && raw.title, 28),
     hook: cut(raw && raw.hook, 24) || '지금 이거 보세요',
     hookSub: cut(raw && raw.hookSub, 30),
     caption: cut(raw && raw.caption, 400),

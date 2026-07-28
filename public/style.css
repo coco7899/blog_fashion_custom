@@ -1,6 +1,14 @@
+/* 프리텐다드(가변 폰트) 자체 호스팅 — 오프라인에서도 적용 */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  font-family: 'Pretendard', 'Malgun Gothic', -apple-system, sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', 'Malgun Gothic', -apple-system, sans-serif;
   background: #f4f6f8;
   color: #222;
   line-height: 1.6;
@@ -38,6 +46,8 @@ h1 { font-size: 19px; }
 .btn-ghost { background: #eef1f4; color: #555; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-running { background: #ff8a3d; color: #fff; cursor: default; animation: pulse 1.2s infinite; }
+.btn-queued { background: #3b82f6; color: #fff; }
+.btn-queued:hover { opacity: .85; }
 .btn-running:disabled { opacity: 1; }
 /* 대기 중 글감: 다른 글감이 실행 중이어도 선명한 초록 유지 */
 .btn-green:disabled { opacity: 1; }
@@ -160,3 +170,82 @@ input[type="text"], select {
 }
 .ui-confirm-msg { white-space: pre-line; font-size: 14px; line-height: 1.6; color: #222; }
 .ui-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+/* ══════════════ 숏폼 생성기 (편집기 페이지) ══════════════ */
+.btn-shorts { background: #111827; color: #fff; }
+.sf-wrap { max-width: 1180px; }
+.sf-layout { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; }
+.sf-layout[hidden] { display: none; }
+@media (max-width: 760px) { .sf-layout { grid-template-columns: 1fr; } }
+
+.sf-preview-card { position: sticky; top: 70px; }
+.sf-stage { background: #0b0d10; border-radius: 14px; overflow: hidden; display: flex; justify-content: center; padding: 10px 0; }
+.sf-stage canvas { width: 258px; height: 459px; border-radius: 10px; display: block; }
+.sf-transport { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.sf-transport input[type="range"] { flex: 1; }
+/* 장면 이동 바 */
+.sf-scenenav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; }
+.sf-scenenav button { min-width: 40px; }
+.sf-scenenav .sf-cur { font-size: 13px; font-weight: 700; color: #333; min-width: 84px; text-align: center; }
+/* 작은 화면에서 미리보기 접기 */
+.sf-preview-card h2 .sf-fold { float: right; font-size: 12px; font-weight: 600; color: #7c3aed; cursor: pointer; background: none; border: none; }
+
+.sf-edit-col { display: flex; flex-direction: column; gap: 18px; }
+.sf-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #666; font-weight: 600; }
+.sf-style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.sf-range { display: flex; align-items: center; gap: 8px; }
+.sf-range input { flex: 1; }
+.sf-range b { font-size: 12px; color: #2563eb; min-width: 44px; text-align: right; }
+.sf-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #444; font-weight: 600; }
+.sf-subhead { font-size: 13px; color: #444; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid #eef1f4; }
+.sf-crow { display: flex; align-items: center; gap: 6px; }
+.sf-color { width: 100%; height: 34px; min-width: 0; border: 1px solid #d5dade; border-radius: 8px; padding: 2px; cursor: pointer; background: #fff; }
+
+/* 오디오(더빙·배경음악) */
+.sf-audio-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.sf-audio-row select { padding: 6px 8px; font-size: 12px; }
+.sf-arow { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: #666; font-weight: 600; }
+.sf-arow span { min-width: 76px; }
+.sf-arow input[type="range"] { flex: 1; }
+.sf-arow b { min-width: 42px; text-align: right; color: #2563eb; }
+
+.sf-scenes { display: flex; flex-direction: column; gap: 10px; }
+.sf-scene { display: flex; gap: 12px; border: 1px solid #e5e8eb; border-radius: 10px; padding: 10px; cursor: pointer; transition: border-color .12s, box-shadow .12s, background .12s; }
+.sf-scene:hover { border-color: #c9b8f0; }
+.sf-scene.active { border-color: #7c3aed; box-shadow: 0 0 0 2px #ede9fe; background: #faf8ff; }
+.sf-scene textarea, .sf-scene input, .sf-scene button { cursor: auto; }
+.sf-thumb { position: relative; width: 62px; height: 110px; flex: 0 0 62px; border-radius: 8px; overflow: hidden; background: #eef1f4; cursor: pointer; }
+.sf-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sf-thumb .sf-thumb-no { position: absolute; top: 4px; left: 4px; font-size: 11px; font-weight: 800; color: #fff; background: rgba(0,0,0,.55); border-radius: 6px; padding: 1px 6px; }
+.sf-badge { position: absolute; left: 4px; bottom: 4px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; }
+.sf-badge-ai { background: #7c3aed; }
+.sf-badge-up { background: #0ea5e9; }
+.sf-scene-body { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sf-scene-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.sf-sec { font-size: 12px; color: #666; }
+.sf-sec input { width: 58px; padding: 4px 6px; border: 1px solid #d5dade; border-radius: 6px; font-size: 12px; }
+.sf-scene textarea { width: 100%; border: 1px solid #d5dade; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; resize: vertical; line-height: 1.5; }
+.sf-scene textarea.s-narr { color: #777; font-size: 12px; background: #fafbfc; }
+textarea#captionInput { border: 1px solid #d5dade; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; resize: vertical; }
+
+/* ══════════════ 대시보드 인라인 숏폼 ══════════════ */
+.sf-process { margin-top: 6px; }
+.sf-proc-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #333; margin-bottom: 8px; }
+.sf-proc-bar { height: 8px; background: #eef1f4; border-radius: 999px; overflow: hidden; }
+.sf-proc-bar > div { height: 100%; width: 0%; background: #7c3aed; border-radius: 999px; transition: width .3s; }
+.sf-spin { width: 16px; height: 16px; border-radius: 50%; border: 3px solid #ddd; border-top-color: #7c3aed; display: inline-block; animation: sf-rot .8s linear infinite; flex: 0 0 auto; }
+@keyframes sf-rot { to { transform: rotate(360deg); } }
+
+.sf-inline { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.sf-inline-stage { position: relative; flex: 0 0 auto; width: 216px; height: 384px; border-radius: 12px; overflow: hidden; background: #0b0d10; }
+.sf-inline-stage canvas { width: 100%; height: 100%; display: block; }
+.sf-mini-play { position: absolute; inset: 0; margin: auto; width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(0,0,0,.5); color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.sf-mini-play:hover { background: rgba(0,0,0,.68); }
+.sf-inline-side { flex: 1; min-width: 240px; }
+.sf-inline-btns { display: flex; flex-direction: column; gap: 8px; align-items: stretch; max-width: 280px; }
+.sf-inline-btns .btn { width: 100%; }
+.sf-export { margin-top: 10px; max-width: 280px; }
+
+.sf-modal-box { width: min(440px, 94vw); padding: 20px; }
+.sf-modal-stage { background: #0b0d10; border-radius: 12px; overflow: hidden; display: flex; justify-content: center; padding: 8px 0; }
+.sf-modal-stage canvas { width: min(360px, 82vw); height: auto; display: block; border-radius: 8px; }
