@@ -1,7 +1,7 @@
-// 실행 환경 점검: Playwright Chromium / claude CLI 설치 확인 및 자동 설치
+// 실행 환경 점검: Playwright Chromium / Codex CLI 설치 확인 및 자동 설치
 const fs = require('fs');
 const { spawnSync } = require('child_process');
-const claude = require('./claude');
+const codex = require('./codex');
 
 function chromiumInstalled() {
   try {
@@ -31,7 +31,7 @@ async function ensureChromium() {
 function checkAll() {
   return {
     chromium: chromiumInstalled(),
-    claude: claude.checkCli(),
+    codex: codex.checkCli(),
   };
 }
 

@@ -2,7 +2,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// 커스텀 실행 파일에서는 코드 폴더 밖의 영구 저장 위치를 지정한다.
+// 저장소를 다시 Pull하거나 교체해도 작업 이력이 사라지지 않도록 하기 위함이다.
+const DATA_DIR = process.env.BLOG_FASHION_DATA_DIR
+  ? path.resolve(process.env.BLOG_FASHION_DATA_DIR)
+  : path.join(__dirname, '..', 'data');
 const SESSION_DIR = path.join(DATA_DIR, 'session');
 const DRAFTS_DIR = path.join(DATA_DIR, 'drafts');
 const SEARCHES_DIR = path.join(DATA_DIR, 'searches');
@@ -131,6 +135,54 @@ function getSearch(id) {
   return readJson(path.join(SEARCHES_DIR, String(id) + '.json'));
 }
 
+// 가장 최근에 찾은 글감 목록을 대시보드 재진입 시 복원한다.
+function getLatestSearch() {
+  if (!fs.existsSync(SEARCHES_DIR)) return null;
+  return fs
+    .readdirSync(SEARCHES_DIR)
+    .filter((file) => file.endsWith('.json'))
+    .map((file) => {
+      const fullPath = path.join(SEARCHES_DIR, file);
+      const search = readJson(fullPath);
+      if (!search) return null;
+      const stat = fs.statSync(fullPath);
+      return { search, savedAt: Date.parse(search.at || '') || stat.mtimeMs };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.savedAt - a.savedAt)[0]?.search || null;
+}
+
+// 사용자가 '모든 글감 삭제'를 눌렀을 때 저장된 검색 목록도 함께 지운다.
+function clearSearches() {
+  if (!fs.existsSync(SEARCHES_DIR)) return 0;
+  let count = 0;
+  for (const file of fs.readdirSync(SEARCHES_DIR)) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      fs.rmSync(path.join(SEARCHES_DIR, file), { force: true });
+      count++;
+    } catch {}
+  }
+  return count;
+}
+
+// 정책에서 제외된 글감을 기존 저장 목록에서도 제거한다.
+function filterSearchTopics(keepTopic) {
+  if (!fs.existsSync(SEARCHES_DIR)) return 0;
+  let removed = 0;
+  for (const file of fs.readdirSync(SEARCHES_DIR)) {
+    if (!file.endsWith('.json')) continue;
+    const fullPath = path.join(SEARCHES_DIR, file);
+    const search = readJson(fullPath);
+    if (!search || !Array.isArray(search.topics)) continue;
+    const filtered = search.topics.filter(keepTopic);
+    if (filtered.length === search.topics.length) continue;
+    removed += search.topics.length - filtered.length;
+    writeJson(fullPath, { ...search, topics: filtered });
+  }
+  return removed;
+}
+
 module.exports = {
   DATA_DIR,
   SESSION_DIR,
@@ -153,4 +205,7 @@ module.exports = {
   clearDrafts,
   saveSearch,
   getSearch,
+  getLatestSearch,
+  clearSearches,
+  filterSearchTopics,
 };

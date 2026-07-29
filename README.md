@@ -5,7 +5,7 @@
 ## 필요 조건
 
 - Node.js 18+
-- Claude Code CLI 로그인 상태 (`claude` 명령 사용 가능) — AI 호출은 `claude -p` 헤드리스 모드로 **구독 요금제**를 사용합니다 (API 종량제 아님)
+- Codex CLI에서 ChatGPT 로그인 상태 (`codex login status` 결과가 `Logged in using ChatGPT`) — AI 호출은 `codex exec`로 **ChatGPT/Codex 구독 요금제**를 사용합니다. OpenAI API 키와 API 종량제는 사용하지 않습니다.
 
 ## 실행
 
@@ -14,8 +14,13 @@ npm install
 npm start
 ```
 
-브라우저에서 `http://localhost:3000` 접속.
+브라우저에서 `http://localhost:4000` 접속.
 첫 실행 시 Playwright Chromium이 없으면 자동으로 설치합니다.
+
+커스텀 버전의 작업 이력과 로그인 세션은 기본적으로 저장소 밖의
+`../blog_fashion_data` 폴더에 저장됩니다. 따라서 코드를 다시 Pull하거나
+프로젝트 폴더를 교체해도 이력이 유지됩니다. 다른 위치를 사용하려면
+`BLOG_FASHION_DATA_DIR` 환경변수로 지정할 수 있습니다.
 
 ## 사용 흐름
 

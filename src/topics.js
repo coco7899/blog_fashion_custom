@@ -1,10 +1,23 @@
-// 수집된 뉴스/블로그 목록 → claude -p 로 글감 후보 생성
+// 수집된 뉴스/블로그 목록 → Codex로 글감 후보 생성
 // (blog_fashion-01 "연예인 뉴스 블로그" 스킬 명세 반영: 분야 확대·최신성·팩트체크·추천)
-const claude = require('./claude');
+const codex = require('./codex');
 
 // 글감으로 쓸 수 있는 뉴스의 최대 나이(일). 이보다 오래된 기사는 후보에서 제외한다.
 // 검색 결과에 몇 년 전 기사가 섞여 들어와 "옛날 소식"이 글감으로 뽑히는 것을 막는다.
 const MAX_SOURCE_AGE_DAYS = 5;
+const SPORTS_RE = /스포츠|야구|축구|농구|배구|골프|테니스|KBO|MLB|K리그|프리미어리그|올림픽|월드컵|선수|감독|트레이드|이적시장|경기\s*(결과|일정|분석)/i;
+
+function isSportsTopic(topic) {
+  const text = [
+    topic && topic.field,
+    topic && topic.title,
+    topic && topic.angle,
+    ...(Array.isArray(topic && topic.keywords) ? topic.keywords : []),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return SPORTS_RE.test(text);
+}
 
 /** 'YYYY.MM.DD' → 오늘 기준 경과 일수. 파싱 불가면 null */
 function ageInDays(dateStr) {
@@ -80,7 +93,7 @@ ${avoid}
 가장 좋은 글감을 배열의 첫 번째에 놓고 "recommended": true 로 표시하세요 (1개만).
 
 주제 방향: 키워드와 수집 자료에 맞는 분야로 자유롭게 고르세요
-(연예·방송/드라마·예능, 스포츠, 쇼핑·핫딜, 건강·생활정보, 패션·뷰티 등. 주식·재테크·투자 종목, 자동차 주제는 다루지 마세요).
+(연예·방송/드라마·예능, 쇼핑·핫딜, 건강·생활정보, 패션·뷰티 등. 스포츠, 주식·재테크·투자 종목, 자동차 주제는 다루지 마세요).
 당일 화제성과 블로그 확장성이 높은 **정보성 각도**를 우선하세요:
 정리·요약, 배경 설명, 비교, 따라 하기, 시청 포인트, 상품 소개, 건강·생활 상식 등 독자에게 실제 정보를 주는 주제.
 
@@ -102,7 +115,7 @@ ${avoid}
 [
   {
     "title": "홈판 후킹형 제목 (호기심 구절이 앞, 인물 이름은 앞에 없어도 됨)",
-    "field": "짧은 분야 라벨 (예: 드라마, 예능, 스포츠, 핫딜, 건강, 패션)",
+    "field": "짧은 분야 라벨 (예: 드라마, 예능, 핫딜, 건강, 패션, 뷰티)",
     "fact": "확인된 핵심 사실 한 문장",
     "angle": "어떤 관점/구성으로 쓸지 한두 문장 (블로그 포인트)",
     "refs": [0, 3],
@@ -111,7 +124,7 @@ ${avoid}
   }
 ]`;
 
-  const arr = await claude.invokeJson(prompt, { timeoutMs: 180000 });
+  const arr = await codex.invokeJson(prompt, { timeoutMs: 180000 });
   if (!Array.isArray(arr) || arr.length === 0) {
     throw new Error('글감 생성 결과가 비어 있습니다.');
   }
@@ -147,8 +160,20 @@ ${avoid}
         })(),
       };
     });
+  // 안전망: AI 응답에 스포츠가 섞여도 대시보드에는 전달하지 않는다.
+  const nonSports = out.filter((topic) => {
+    if (isSportsTopic(topic)) {
+      console.log(`[topics] 스포츠 글감 제외: ${topic.title.slice(0, 40)}`);
+      return false;
+    }
+    return true;
+  });
+  if (!nonSports.length) {
+    throw new Error('스포츠를 제외한 글감을 만들지 못했습니다. 다른 키워드로 다시 찾아주세요.');
+  }
+
   // 안전망: 소스 필터를 통과했더라도 결과 날짜가 오래된 글감은 버린다.
-  const fresh = out.filter((t) => {
+  const fresh = nonSports.filter((t) => {
     const age = ageInDays(t.date);
     if (age !== null && age > MAX_SOURCE_AGE_DAYS) {
       console.log(`[topics] 오래된 글감 제외(${t.date}): ${t.title.slice(0, 30)}`);
@@ -156,7 +181,7 @@ ${avoid}
     }
     return true;
   });
-  const result = fresh.length ? fresh : out; // 전부 걸리면 빈 목록 대신 원본 유지
+  const result = fresh.length ? fresh : nonSports; // 전부 오래됐으면 스포츠가 아닌 원본만 유지
 
   // 추천은 정확히 1개만 (없으면 첫 번째)
   if (!result.some((t) => t.recommended) && result.length) result[0].recommended = true;
@@ -168,4 +193,4 @@ ${avoid}
   return result;
 }
 
-module.exports = { suggestTopics };
+module.exports = { suggestTopics, isSportsTopic };

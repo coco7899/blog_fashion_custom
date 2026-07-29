@@ -1,7 +1,28 @@
-// 다운로드된 후보 이미지들을 claude -p (Read 툴 = vision)로 보고
+// 다운로드된 후보 이미지들을 Codex의 이미지 입력으로 보고
 // 쓸 만한 것만 골라 본문 이미지 슬롯에 고루 나눠 배치한다.
 const path = require('path');
-const claude = require('./claude');
+const codex = require('./codex');
+
+function photoSourceLabel(candidate = {}) {
+  const host = (() => {
+    try { return new URL(candidate.sourceUrl || '').hostname.toLowerCase(); } catch { return ''; }
+  })();
+  const known = [
+    ['newsen.com', '뉴스엔'],
+    ['tvreport.co.kr', 'TV리포트'],
+    ['jnilbo.com', '전남일보'],
+    ['mk.co.kr', '매일경제'],
+    ['osen.co.kr', 'OSEN'],
+    ['starnews.com', '스타뉴스'],
+    ['news1.kr', '뉴스1'],
+    ['yna.co.kr', '연합뉴스'],
+  ];
+  const matched = known.find(([domain]) => host.includes(domain));
+  if (matched) return matched[1];
+  const given = String(candidate.sourceName || '').trim();
+  if (given === '뉴스 기사') return '관련 기사';
+  return given && given.length <= 20 ? given : '관련 기사';
+}
 
 /**
  * @param {object} article {title, blocks} — image 블록의 slot/caption/desc 사용
@@ -33,7 +54,7 @@ async function judgeImages(article, candidates, rawDir) {
 이미지가 들어갈 자리(슬롯)와 각 자리의 내용 힌트:
 ${slotDesc}
 
-후보 이미지 파일 목록 (Read 툴로 각 파일을 반드시 직접 열어서 눈으로 확인한 뒤 판단하세요):
+후보 이미지 파일 목록 (첨부된 각 이미지를 반드시 직접 확인한 뒤 판단하세요):
 ${fileList}
 
 작업 방법:
@@ -58,9 +79,9 @@ ${fileList}
 }
 file에는 파일명만 쓰세요(경로 제외).`;
 
-  const result = await claude.invokeJson(prompt, {
+  const result = await codex.invokeJson(prompt, {
     timeoutMs: 300000,
-    allowedTools: ['Read'],
+    imagePaths: candidates.map((candidate) => path.join(rawDir, candidate.file)),
   });
 
   const byFile = new Map(candidates.map((c) => [c.file, c]));
@@ -103,7 +124,7 @@ file에는 파일명만 쓰세요(경로 제외).`;
       slot: s.slot,
       file: picked ? picked.file : null,
       caption: s.caption || '',
-      sourceName: meta.sourceName || '',
+      sourceName: photoSourceLabel(meta),
       sourceUrl: meta.sourceUrl || '',
       reason: picked ? picked.reason : '쓸 만한 이미지가 부족해 비움',
     };

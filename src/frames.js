@@ -297,12 +297,15 @@ function pickFrame(type, ctx = {}) {
 }
 
 /** 선택된 프레임을 프롬프트에 넣을 지시문으로 변환 */
-function renderFrameInstruction(frame) {
+function renderFrameInstruction(frame, type = 'celeb') {
+  const isProduct = type === 'product';
   const lines = [
     `【이번 글의 구성 프레임 — "${frame.label}"】`,
     '이 글은 아래 흐름으로 쓰세요. 매번 같은 틀로 쓰지 않기 위해 이번 글에만 적용되는 구성입니다.',
     ...frame.skeleton.map((s) => `  ${s}`),
-    `- 위 각 단계는 quote 구절 1개 + 문단(paragraph) 3~4개로 충분히 풀어서 쓰세요. 한 단계를 한 문단으로 끝내지 마세요.`,
+    isProduct
+      ? '- 위 각 단계는 quote 구절과 문단으로 충분히 풀어서 쓰세요.'
+      : '- 위 단계는 내용 흐름을 위한 참고 순서입니다. 단계마다 소제목을 만들지 말고, quote/heading은 글 전체에서 꼭 필요한 1~3개만 사용하세요.',
     `- 도입: ${frame.intro}`,
     `- 구간 구절(quote) 표현: ${frame.quoteStyle}`,
     `- 마무리: ${frame.outro}`,
@@ -313,7 +316,8 @@ function renderFrameInstruction(frame) {
     '- 구체 우선: 자료에서 확인된 사실(누가·언제·무엇을·발언·수치·장소)을 먼저 서술하세요. 두루뭉술한 인상평으로 문단을 채우지 마세요.',
     '- 자료에 없는 사실·브랜드·가격·추측을 지어내지 마세요. 확인 안 된 건 "~라고 전해졌습니다", "~로 알려졌어요"처럼 조심스럽게.',
     '- **말투는 "이런 기사가 났더라고요" 하고 뉴스를 소개·큐레이션하듯** 친근하게.',
-    '- **마지막 구간은 글쓴이(나)의 생각을 자연스럽게 한두 문장** 담으며 끝내세요("개인적으로는~", "저는 ~하게 느껴졌어요"). 단, 단정·훈계·과장은 금지.',
+    '- 필요하면 마지막에 글쓴이(나)의 생각을 자연스럽게 한두 문장 덧붙이세요. 단, 단정·훈계·과장은 금지.',
+    '- 기사 문장과 문단 순서를 베끼지 말고, 확인된 사실을 새 문장과 자연스러운 흐름으로 재구성하세요.',
   ];
   if (frame.guard) lines.push(frame.guard);
   return lines.join('\n');

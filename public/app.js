@@ -73,14 +73,14 @@ async function refreshStatus() {
   try {
     const s = await api('/api/status');
     const badge = $('loginBadge');
-    if (!s.claude.ok) {
+    if (!s.codex.ok) {
       $('envBadge').hidden = false;
       $('envBadge').className = 'badge badge-warn';
-      $('envBadge').textContent = '⚠ claude CLI 없음';
-    } else if (s.claudeAuth && !s.claudeAuth.ok) {
+      $('envBadge').textContent = '⚠ Codex CLI 없음';
+    } else if (s.codexAuth && !s.codexAuth.ok) {
       $('envBadge').hidden = false;
       $('envBadge').className = 'badge badge-warn';
-      $('envBadge').textContent = '⚠ AI 사용 불가: ' + s.claudeAuth.error;
+      $('envBadge').textContent = '⚠ AI 사용 불가: ' + s.codexAuth.error;
     } else {
       $('envBadge').hidden = true;
     }
@@ -297,11 +297,17 @@ $('productLinkBtn').onclick = async () => {
 };
 
 // ── 모든 글감 삭제 (#5) ───────────────────────
-$('clearTopicsBtn').onclick = () => {
+$('clearTopicsBtn').onclick = async () => {
+  if (!(await uiConfirm('찾아둔 글감 목록을 모두 삭제할까요?'))) return;
   currentSearch = null;
   runQueue = [];
+  runningTopicIndex = null;
+  completedTopics.clear();
   $('topicsList').innerHTML = '';
   $('topicsCard').hidden = true;
+  await api('/api/topics', { method: 'DELETE' }).catch((error) => {
+    alert('저장된 글감 삭제 실패: ' + error.message);
+  });
 };
 $('runAllBtn').onclick = () => runAllTopics();
 
@@ -317,7 +323,7 @@ $('clearDraftsBtn').onclick = async () => {
 };
 
 // ── 글감 목록 렌더 ────────────────────────────
-function renderTopics(data, visOverride) {
+function renderTopics(data, visOverride, { scroll = true } = {}) {
   $('topicsCard').hidden = false;
   // 새 글감 목록 → 실행 상태 초기화 (모두 대기=초록)
   runningTopicIndex = null;
@@ -363,7 +369,19 @@ function renderTopics(data, visOverride) {
     div.querySelector('button').onclick = (e) => startRun(i, visOverride, e.currentTarget);
     list.appendChild(div);
   });
-  $('topicsCard').scrollIntoView({ behavior: 'smooth' });
+  if (scroll) $('topicsCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+// 페이지를 새로 열거나 숏폼 제작 화면에서 돌아왔을 때 최근 글감을 복원한다.
+async function restoreLatestTopics() {
+  const saved = await api('/api/topics/latest').catch(() => null);
+  if (!saved || !saved.search || !Array.isArray(saved.search.topics) || !saved.search.topics.length) return;
+  currentSearch = saved.search;
+  renderTopics(saved.search, saved.search.visibility, { scroll: false });
+  for (const index of saved.completedTopicIndexes || []) {
+    if (Number.isInteger(index)) completedTopics.add(index);
+  }
+  refreshTopicButtons();
 }
 
 // ── 파이프라인 실행: 여러 글감을 대기열에 쌓아 하나씩 자동 처리 ──
@@ -628,9 +646,9 @@ async function loadDrafts() {
       </div>
       <div class="d-actions">
         <span class="tag-status ${tag}">${tagText}</span>
-        ${d.status === 'error' && d.title ? `<button class="btn btn-primary btn-retry">${d.mode === 'publish' ? '발행' : '임시저장'} 재시도</button>` : ''}
-        <button class="btn btn-ghost btn-preview">미리보기</button>
-        ${d.title ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
+        ${d.status === 'error' && d.title && !d.recovered ? `<button class="btn btn-primary btn-retry">${d.mode === 'publish' ? '발행' : '임시저장'} 재시도</button>` : ''}
+        ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
+        ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
         ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
       </div>`;
     const sfBtn = div.querySelector('.btn-shortform');
@@ -640,8 +658,11 @@ async function loadDrafts() {
       `${new Date(d.createdAt).toLocaleString('ko-KR')} · ${d.keyword} · ${d.visibility === 'private' ? '비공개' : '공개'}` +
       (d.frameLabel ? ` · 구성: ${d.frameLabel}` : '') +
       (d.status === 'error' ? ` · ${d.error || ''}` : '');
-    div.querySelector('.btn-preview').onclick = () => openPreview(d.id);
-    if (running) div.querySelector('.btn-preview').onclick = () => watchDraft(d.id);
+    const previewBtn = div.querySelector('.btn-preview');
+    if (previewBtn) {
+      previewBtn.onclick = () => openPreview(d.id);
+      if (running) previewBtn.onclick = () => watchDraft(d.id);
+    }
     const retryBtn = div.querySelector('.btn-retry');
     if (retryBtn) {
       retryBtn.onclick = async () => {
@@ -710,7 +731,10 @@ async function openPreview(id) {
           body.appendChild(img);
           const cap = document.createElement('div');
           cap.className = 'caption';
-          cap.textContent = `▲ ${j.caption || ''}${j.sourceName ? ` (사진 출처: ${j.sourceName})` : ''}`;
+          const sourceLabel = j.sourceName || '관련 기사';
+          cap.textContent = j.caption
+            ? `${j.caption}(출처:${sourceLabel})`
+            : `(출처:${sourceLabel})`;
           body.appendChild(cap);
         }
       }
@@ -988,6 +1012,7 @@ $('sfZipBtn').onclick = async () => {
 
 // 초기화
 refreshStatus();
+restoreLatestTopics();
 loadDrafts();
 setInterval(loadDrafts, 15000);
 setInterval(refreshStatus, 10000);

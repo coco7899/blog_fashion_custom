@@ -364,13 +364,12 @@ async function publish(article, judgments, opts) {
           let captionLine;
           if (j.ai) {
             // AI 연출 이미지는 출처 대신 "AI 연출 이미지"로 명확히 표시(스킬 규칙)
-            captionLine = cleanCap ? `▲ ${cleanCap} · AI 연출 이미지` : '▲ AI 연출 이미지';
+            captionLine = cleanCap ? `${cleanCap}(AI 연출 이미지)` : 'AI 연출 이미지';
           } else {
+            const sourceLabel = j.sourceName || '관련 기사';
             captionLine = cleanCap
-              ? `▲ ${cleanCap}${j.sourceName ? ` (사진 출처: ${j.sourceName})` : ' (사진 출처: 관련 기사)'}`
-              : j.sourceName
-                ? `(사진 출처: ${j.sourceName})`
-                : '';
+              ? `${cleanCap}(출처:${sourceLabel})`
+              : `(출처:${sourceLabel})`;
           }
           try {
             await insertImage(frame, page, path.join(imagesDir, 'raw', j.file), captionLine);

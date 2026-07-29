@@ -4,7 +4,7 @@ const path = require('path');
 const express = require('express');
 
 const setup = require('./src/setup');
-const claude = require('./src/claude');
+const codex = require('./src/codex');
 const store = require('./src/store');
 const auth = require('./src/naverAuth');
 const collector = require('./src/collector');
@@ -23,16 +23,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/status', (req, res) => {
   const env = setup.checkAll();
   // 인증 실패 상태면 2분마다 백그라운드로 재점검 (재로그인 후 자동 복구)
-  const authNow = claude.getAuthStatus();
-  if (env.claude.ok && authNow && !authNow.ok && Date.now() - authNow.at > 2 * 60 * 1000) {
-    claude.checkAuth(true).then((a) => {
-      if (a.ok) console.log('[setup] claude 인증 복구 확인 — AI 사용 가능');
+  const authNow = codex.getAuthStatus();
+  if (env.codex.ok && authNow && !authNow.ok && Date.now() - authNow.at > 2 * 60 * 1000) {
+    codex.checkAuth(true).then((a) => {
+      if (a.ok) console.log('[setup] Codex 인증 복구 확인 — AI 사용 가능');
     });
   }
   res.json({
     chromium: env.chromium,
-    claude: env.claude,
-    claudeAuth: authNow, // null이면 아직 점검 전
+    codex: env.codex,
+    codexAuth: authNow, // null이면 아직 점검 전
 
     session: auth.hasState(),
     blogId: auth.getProfile().blogId || null,
@@ -86,6 +86,31 @@ app.post('/api/topics', async (req, res) => {
   }
 });
 
+// 숏폼 화면이나 다른 페이지에서 돌아와도 가장 최근 글감 목록을 다시 보여준다.
+app.get('/api/topics/latest', (req, res) => {
+  const search = store.getLatestSearch();
+  if (!search) return res.json({ search: null, completedTopicIndexes: [] });
+  const completedTopicIndexes = store
+    .listDrafts()
+    .filter(
+      (draft) =>
+        draft.searchId === search.id &&
+        (draft.status === 'saved' || draft.status === 'published') &&
+        Number.isInteger(draft.topicIndex)
+    )
+    .map((draft) => draft.topicIndex);
+  res.json({
+    search: { ...search, searchId: search.id },
+    completedTopicIndexes: [...new Set(completedTopicIndexes)],
+  });
+});
+
+app.delete('/api/topics', (req, res) => {
+  const count = store.clearSearches();
+  console.log(`[topics] 저장된 글감 목록 ${count}건 삭제`);
+  res.json({ ok: true, count });
+});
+
 // ── 수동 실행: 글감 선택 → 파이프라인 (임시저장 또는 발행) ────
 app.post('/api/run', async (req, res) => {
   const { searchId, topicIndex, visibility } = req.body || {};
@@ -103,6 +128,8 @@ app.post('/api/run', async (req, res) => {
   const meta = store.createDraft({
     keyword: search.keyword,
     topic,
+    searchId,
+    topicIndex,
     visibility: visibility === 'private' ? 'private' : 'public',
     mode,
   });
@@ -486,14 +513,16 @@ function cleanupOrphanDrafts() {
 
 // ── 시작 ────────────────────────────────────────────────────
 (async () => {
+  const removedSportsTopics = store.filterSearchTopics((topic) => !topics.isSportsTopic(topic));
+  if (removedSportsTopics) console.log(`[setup] 저장된 스포츠 글감 ${removedSportsTopics}건 제외`);
   cleanupOrphanDrafts();
   const chrome = await setup.ensureChromium();
   if (!chrome.ok) console.error('[setup]', chrome.error);
-  const cli = claude.checkCli();
-  console.log(cli.ok ? `[setup] claude CLI 확인: ${cli.version}` : `[setup] claude CLI를 찾지 못했습니다: ${cli.error}`);
+  const cli = codex.checkCli();
+  console.log(cli.ok ? `[setup] Codex CLI 확인: ${cli.version}` : `[setup] Codex CLI를 찾지 못했습니다: ${cli.error}`);
   if (cli.ok) {
-    claude.checkAuth().then((a) => {
-      console.log(a.ok ? '[setup] claude 인증 정상 — AI 사용 가능' : `[setup] claude 인증 문제: ${a.error}`);
+    codex.checkAuth().then((a) => {
+      console.log(a.ok ? '[setup] Codex 구독 로그인 정상 — AI 사용 가능' : `[setup] Codex 인증 문제: ${a.error}`);
     });
   }
   scheduler.start();

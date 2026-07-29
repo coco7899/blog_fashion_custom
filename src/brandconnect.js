@@ -3,7 +3,7 @@
 // - 제휴 링크: 상품 상세에서 "링크 발급" → naver.me 단축 제휴 링크 생성(클립보드 복사)
 const browserHelper = require('./browser');
 const auth = require('./naverAuth');
-const claude = require('./claude');
+const codex = require('./codex');
 
 const CREATOR_ID = '719569259757728'; // 사용자의 브랜드커넥트 크리에이터 ID
 const BASE = `https://brandconnect.naver.com/${CREATOR_ID}/affiliate`;
@@ -314,7 +314,7 @@ async function aiShoppingKeywords(article, topic) {
 
 규칙: 사람 이름·추상적 표현 말고, 실제로 살 수 있는 상품 검색어로. (예: "선크림", "여행 파우치", "여름 원피스")
 JSON 배열로만: ["키워드1","키워드2"]`;
-  const arr = await claude.invokeJson(prompt, { timeoutMs: 60000 });
+  const arr = await codex.invokeJson(prompt, { timeoutMs: 60000 });
   return (Array.isArray(arr) ? arr : []).map((s) => String(s).trim()).filter((s) => s.length >= 2).slice(0, 2);
 }
 

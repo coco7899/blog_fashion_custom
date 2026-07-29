@@ -9,7 +9,7 @@
 // 서버는 "대본 + 장면별 배경 이미지 파일"까지만 준비한다.
 const fs = require('fs');
 const path = require('path');
-const claude = require('./claude');
+const codex = require('./codex');
 const store = require('./store');
 const aiimage = require('./aiimage');
 
@@ -96,7 +96,7 @@ ${articleToText(article)}
   ]
 }`;
 
-  const raw = await claude.invokeJson(prompt, { timeoutMs: 240000 });
+  const raw = await codex.invokeJson(prompt, { timeoutMs: 240000 });
   return normalizeScript(raw, { sceneCount });
 }
 
