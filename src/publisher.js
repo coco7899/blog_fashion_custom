@@ -43,6 +43,31 @@ const SEL = {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PRODUCT_POST_FORBIDDEN_RE =
+  /\d[\d,]*\s*원|가격|판매가|정가|할인|쿠폰|적립|배송비|무료\s*배송|혜택|수수료|공정위|광고|제휴|협찬|경제적\s*이해관계|쇼핑커넥트\s*활동|판매\s*발생\s*시|출처|공식\s*스토어/i;
+
+function cleanProductPostText(value) {
+  return String(value || '')
+    .split('\n')
+    .map((line) => line.replace(/\s*\(출처\s*[:：][^)]+\)\s*/gi, '').trim())
+    .filter((line) => line && !PRODUCT_POST_FORBIDDEN_RE.test(line))
+    .join('\n');
+}
+
+function cleanProductPostArticle(article, products) {
+  const productName = String(products?.[0]?.name || '상품').trim().slice(0, 40);
+  const title = cleanProductPostText(article.title) || `${productName} 구성과 사용 전 확인할 점`;
+  const blocks = (article.blocks || [])
+    .map((block) => {
+      const cleaned = { ...block };
+      if (typeof cleaned.text === 'string') cleaned.text = cleanProductPostText(cleaned.text);
+      if (typeof cleaned.caption === 'string') cleaned.caption = cleanProductPostText(cleaned.caption);
+      return cleaned;
+    })
+    .filter((block) => block.type === 'image' || !('text' in block) || String(block.text).trim());
+  const tags = (article.tags || []).filter((tag) => !PRODUCT_POST_FORBIDDEN_RE.test(tag));
+  return { ...article, title, blocks, tags };
+}
 
 // 후보 셀렉터들을 순서대로 훑어 "화면에 보이는" 버튼만 클릭 (숨겨진 버튼 오매칭 방지)
 // pick: 'first' | 'last' — 같은 텍스트 버튼이 여럿일 때 어느 쪽을 누를지
@@ -290,6 +315,8 @@ async function insertImage(frame, page, filePath, captionLine) {
  */
 async function publish(article, judgments, opts) {
   const { mode = 'draft', visibility = 'public', imagesDir, errorShotPath, onStep = () => {}, sources = [], products = [] } = opts;
+  const hasProducts = (products || []).some((product) => product && product.link);
+  const publishArticle = hasProducts ? cleanProductPostArticle(article, products) : article;
 
   const status = await auth.verify(true);
   if (!status.loggedIn || !status.blogId) {
@@ -324,7 +351,7 @@ async function publish(article, judgments, opts) {
     // 제목
     onStep('제목 입력 중');
     await frame.locator(SEL.titleArea).first().click();
-    await page.keyboard.insertText(article.title);
+    await page.keyboard.insertText(publishArticle.title);
 
     // 본문
     onStep('본문 입력 중');
@@ -335,16 +362,8 @@ async function publish(article, judgments, opts) {
     await frame.locator(SEL.bodyArea).first().click();
     await sleep(200);
 
-    // 공정위 고지 문구 — 제휴 링크가 있는 상품 소개 글에만 본문 맨 위에 삽입
-    const hasProducts = (products || []).some((p) => p && p.link);
-    if (hasProducts) {
-      await typeRich(page, '이 글은 네이버 쇼핑커넥트 활동의 일환으로, 판매 발생 시 수수료를 제공받습니다.');
-      await page.keyboard.press('Enter');
-      await page.keyboard.press('Enter');
-    }
-
-    for (const block of article.blocks) {
-      // AI가 고지 문구를 중복으로 넣었으면 건너뛴다 (시스템이 위에서 이미 삽입)
+    for (const block of publishArticle.blocks) {
+      // AI가 광고·제휴 고지 문구를 넣었으면 상품 글에서 제외한다.
       if (block.type === 'paragraph' && /쇼핑커넥트 활동/.test(block.text || '')) continue;
       if (block.type === 'heading') {
         await insertHeading(frame, page, block.text);
@@ -365,6 +384,9 @@ async function publish(article, judgments, opts) {
           if (j.ai) {
             // AI 연출 이미지는 출처 대신 "AI 연출 이미지"로 명확히 표시(스킬 규칙)
             captionLine = cleanCap ? `${cleanCap}(AI 연출 이미지)` : 'AI 연출 이미지';
+          } else if (hasProducts) {
+            // 쇼핑커넥트 포스팅은 자연스러운 사진 설명만 쓰고 출처 문구는 붙이지 않는다.
+            captionLine = cleanCap;
           } else {
             const sourceLabel = j.sourceName || '관련 기사';
             captionLine = cleanCap
@@ -382,7 +404,7 @@ async function publish(article, judgments, opts) {
     }
 
     // ── 해시태그 (본문 끝) ──────────────────────────
-    const tagLine = (article.tags || [])
+    const tagLine = (publishArticle.tags || [])
       .map((t) => '#' + String(t).replace(/^#+/, '').replace(/\s+/g, ''))
       .filter((t) => t.length > 1)
       .slice(0, 10)
@@ -396,7 +418,7 @@ async function publish(article, judgments, opts) {
     // ── 출처 링크 (글 맨 아래) ──────────────────────
     // 뉴스 기사 URL을 그대로 입력하면 스마트에디터가 클릭 가능한 링크로 자동 변환한다.
     const linkSources = (sources || []).filter((s) => s && s.url).slice(0, 8);
-    if (linkSources.length) {
+    if (!hasProducts && linkSources.length) {
       onStep('출처 링크 정리 중');
       await insertDivider(frame, page);
       await insertHeading(frame, page, '📌 출처');
@@ -427,7 +449,6 @@ async function publish(article, judgments, opts) {
         await page.keyboard.press('Enter');
         await sleep(300);
       }
-      // 광고·제휴 고지 문구는 스킬 지침에 따라 글 상단(본문 첫 블록)에 이미 포함됨
     }
 
     if (mode === 'publish') {

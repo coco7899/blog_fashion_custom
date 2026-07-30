@@ -699,41 +699,54 @@ async function openPreview(id) {
   try {
     const { meta, article, judgments } = await api('/api/drafts/' + id);
     if (!article) return alert('아직 글이 작성되지 않았습니다.');
+    const isProductPost = (meta.products || []).some((product) => product && product.link);
+    const productForbidden =
+      /\d[\d,]*\s*원|가격|판매가|정가|할인|쿠폰|적립|배송비|무료\s*배송|혜택|수수료|공정위|광고|제휴|협찬|경제적\s*이해관계|쇼핑커넥트\s*활동|판매\s*발생\s*시|출처|공식\s*스토어/i;
+    const cleanProductText = (value) =>
+      String(value || '')
+        .split('\n')
+        .map((line) => line.replace(/\s*\(출처\s*[:：][^)]+\)\s*/gi, '').trim())
+        .filter((line) => line && !productForbidden.test(line))
+        .join('\n');
     const body = $('modalBody');
     body.innerHTML = '';
     const h1 = document.createElement('h1');
-    h1.textContent = article.title;
+    h1.textContent = isProductPost
+      ? cleanProductText(article.title) || `${meta.products?.[0]?.name || '상품'} 구성과 사용 전 확인할 점`
+      : article.title;
     body.appendChild(h1);
     if (article.titleAlternatives?.length) {
+      const alternatives = isProductPost
+        ? article.titleAlternatives.map(cleanProductText).filter(Boolean)
+        : article.titleAlternatives;
       const alt = document.createElement('div');
       alt.style.cssText = 'font-size:12px;color:#888;margin:-10px 0 14px';
-      alt.textContent = '제목 대안: ' + article.titleAlternatives.join(' | ');
-      body.appendChild(alt);
-    }
-    // 공정위 고지 — 제휴 링크(상품)가 있는 글에만 (발행 시 시스템이 본문 맨 위 삽입)
-    if ((meta.products || []).some((p) => p && p.link)) {
-      const disc = document.createElement('p');
-      disc.style.cssText = 'font-size:13px;color:#777';
-      disc.textContent = '이 글은 네이버 쇼핑커넥트 활동의 일환으로, 판매 발생 시 수수료를 제공받습니다.';
-      body.appendChild(disc);
+      alt.textContent = '제목 대안: ' + alternatives.join(' | ');
+      if (alternatives.length) body.appendChild(alt);
     }
     const bySlot = new Map((judgments || []).map((j) => [j.slot, j]));
     for (const b of article.blocks) {
       if (b.type === 'heading') {
+        const blockText = isProductPost ? cleanProductText(b.text) : b.text;
+        if (!blockText) continue;
         const el = document.createElement('h3');
-        el.textContent = b.text;
+        el.textContent = blockText;
         body.appendChild(el);
       } else if (b.type === 'paragraph') {
-        if (/쇼핑커넥트 활동/.test(b.text || '')) continue; // 고지 문구는 위에서 이미 표시
+        if (/쇼핑커넥트 활동/.test(b.text || '')) continue; // 상품 글에서는 고지 문구를 표시하지 않음
+        const blockText = isProductPost ? cleanProductText(b.text) : b.text;
+        if (!blockText) continue;
         const el = document.createElement('p');
         el.style.textAlign = 'left';
-        el.innerHTML = escapeHtml(b.text)
+        el.innerHTML = escapeHtml(blockText)
           .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
           .replace(/\n/g, '<br>'); // 문단 안 줄은 붙여서 (실제 에디터와 동일)
         body.appendChild(el);
       } else if (b.type === 'quote') {
+        const blockText = isProductPost ? cleanProductText(b.text) : b.text;
+        if (!blockText) continue;
         const el = document.createElement('blockquote');
-        el.innerHTML = escapeHtml(b.text).replace(/\n/g, '<br>');
+        el.innerHTML = escapeHtml(blockText).replace(/\n/g, '<br>');
         body.appendChild(el);
       } else if (b.type === 'divider') {
         body.appendChild(document.createElement('hr'));
@@ -745,17 +758,24 @@ async function openPreview(id) {
           body.appendChild(img);
           const cap = document.createElement('div');
           cap.className = 'caption';
-          const sourceLabel = j.sourceName || '관련 기사';
-          cap.textContent = j.caption
-            ? `${j.caption}(출처:${sourceLabel})`
-            : `(출처:${sourceLabel})`;
+          if (j.ai) {
+            const cleanCaption = String(j.caption || '').replace(/\s*\(AI 연출 이미지\)\s*$/, '').trim();
+            cap.textContent = cleanCaption ? `${cleanCaption}(AI 연출 이미지)` : 'AI 연출 이미지';
+          } else if (isProductPost) {
+            cap.textContent = cleanProductText(j.caption);
+          } else {
+            const sourceLabel = j.sourceName || '관련 기사';
+            cap.textContent = j.caption
+              ? `${j.caption}(출처:${sourceLabel})`
+              : `(출처:${sourceLabel})`;
+          }
           body.appendChild(cap);
         }
       }
     }
     // 출처 (참고한 뉴스 링크) — 글 맨 아래
     const newsRefs = (meta.refs || []).filter((r) => r && r.url && r.kind === 'news');
-    if (newsRefs.length) {
+    if (!isProductPost && newsRefs.length) {
       body.appendChild(document.createElement('hr'));
       const st = document.createElement('h3');
       st.textContent = '📌 출처';

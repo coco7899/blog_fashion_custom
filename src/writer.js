@@ -221,6 +221,37 @@ function deriveProductName(name) {
   return s.slice(0, 40);
 }
 
+const PRODUCT_POST_FORBIDDEN_RE =
+  /\d[\d,]*\s*원|가격|판매가|정가|할인|쿠폰|적립|배송비|무료\s*배송|혜택|수수료|공정위|광고|제휴|협찬|경제적\s*이해관계|쇼핑커넥트\s*활동|판매\s*발생\s*시|출처|공식\s*스토어/i;
+
+// 쇼핑커넥트 글에는 가격·광고 고지·출처가 남지 않도록 생성 결과에도 마지막 안전망을 적용한다.
+function sanitizeProductArticle(article, product) {
+  const cleanLines = (value) =>
+    String(value || '')
+      .split('\n')
+      .map((line) => line.replace(/\s*\(출처\s*[:：][^)]+\)\s*/gi, '').trim())
+      .filter((line) => line && !PRODUCT_POST_FORBIDDEN_RE.test(line))
+      .join('\n');
+
+  article.blocks = (article.blocks || [])
+    .map((block) => {
+      const cleaned = { ...block };
+      if (typeof cleaned.text === 'string') cleaned.text = cleanLines(cleaned.text);
+      if (typeof cleaned.caption === 'string') cleaned.caption = cleanLines(cleaned.caption);
+      return cleaned;
+    })
+    .filter((block) => block.type === 'image' || !('text' in block) || String(block.text).trim());
+
+  if (PRODUCT_POST_FORBIDDEN_RE.test(article.title || '')) {
+    article.title = `${deriveProductName(product.name)} 구성과 사용 전 확인할 점`;
+  }
+  article.titleAlternatives = (article.titleAlternatives || []).filter(
+    (title) => !PRODUCT_POST_FORBIDDEN_RE.test(title)
+  );
+  article.tags = (article.tags || []).filter((tag) => !PRODUCT_POST_FORBIDDEN_RE.test(tag));
+  return article;
+}
+
 /**
  * 핵심 요약 블록을 보장한다.
  * 대표 이미지와 공감형 도입 뒤에 꼭 필요한 상품 사실만 짧게 보여준다.
@@ -258,10 +289,7 @@ function enforceSpecQuote(article, product) {
     blocks.splice(insertAt, 0, spec);
   } else {
     // 스펙 인용구가 아예 없으면 상품 정보로 최소 스펙을 만들어 삽입
-    const priceLine = product.price
-      ? `· 가격: ${Number(product.price).toLocaleString()}원 (작성 시점 기준)`
-      : '';
-    const specText = [`${derived} 핵심만 보기`, `· 상품명: ${derived}`, priceLine].filter(Boolean).join('\n');
+    const specText = [`${derived} 핵심만 보기`, `· 상품명: ${derived}`].join('\n');
     const imgIdx = blocks.findIndex((b) => b.type === 'image');
     let insertAt = imgIdx >= 0 ? imgIdx + 1 : 0;
     let paragraphs = 0;
@@ -295,8 +323,9 @@ ${skill}
 
 【이 자동화 환경에 맞춘 조정 — 지침보다 우선】
 - 이미지: 상세페이지 원본 이미지는 시스템이 이미 수집해 image 블록 순서대로 배치합니다. image 블록을 ${imgCount}개 넣고, desc는 "대표", "핵심 특징", "사용 장면/디테일" 등 역할만 쓰세요. **AI 연출 이미지는 이 환경에서 생성 불가하므로 만들지 마세요.**
-- ZIP·이미지 미리보기·이미지 목록·공식 상세페이지 링크 출력은 시스템이 처리하므로 생략하세요.
+- ZIP·이미지 미리보기·이미지 목록 출력은 시스템이 처리하므로 생략하세요.
 - 상품 링크는 시스템이 글 마지막에 자동으로 붙입니다. 마지막 문단에서 "아래 링크에서 확인해보세요"로 자연스럽게 유도만 하세요.
+- 가격·할인·쿠폰·적립·배송비·수수료, 공정위·광고·제휴 고지, 출처·공식 스토어·상세페이지 주소는 제목·본문·요약·캡션에 절대 쓰지 마세요.
 
 【생활밀착형 소개 글 스타일 — 반드시 이 형태로 쓸 것】
 1. 첫 문단은 상품 설명이 아니라 **이 상품이 필요한 사람의 실제 고민과 생활 장면**으로 시작하세요.
@@ -306,13 +335,12 @@ ${skill}
 2. **절대 금지 표현**: "상세페이지에는", "상세페이지에서", "안내됩니다/안내됐습니다", "표시됩니다/표시돼 있습니다", "소개됩니다", "기재되어 있습니다".
    - 상품 정보를 출처 화면의 문구처럼 설명하지 말고, "10장이 한 묶음이라 여유분을 두고 싶은 분에게 맞아요", "A9·A9S 올인원타워를 쓴다면 먼저 모델을 확인해보세요"처럼 **생활 속 의미와 선택 기준**으로 바꾸세요.
    - "선택 이유가 될 수 있어요", "~라고 전했어요", "생활 패턴에 어울려요", "참고하는 자료일 뿐" 같은 분석 보고서 말투도 쓰지 마세요.
-   - 가격은 "제가 확인했을 때는 11,900원이었어요. 가격이나 쿠폰은 바뀔 수 있으니 결제 전에 한 번 더 봐주시면 좋겠습니다"처럼 말하듯 쓰세요. "작성 시점인 YYYY년 M월 D일 기준으로 확인된 판매가는"처럼 공문서식으로 시작하지 마세요.
    - **리뷰·평점·재구매 수·구매자 반응은 본문에 쓰지 마세요.** "후기 중에는", "구매자는", "자주 묻는 질문", "질문에는", "의견도 있었어요" 같은 리뷰 해설 형식도 금지합니다.
    - 리뷰에서 발견한 주의점이 있더라도 리뷰를 인용하거나 경험담처럼 소개하지 마세요. 확인이 필요한 내용만 "호환품은 정품과 모양이나 장착감이 다를 수 있으니 처음 끼운 뒤 잘 고정됐는지 봐주세요"처럼 **가능성과 확인 방법**으로 짧게 바꾸세요.
-   - 본문은 상품의 구성, 수량, 호환 모델, 형태, 선택 옵션, 교체 방법, 가격처럼 공식 상품 자료에서 확인되는 특징을 중심으로 풀어주세요.
+   - 본문은 상품의 구성, 수량, 호환 모델, 형태, 선택 옵션, 교체 방법처럼 공식 상품 자료에서 확인되는 특징을 중심으로 풀어주세요.
 3. 블록 순서: ① image slot 1(대표) → ② 공감형 도입 paragraph 2~3개 → ③ **quote 블록 하나에 핵심 요약**.
    - 요약 첫 줄은 반드시 "{상품명} 핵심만 보기"로 쓰고, 구성·호환 조건·용도 등 확인된 정보 3~4개만 짧게 넣으세요. 딱딱한 사양표처럼 모든 정보를 나열하지 마세요.
-   - 광고·제휴 고지 문구는 시스템이 맨 위에 자동 삽입하므로 쓰지 마세요.
+   - 공정위 문구, 광고·제휴·경제적 이해관계 표시 문구와 출처 표기는 쓰지 마세요.
 4. **소제목(heading) 블록을 쓰지 마세요.** 구간 전환은 **quote 블록(8~20자 짧은 구절)**로 합니다.
    예: "섬유항균제는 세탁세제와 역할이 달라요", "공간에 따라 다르게 쓸 수 있는 2in1 구조"
    핵심 요약을 포함해 quote는 전체 3~4개만 사용하세요.
@@ -335,7 +363,6 @@ ${frames.renderFrameInstruction(frame, 'product')}
 
 【상품 정보 (상세페이지에서 수집)】
 상품명: ${product.name}
-가격: ${product.price ? Number(product.price).toLocaleString() + '원 (작성 시점 기준)' : '상세페이지 확인'}
 카테고리: ${product.query || ''}
 
 확인된 상품 자료(사실 확인용이며, 본문에서 '상세페이지'라고 부르지 마세요):
@@ -386,9 +413,9 @@ async function writeProductArticle(product, detail) {
       throw new Error('상품 글 작성 결과 형식이 올바르지 않습니다.');
     }
     const alts = (Array.isArray(raw.titleAlternatives) ? raw.titleAlternatives : []).map(String).slice(0, 3);
-    const a = enforceSpecQuote(normalize(raw), product); // 스펙 인용구 형식/위치 보장
-    a.titleAlternatives = alts;
-    return a;
+    const normalized = enforceSpecQuote(normalize(raw), product);
+    normalized.titleAlternatives = alts;
+    return sanitizeProductArticle(normalized, product); // 스펙 인용구 형식/위치 보장 + 가격·고지·출처 제거
   };
 
   let article = await run();
@@ -421,7 +448,7 @@ async function writeProductArticle(product, detail) {
       : null;
   if (m.chars < MIN_PRODUCT_CHARS - CHARS_TOLERANCE || frameIssue || styleIssue) {
     console.log(`[writer] 상품 글 기준 미달(글자 ${m.chars}${frameIssue ? `, ${frameIssue}` : ''}${styleIssue ? `, ${styleIssue}` : ''}) → 재작성`);
-    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(본문 ${m.chars}자${frameIssue ? `, ${frameIssue}` : ''}${styleIssue ? `, ${styleIssue}` : ''}). 독자의 생활 고민에 공감하는 질문으로 시작하세요. "상세페이지/안내됩니다/표시됩니다/소개됩니다", "직접 사용한 후기가 아니라", "확인된 자료를 토대로", "선택 이유가 될 수 있어요", "~라고 전했어요", "생활 패턴에 어울려요" 같은 해설·보고서 표현은 쓰지 마세요. 리뷰·평점·구매자 반응·자주 묻는 질문은 모두 제외하고, 상품의 구성·수량·호환 모델·형태·옵션·교체 방법·가격을 친한 사람에게 알려주듯 자연스럽게 풀어 본문 ${MIN_PRODUCT_CHARS}자 이상 작성하세요.\n`;
+    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(본문 ${m.chars}자${frameIssue ? `, ${frameIssue}` : ''}${styleIssue ? `, ${styleIssue}` : ''}). 독자의 생활 고민에 공감하는 질문으로 시작하세요. "상세페이지/안내됩니다/표시됩니다/소개됩니다", "직접 사용한 후기가 아니라", "확인된 자료를 토대로", "선택 이유가 될 수 있어요", "~라고 전했어요", "생활 패턴에 어울려요" 같은 해설·보고서 표현은 쓰지 마세요. 리뷰·평점·구매자 반응·자주 묻는 질문은 모두 제외하고, 상품의 구성·수량·호환 모델·형태·옵션·교체 방법을 친한 사람에게 알려주듯 자연스럽게 풀어 본문 ${MIN_PRODUCT_CHARS}자 이상 작성하세요. 가격·혜택·공정위 문구·광고 고지·출처 표기는 어떤 블록에도 넣지 마세요.\n`;
     try {
       const retry = await run(note);
       const rm = measure(retry);
@@ -442,4 +469,4 @@ async function writeProductArticle(product, detail) {
   return article;
 }
 
-module.exports = { writeArticle, writeProductArticle, measure };
+module.exports = { writeArticle, writeProductArticle, measure, sanitizeProductArticle };
