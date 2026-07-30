@@ -68,19 +68,36 @@ app.post('/api/logout', (req, res) => {
 app.post('/api/topics', async (req, res) => {
   const keyword = String(req.body.keyword || '').trim();
   if (!keyword) return res.status(400).json({ error: '키워드를 입력하세요.' });
+  const abortController = new AbortController();
+  req.on('aborted', () => abortController.abort());
+  res.on('close', () => {
+    if (!res.writableEnded) abortController.abort();
+  });
   try {
     console.log(`[topics] "${keyword}" 최신 뉴스 검색 수집 시작`);
     const { news, blogs } = await collector.searchNaver(keyword, { recentNews: true });
+    if (abortController.signal.aborted) {
+      const error = new Error('글감 찾기가 중지되었습니다.');
+      error.name = 'AbortError';
+      throw error;
+    }
     const sources = [...news, ...blogs];
     if (!sources.length) {
       return res.status(500).json({ error: '검색 결과를 수집하지 못했습니다. 키워드를 바꿔보세요.' });
     }
     console.log(`[topics] 뉴스 ${news.length}건 + 블로그 ${blogs.length}건 → 글감 생성 중`);
     // 사용자가 직접 키워드로 찾는 경우이므로, 최신 뉴스가 없어도 관련 기사(오래된 것 포함)로 글감을 만든다.
-    const list = await topics.suggestTopics(keyword, sources, { allowStale: true });
+    const list = await topics.suggestTopics(keyword, sources, {
+      allowStale: true,
+      signal: abortController.signal,
+    });
     const searchId = store.saveSearch({ keyword, sources, topics: list, at: new Date().toISOString() });
     res.json({ searchId, keyword, sources, topics: list });
   } catch (e) {
+    if (e.name === 'AbortError' || req.aborted) {
+      console.log('[topics] 사용자가 글감 찾기를 중지했습니다.');
+      return;
+    }
     console.error('[topics] 실패:', e.message);
     res.status(500).json({ error: e.message });
   }
@@ -210,10 +227,27 @@ app.post('/api/run-link', async (req, res) => {
 
 // ── 스케줄 주제로 즉시 글감 찾기 ─────────────────────────────
 app.post('/api/schedule/topics', async (req, res) => {
+  const abortController = new AbortController();
+  req.on('aborted', () => abortController.abort());
+  res.on('close', () => {
+    if (!res.writableEnded) abortController.abort();
+  });
   try {
     const { settings } = scheduler.getStatus();
-    // 키워드 풀에서 매번 3개를 랜덤으로 골라 글감 다양성 확보
-    const pool = [...settings.keywords];
+    const previousSearch = store.getLatestSearch();
+    const previousKeywords = new Set(
+      String(previousSearch?.keyword || '')
+        .split(',')
+        .map((keyword) => keyword.trim())
+        .filter(Boolean)
+    );
+    const previousTopicTitles = Array.isArray(previousSearch?.topics)
+      ? previousSearch.topics.map((topic) => topic && topic.title).filter(Boolean)
+      : [];
+
+    // 직전 검색에서 사용한 키워드를 우선 제외해 버튼을 누를 때마다 다른 분야를 섞는다.
+    const unusedKeywords = settings.keywords.filter((keyword) => !previousKeywords.has(keyword));
+    const pool = [...(unusedKeywords.length >= 3 ? unusedKeywords : settings.keywords)];
     const keywords = [];
     while (keywords.length < 3 && pool.length) {
       keywords.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
@@ -222,6 +256,11 @@ app.post('/api/schedule/topics', async (req, res) => {
     let sources = [];
     for (const kw of keywords) {
       const { news, blogs } = await collector.searchNaver(kw, { recentNews: true });
+      if (abortController.signal.aborted) {
+        const error = new Error('글감 찾기가 중지되었습니다.');
+        error.name = 'AbortError';
+        throw error;
+      }
       sources = sources.concat(news.slice(0, 8), blogs.slice(0, 4));
     }
     const seen = new Set();
@@ -229,13 +268,21 @@ app.post('/api/schedule/topics', async (req, res) => {
     if (!sources.length) {
       return res.status(500).json({ error: '주제 키워드로 검색 결과를 수집하지 못했습니다.' });
     }
+    const avoidTitles = [
+      ...new Set([...previousTopicTitles, ...scheduler.recentTitles(30)]),
+    ].slice(0, 40);
     const list = await topics.suggestTopics(keywords.join(', '), sources, {
-      avoidTitles: scheduler.recentTitles(),
+      avoidTitles,
+      signal: abortController.signal,
     });
     const keyword = keywords.join(', ');
     const searchId = store.saveSearch({ keyword, sources, topics: list, at: new Date().toISOString() });
     res.json({ searchId, keyword, sources, topics: list, visibility: settings.visibility });
   } catch (e) {
+    if (e.name === 'AbortError' || req.aborted) {
+      console.log('[schedule/topics] 사용자가 글감 찾기를 중지했습니다.');
+      return;
+    }
     console.error('[schedule/topics] 실패:', e.message);
     res.status(500).json({ error: e.message });
   }

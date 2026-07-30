@@ -70,8 +70,14 @@ function checkCli() {
  * codex exec를 호출해 마지막 텍스트 응답을 받는다.
  * 프롬프트는 stdin으로 전달하고, 이미지가 있으면 공식 --image 옵션으로 첨부한다.
  */
-function invoke(prompt, { timeoutMs = 180000, imagePaths = [] } = {}) {
+function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal } = {}) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      const error = new Error('Codex 호출이 중지되었습니다.');
+      error.name = 'AbortError';
+      return reject(error);
+    }
+
     const args = [
       'exec',
       '--ephemeral',
@@ -93,12 +99,26 @@ function invoke(prompt, { timeoutMs = 180000, imagePaths = [] } = {}) {
     let err = '';
     let settled = false;
 
+    const cleanup = () => signal?.removeEventListener('abort', handleAbort);
+    const handleAbort = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      cleanup();
+      try { child.kill(); } catch {}
+      const error = new Error('Codex 호출이 중지되었습니다.');
+      error.name = 'AbortError';
+      reject(error);
+    };
+
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
+      cleanup();
       try { child.kill(); } catch {}
       reject(new Error(`Codex 호출이 ${Math.round(timeoutMs / 1000)}초 안에 끝나지 않았습니다.`));
     }, timeoutMs);
+    signal?.addEventListener('abort', handleAbort, { once: true });
 
     child.stdout.on('data', (data) => (out += data));
     child.stderr.on('data', (data) => (err += data));
@@ -106,12 +126,14 @@ function invoke(prompt, { timeoutMs = 180000, imagePaths = [] } = {}) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      cleanup();
       reject(new Error(`Codex CLI 실행 실패: ${error.message}`));
     });
     child.on('close', (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      cleanup();
       if (code !== 0) {
         return reject(new Error(`Codex 종료 코드 ${code}: ${(err || out).slice(-700)}`));
       }
@@ -151,6 +173,7 @@ async function invokeJson(prompt, opts = {}) {
   try {
     return extractJson(await invoke(prompt + suffix, opts));
   } catch (error) {
+    if (error.name === 'AbortError') throw error;
     if (error.message.startsWith('Codex')) throw error;
     const retryPrompt =
       prompt + suffix + '\n(직전 응답이 JSON 파싱에 실패했습니다. 반드시 JSON만 출력하세요.)';

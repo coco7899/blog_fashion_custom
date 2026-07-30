@@ -74,9 +74,8 @@ async function refreshStatus() {
     const s = await api('/api/status');
     const badge = $('loginBadge');
     if (!s.codex.ok) {
-      $('envBadge').hidden = false;
-      $('envBadge').className = 'badge badge-warn';
-      $('envBadge').textContent = '⚠ Codex CLI 없음';
+      $('envBadge').hidden = true;
+      $('envBadge').textContent = '';
     } else if (s.codexAuth && !s.codexAuth.ok) {
       $('envBadge').hidden = false;
       $('envBadge').className = 'badge badge-warn';
@@ -160,7 +159,7 @@ $('newsModeBtn').onclick = async () => {
   const st = $('newsModeStatus');
   st.hidden = false;
   st.className = 'status';
-  st.textContent = '최신 연예인 뉴스를 수집하고 AI가 글감을 뽑는 중... (1~2분) — 오른쪽 중지 버튼으로 취소할 수 있어요.';
+  st.textContent = '직전 글감과 겹치지 않는 새로운 주제를 찾는 중... (1~2분) — 오른쪽 중지 버튼으로 취소할 수 있어요.';
   topicsAbort = new AbortController();
   try {
     const data = await api('/api/schedule/topics', { method: 'POST', signal: topicsAbort.signal });
@@ -177,13 +176,18 @@ $('newsModeBtn').onclick = async () => {
     }
   } finally {
     btn.disabled = false;
+    stopBtn.disabled = false;
+    stopBtn.textContent = '글감 찾기 중지';
     stopBtn.hidden = true;
     topicsAbort = null;
   }
 };
 // 글감 찾기 중지 — 진행 중인 요청을 취소한다
 $('newsStopBtn').onclick = () => {
-  if (topicsAbort) topicsAbort.abort();
+  if (!topicsAbort) return;
+  $('newsStopBtn').disabled = true;
+  $('newsStopBtn').textContent = '중지 중...';
+  topicsAbort.abort();
 };
 
 // ── 모드 1-c: 키워드로 관련 기사 찾아 글감 만들기 ──────
@@ -215,6 +219,8 @@ $('keywordModeBtn').onclick = async () => {
     }
   } finally {
     btn.disabled = false;
+    stopBtn.disabled = false;
+    stopBtn.textContent = '글감 찾기 중지';
     stopBtn.hidden = true;
     topicsAbort = null;
   }
@@ -271,6 +277,19 @@ $('productModeBtn').onclick = async () => {
 };
 
 // ── 모드 2-b: 내 상품 링크로 소개 글쓰기 ──────
+$('productLinkInput').addEventListener('input', () => {
+  $('productLinkDeleteBtn').hidden = !$('productLinkInput').value.trim();
+});
+
+$('productLinkDeleteBtn').onclick = () => {
+  const input = $('productLinkInput');
+  input.value = '';
+  $('productLinkDeleteBtn').hidden = true;
+  $('productModeStatus').hidden = true;
+  $('productModeStatus').textContent = '';
+  input.focus();
+};
+
 $('productLinkBtn').onclick = async () => {
   const url = $('productLinkInput').value.trim();
   if (!/^https?:\/\//.test(url)) return alert('상품 링크(쇼핑커넥트/스마트스토어, https://...)를 붙여넣어 주세요.');
@@ -579,6 +598,8 @@ function watchDraft(draftId, topicIndex = null) {
   watchingDraft = draftId;
   $('progressCard').hidden = false;
   $('progressResult').hidden = true;
+  $('progressResult').innerHTML = '';
+  $('progressMsg').hidden = false;
   $('stopBtn').hidden = false;
   $('stopBtn').disabled = false;
   $('stopBtn').textContent = '■ 진행 중지';
@@ -588,6 +609,7 @@ function watchDraft(draftId, topicIndex = null) {
     try {
       const { meta } = await api('/api/drafts/' + draftId);
       renderSteps(meta.status, meta.mode);
+      $('progressMsg').hidden = false;
       $('progressMsg').className = meta.status === 'error' ? 'status err' : 'status';
       $('progressMsg').textContent = meta.step || meta.status;
       if (meta.status === 'saved' || meta.status === 'published') {
@@ -596,19 +618,11 @@ function watchDraft(draftId, topicIndex = null) {
         // 이 글감을 '실행완료(연회색)'로 고정, 나머지는 초록 복귀
         if (topicIndex !== null) completedTopics.add(topicIndex);
         resetTopicButtons();
-        const r = $('progressResult');
-        r.hidden = false;
-        // 글쓰기가 끝나면 '이 글로 숏폼 만들기'를 주 동작으로 노출한다.
-        const doneLabel = meta.status === 'saved' ? '글 작성 완료' : '발행 완료';
-        const linkLabel = meta.status === 'saved' ? '글쓰기 열기 →' : '발행된 글 보기 →';
-        r.innerHTML = `
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-weight:700">✅ ${doneLabel}</span>
-            <button id="goShortformBtn" class="btn btn-shorts">🎬 숏폼 제작하기</button>
-            ${meta.postUrl ? `<a href="${meta.postUrl}" target="_blank" style="color:#03c75a;font-weight:700;font-size:13px">${linkLabel}</a>` : ''}
-          </div>`;
-        const goBtn = document.getElementById('goShortformBtn');
-        if (goBtn) goBtn.onclick = () => sfOpenPanel(draftId, meta.title || '');
+        // 완료 단계는 위 진행 표시로 충분하므로 중복 완료 문구와 후속 버튼은 숨긴다.
+        $('progressMsg').textContent = '';
+        $('progressMsg').hidden = true;
+        $('progressResult').innerHTML = '';
+        $('progressResult').hidden = true;
         loadDrafts();
         processQueue(); // 대기열에 다음 글감이 있으면 이어서 자동 실행
       } else if (meta.status === 'error') {

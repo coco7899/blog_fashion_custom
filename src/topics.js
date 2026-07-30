@@ -57,7 +57,11 @@ function filterStaleSources(sources) {
  * @param {object} opts {avoidTitles: 이미 발행한 제목들(중복 회피)}
  * @returns {Array} [{title, field, fact, angle, refs:[index], keywords:[], recommended}]
  */
-async function suggestTopics(keyword, allSources, { avoidTitles = [], allowStale = false } = {}) {
+async function suggestTopics(
+  keyword,
+  allSources,
+  { avoidTitles = [], allowStale = false, signal } = {}
+) {
   // 오래된 기사는 AI에게 아예 넘기지 않는다 (프롬프트 부탁만으로는 걸러지지 않음).
   // kept[i] = { source, originalIndex } — AI에게는 0..n 로 보여주고, refs는 원본 인덱스로 되돌린다.
   let kept = filterStaleSources(allSources);
@@ -124,7 +128,7 @@ ${avoid}
   }
 ]`;
 
-  const arr = await codex.invokeJson(prompt, { timeoutMs: 180000 });
+  const arr = await codex.invokeJson(prompt, { timeoutMs: 180000, signal });
   if (!Array.isArray(arr) || arr.length === 0) {
     throw new Error('글감 생성 결과가 비어 있습니다.');
   }

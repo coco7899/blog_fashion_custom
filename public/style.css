@@ -44,6 +44,7 @@ h1 { font-size: 19px; }
 .btn-primary { background: #2563eb; color: #fff; }
 .btn-green { background: #03c75a; color: #fff; }
 .btn-ghost { background: #eef1f4; color: #555; }
+.btn-delete { background: #fdecea; color: #b42318; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-running { background: #ff8a3d; color: #fff; cursor: default; animation: pulse 1.2s infinite; }
 .btn-queued { background: #3b82f6; color: #fff; }
