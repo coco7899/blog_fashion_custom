@@ -13,7 +13,7 @@ const WRITE_TIMEOUT_MS = 600000; // 10분
 // (재작성은 한 번에 수 분이 더 들고, 대개 원본과 큰 차이가 없다)
 const CHARS_TOLERANCE = 150;
 
-const MIN_CHARS = 1300;         // 연예인 글 본문 최소 글자 수
+const MIN_CHARS = 800;          // 연예·생활 뉴스 큐레이션 본문 최소 글자 수
 // 상품 글은 짧은 줄바꿈 문체라 자연 분량이 ~1,000~1,200자다. 목표를 너무 높이면
 // 매 글마다 재작성(5분+타임아웃)이 걸리므로, 잘리거나 깨진 결과만 걸러내는 안전선으로 둔다.
 const MIN_PRODUCT_CHARS = 1200;
@@ -35,24 +35,25 @@ ${skill}
 - 출처 링크는 시스템이 글 끝에 자동으로 정리합니다. 본문에 출처 목록을 넣지 마세요.
 - image desc/caption은 **그 뉴스에 실제로 있을 법한 사진**만 묘사하세요(뉴스 속 인물·현장·장면). 연출 상품 컷은 금지.
 
-【글 작성 방식 — 뉴스 큐레이션(소개)형】 ★가장 중요
-1. **뉴스 내용에 충실하게 쓰세요.** 참고자료(뉴스)에 나온 사실을 그대로 소개·정리하는 글입니다.
-   - **패션·뷰티·스타일 분석으로 억지로 끌고 가지 마세요.** 제목과 본문 내용이 **반드시 일치**해야 합니다.
-   - 자료에 없는 사실·브랜드·가격·추측은 지어내지 마세요. 확인 안 된 건 "~라고 전해졌습니다", "~로 알려졌어요"처럼 조심스럽게.
-2. **말투는 "이런 기사가 났더라고요" 하고 독자에게 뉴스를 소개·큐레이션하듯** 친근하게 쓰세요.
-   예: "얼마 전 이런 소식이 있었는데요", "정리해서 소개해드릴게요".
-3. 흐름:
-   ① 상단 대표 image 1장 + 도입 (제목의 궁금증을 이어받아 '무슨 뉴스인지' 자연스럽게 소개).
-   ② 무슨 일이 있었는지 → 배경/경과 → 세부 내용·반응 순서로, 뉴스를 차근차근 소개.
-   ③ 필요하면 마지막에 **글쓴이(나)의 생각을 자연스럽게 조금** 담으세요.
-      ("개인적으로는~", "저는 ~하게 느껴졌어요" 정도로 담백하게. 단정·훈계·과장 금지, 1~3문장.)
-4. 소제목이나 quote는 꼭 필요한 전환점에만 **전체 1~3개** 사용하세요. 모든 내용을 잘게 나누지 말고 문단끼리 자연스럽게 이어지게 하세요.
-5. 문단(paragraph)은 1~3문장으로 쓰되, 문장을 기계적으로 짧게 끊지 마세요. 읽었을 때 한 편의 이야기처럼 술술 이어져야 합니다.
-6. 이미지는 기사 자료에 따라 **총 1~4장**만 사용하세요. 상단에는 대표 이미지 1장만 두고, 추가 이미지가 필요할 때만 본문 흐름에 맞춰 배치하세요.
-7. ★**문장 끝맺음을 다양하게 섞으세요.** "~습니다 / ~예요 / ~죠 / ~더라고요 / ~네요 / ~거든요 / ~답니다"를 번갈아. 같은 어미 2번 연속 금지, "~요"가 절반을 넘지 않게. 굵게(**)는 1~3곳만.
-8. 본문 글자 수 공백 포함 **1,300~1,700자**. 분량은 반복 문장이나 억지 해석이 아니라 **기사에서 확인된 배경·경과·맥락**으로 채우세요.
-9. 과장·낚시 금지. **제목과 다른 내용 금지.**
-10. 기사 문장과 문단 순서를 그대로 따라 쓰지 마세요. 여러 기사에서 사실만 추려 완전히 새로운 문장과 흐름으로 재구성하세요. 직접 인용은 꼭 필요한 짧은 표현만 쓰고 나머지는 풀어 쓰세요.
+【글 작성 방식 — 홈판용 뉴스 큐레이션】 ★가장 중요
+글을 쓰기 전에 내부적으로만 다음 네 가지를 정하세요. 별도 기획표로 출력하지는 마세요.
+- 기사 전체가 아니라 사용할 핵심 사실 2~3개
+- 글 전체를 이끌 한 줄 관점 하나
+- 독자가 얻을 맥락·관전 포인트 1개 이상
+- 무엇이 새롭고 읽을 이유가 있는지 보여 주는 제목 방향
+
+1. **하나의 관점으로 큐레이션하세요.** 이번에 선택된 구성 프레임을 중심축으로 삼고 다른 관점을 한 글에 섞지 마세요.
+2. 도입에서는 인물의 대표 이미지·대표작·활동 맥락을 짧게 짚은 뒤 이번 소식이 왜 새로운지 연결하세요. 상투적인 "오늘은 알아볼게요", "정리해드릴게요"로 시작하지 마세요.
+3. 본문에는 참고자료에서 확인된 핵심 사실 2~3개만 사용하세요. 기자의 말, 행사 순서, 인물 이력을 빠짐없이 옮기지 말고 독자가 원문 없이도 맥락을 이해할 수 있게 새 흐름으로 엮으세요.
+4. 기사 내용을 시간순으로 옮기지 마세요. 기사 문장·문단 구조를 따라가지 말고 완전히 새 문장으로 쓰며 인용문을 여러 개 이어 붙이지 마세요.
+5. 핵심 사실 뒤에는 왜 그 지점을 볼 만한지 독자 관점의 맥락을 설명하세요. 시청률·흥행·관계 변화·향후 전개는 예측하지 마세요.
+6. 마지막 2~4문장에 글쓴이의 짧은 생각을 자연스럽게 녹이세요. 별도 소제목을 붙이지 말고 의견을 사실처럼 단정하지 마세요.
+7. 친근한 존댓말로 문단당 1~3문장을 쓰고 같은 어미 반복을 줄이세요. 과한 감탄·확신을 피하며 직접 보거나 사용한 것처럼 쓰지 마세요.
+8. 소제목이나 quote는 꼭 필요한 전환점에만 **전체 0~3개** 사용하세요. 문단끼리 자연스럽게 이어지면 소제목 없이 써도 됩니다.
+9. 이미지는 기사 자료에 따라 **총 1~4장**만 사용하세요. 상단 대표 1장을 기본으로 하고 1장으로 충분하면 억지로 늘리지 마세요.
+10. 본문은 공백 포함 **최소 800자 이상** 쓰세요. 확인된 내용이 충분하면 더 길게 쓰되 분량을 채우려고 사실·표현을 반복하지 마세요.
+11. 제목은 무슨 소식인지, 무엇이 새롭거나 달라졌는지 바로 보이게 쓰세요. 인물 이름을 무조건 맨 앞에 두지 말고 기사 제목이나 검색어를 나열하지 마세요.
+12. 제목과 본문 어디에도 **"충격", "정체", "결국", "소름", "전부 공개"**를 쓰지 마세요. 과장·낚시·추측·루머도 금지합니다.
 
 ${frames.renderFrameInstruction(frame, 'celeb')}
 ※ 위 구성 프레임은 이번 글에만 적용됩니다. 상투적 도입("오늘은 ~에 대해 알아볼게요") 대신 뉴스 소개 흐름에 맞게 새로 지으세요.
@@ -67,18 +68,18 @@ ${refText}
 ${retryNote || ''}
 다음 JSON 형식으로만 출력:
 {
-  "title": "홈판 후킹형 제목 (제목과 본문 내용이 일치해야 함)",
+  "title": "새로움과 읽을 이유가 보이며 본문과 일치하는 홈판형 제목",
   "tags": ["태그1", "태그2"],
   "blocks": [
     {"type": "image", "slot": 1, "caption": "뉴스 속 장면 설명", "desc": "이 뉴스에 실제로 있을 법한 사진 — 인물/현장"},
-    {"type": "paragraph", "text": "얼마 전 이런 소식이 전해졌는데요. 기사에서 확인된 핵심부터 자연스럽게 소개해드릴게요."},
-    {"type": "paragraph", "text": "뉴스의 핵심 사실과 배경을 독자가 이해하기 쉬운 새 문장으로 차근차근 풀어 씁니다."},
-    {"type": "quote", "text": "이 소식의 핵심"},
+    {"type": "paragraph", "text": "인물의 대표 이미지나 활동 맥락을 짚고 이번 소식의 새로운 지점으로 자연스럽게 연결합니다."},
+    {"type": "paragraph", "text": "확인된 핵심 사실 2~3개와 독자가 볼 만한 맥락을 완전히 새로운 문장과 흐름으로 풀어 씁니다."},
+    {"type": "quote", "text": "필요할 때만 쓰는 짧은 전환 구절"},
     {"type": "image", "slot": 2, "caption": "관련 장면", "desc": "뉴스 속 다른 사진"},
     {"type": "paragraph", "text": "기사에 나온 배경과 경과를 연결해 설명하고, 필요하면 마지막에 개인적인 생각을 짧게 덧붙입니다."}
   ]
 }
-quote/heading 합계 1~3개, 이미지는 기사에 따라 ${MIN_IMAGES}~4개, tags 5~10개. 모두 왼쪽 정렬.`;
+quote/heading 합계 0~3개, 이미지는 기사에 따라 ${MIN_IMAGES}~4개, tags 5~10개. 모두 왼쪽 정렬.`;
 }
 
 function normalize(article) {
@@ -150,6 +151,28 @@ function simplifyNewsStructure(article) {
   return article;
 }
 
+const NEWS_TITLE_FORBIDDEN_RE = /충격|정체|결국|소름|전부\s*공개/;
+const NEWS_PREDICTION_RE =
+  /시청률.{0,12}(?:오르|나오|기록|예상)|흥행.{0,12}(?:하|성공|예상)|관계.{0,12}(?:변하|달라질|발전)|향후\s*전개|앞으로.{0,16}(?:전개|관계)|될\s*것으로\s*보|기대해도\s*좋/;
+
+// 생성 결과를 코드에서도 한 번 더 점검한다. 의미 판단은 프롬프트에 맡기되,
+// 글자 수·금지어·소제목·이미지·근거 없는 전망처럼 명확한 위반은 재작성을 요청한다.
+function inspectNewsArticle(article) {
+  const m = measure(article);
+  const text = (article.blocks || []).map((block) => block.text || '').join(' ');
+  const issues = [];
+
+  if (m.chars < MIN_CHARS) issues.push(`본문 ${m.chars}자(최소 ${MIN_CHARS}자)`);
+  if (m.images < MIN_IMAGES || m.images > 4) issues.push(`이미지 ${m.images}개(허용 1~4개)`);
+  if (m.headings + m.quotes > 3) issues.push(`소제목·구간 표시 ${m.headings + m.quotes}개(최대 3개)`);
+  if (NEWS_TITLE_FORBIDDEN_RE.test(article.title || '')) issues.push('제목 금지 표현 포함');
+  if (NEWS_TITLE_FORBIDDEN_RE.test(text)) issues.push('본문 금지 표현 포함');
+  if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
+  if (!(article.blocks || []).some((block) => block.type === 'paragraph')) issues.push('본문 문단 없음');
+
+  return issues;
+}
+
 /**
  * @param {object} topic {title, angle, keywords}
  * @param {Array} refs collectReferences 결과 [{title, url, source, text}]
@@ -172,35 +195,32 @@ async function writeArticle(topic, refs) {
   }
   article = simplifyNewsStructure(normalize(article));
 
-  // 보강 재작성 판단.
-  // 글자 수가 기준에 근접(오차 CHARS_TOLERANCE 이내)하면 재작성하지 않는다 —
-  // 재작성은 수 분이 더 걸리는데 결과가 원본과 크게 다르지 않은 경우가 많다.
-  // 이미지·인용구 부족이나 프레임 요건 미달은 글의 형태 자체가 어긋난 것이므로 그대로 재작성한다.
   const m = measure(article);
   const frameIssue = frame.check ? frame.check(article) : null;
-  const charsTooShort = m.chars < MIN_CHARS - CHARS_TOLERANCE;
-  if (charsTooShort || m.images < MIN_IMAGES || frameIssue) {
+  const qaIssues = inspectNewsArticle(article);
+  if (frameIssue) qaIssues.push(frameIssue);
+  if (qaIssues.length) {
     console.log(
-      `[writer] 기준 미달(글자 ${m.chars}, 이미지 ${m.images}, 인용구 ${m.quotes}${frameIssue ? `, ${frameIssue}` : ''}) → 재작성`
+      `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
-    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(글자 ${m.chars}자, 이미지 ${m.images}, 구간 표시 ${m.quotes}${frameIssue ? `, ${frameIssue}` : ''}). 반드시: 기사 사실 중심 1,300자 이상, quote/heading 1~3개, 이미지 1~4개(상단 대표 1장).\n`;
+    const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
+핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상, quote/heading 합계 0~3개, 이미지는 1~4개로 작성하세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
         retry = simplifyNewsStructure(normalize(retry));
         const rm = measure(retry);
-        const meets = (x) => x.chars >= MIN_CHARS && x.images >= MIN_IMAGES && x.quotes <= 3;
-        // 재작성이 기준을 충족하거나, 원본이 미달인데 재작성이 더 길면 채택
-        if (meets(rm) || (!meets(m) && rm.chars > m.chars && rm.images >= MIN_IMAGES)) {
+        const retryIssues = inspectNewsArticle(retry);
+        const retryFrameIssue = frame.check ? frame.check(retry) : null;
+        if (retryFrameIssue) retryIssues.push(retryFrameIssue);
+        if (!retryIssues.length || (retryIssues.length < qaIssues.length && rm.chars >= m.chars)) {
           article = retry;
-          console.log(`[writer] 재작성 채택(글자 ${rm.chars}, 이미지 ${rm.images}, 인용구 ${rm.quotes})`);
+          console.log(`[writer] 뉴스 글 재작성 채택(글자 ${rm.chars}, 남은 QA ${retryIssues.length}건)`);
         }
       }
     } catch (e) {
       console.log(`[writer] 재작성 실패(원본 사용): ${e.message}`);
     }
-  } else if (m.chars < MIN_CHARS) {
-    console.log(`[writer] 글자 ${m.chars}자 — 기준(${MIN_CHARS})에 근접해 재작성 생략`);
   }
 
   // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
@@ -469,4 +489,4 @@ async function writeProductArticle(product, detail) {
   return article;
 }
 
-module.exports = { writeArticle, writeProductArticle, measure, sanitizeProductArticle };
+module.exports = { writeArticle, writeProductArticle, measure, inspectNewsArticle, sanitizeProductArticle };

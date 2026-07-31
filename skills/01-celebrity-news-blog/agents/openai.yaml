@@ -1,7 +1,7 @@
 interface:
-  display_name: "연예인 뉴스 블로그"
-  short_description: "기사 흐름을 살린 연예 뉴스 큐레이션 글을 작성합니다"
-  default_prompt: "Use $01-celebrity-news-blog to research current celebrity news and write a natural Korean Naver curation post with flexible image placement."
+  display_name: "01연예인블로그"
+  short_description: "연예·생활 뉴스를 홈판형 큐레이션 글로 작성합니다"
+  default_prompt: "Use $01-celebrity-news-blog to find five current entertainment and lifestyle news topics or write a verified Korean Naver curation post."
 policy:
   products:
     - chatgpt
