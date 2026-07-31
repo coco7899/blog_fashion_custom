@@ -49,8 +49,15 @@ ${skill}
 5. 핵심 사실 뒤에는 왜 그 지점을 볼 만한지 독자 관점의 맥락을 설명하세요. 시청률·흥행·관계 변화·향후 전개는 예측하지 마세요.
 6. 마지막 2~4문장에 글쓴이의 짧은 생각을 자연스럽게 녹이세요. 별도 소제목을 붙이지 말고 의견을 사실처럼 단정하지 마세요.
 7. 친근한 존댓말로 문단당 1~3문장을 쓰고 같은 어미 반복을 줄이세요. 과한 감탄·확신을 피하며 직접 보거나 사용한 것처럼 쓰지 마세요.
+   - 제목, 소제목, 본문은 모두 왼쪽 정렬입니다.
+   - 한 paragraph에는 하나의 내용만 담고, 인물의 출연 상태·작품 설정·배역·관전 포인트처럼 중심 내용이 바뀌면 새 paragraph로 나누세요.
+   - 한 문단을 1~3문장으로 구성하되 문장 수를 맞추려고 서로 다른 내용을 한 문단에 묶지 마세요.
+   - **내용을 줄이려고 문장을 억지로 간결하게 다시 쓰지 마세요.** 필요한 설명과 자연스러운 문장 흐름은 그대로 유지하세요.
+   - 완성된 한 문장이 길면 같은 paragraph 안에서 의미 단위로 줄바꿈(\\n)해 2~3줄로 보여주세요.
+   - 한 줄은 약 25~40자를 권장하지만 이는 화면 배치 기준일 뿐, 본문 분량이나 정보량을 줄이는 기준이 아닙니다.
+   - 단어·조사·수식어 중간을 자르지 말고 띄어쓰기나 쉼표처럼 자연스러운 지점에서 줄바꿈하세요.
 8. 소제목이나 quote는 꼭 필요한 전환점에만 **전체 0~3개** 사용하세요. 문단끼리 자연스럽게 이어지면 소제목 없이 써도 됩니다.
-9. 이미지는 기사 자료에 따라 **총 1~4장**만 사용하세요. 상단 대표 1장을 기본으로 하고 1장으로 충분하면 억지로 늘리지 마세요.
+9. 이미지는 기사 자료에 따라 **총 1~4장**만 사용하세요. 상단 대표 이미지 외에도 서로 다른 장면이나 인물을 보여 주는 사용 가능한 기사 사진이 있으면 **2~3장을 우선 검토**해 내용이 바뀌는 단락 사이에 배치하세요. 같은 사진의 단순 크기·자르기 변형이나 내용과 무관한 사진으로 수를 채우지 말고, 적절한 후보가 1장뿐일 때만 1장을 사용하세요.
 10. 본문은 공백 포함 **최소 800자 이상** 쓰세요. 확인된 내용이 충분하면 더 길게 쓰되 분량을 채우려고 사실·표현을 반복하지 마세요.
 11. 제목은 무슨 소식인지, 무엇이 새롭거나 달라졌는지 바로 보이게 쓰세요. 인물 이름을 무조건 맨 앞에 두지 말고 기사 제목이나 검색어를 나열하지 마세요.
 12. 제목과 본문 어디에도 **"충격", "정체", "결국", "소름", "전부 공개"**를 쓰지 마세요. 과장·낚시·추측·루머도 금지합니다.
@@ -79,7 +86,7 @@ ${retryNote || ''}
     {"type": "paragraph", "text": "기사에 나온 배경과 경과를 연결해 설명하고, 필요하면 마지막에 개인적인 생각을 짧게 덧붙입니다."}
   ]
 }
-quote/heading 합계 0~3개, 이미지는 기사에 따라 ${MIN_IMAGES}~4개, tags 5~10개. 모두 왼쪽 정렬.`;
+각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. quote/heading 합계 0~3개, 이미지는 기사에 따라 ${MIN_IMAGES}~4개를 사용하되 서로 다른 관련 사진 후보가 있으면 2~3장을 우선 검토하세요. tags 5~10개. 모두 왼쪽 정렬.`;
 }
 
 function normalize(article) {
@@ -151,6 +158,44 @@ function simplifyNewsStructure(article) {
   return article;
 }
 
+// 연예 뉴스 글의 내용은 그대로 두고 화면에서만 짧은 줄로 보이게 한다.
+// 단어 중간을 자르지 않으며, 굵게(**) 구간 안에서는 줄을 나누지 않는다.
+function wrapNewsLine(value, targetLength = 36) {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = [];
+
+  for (const word of words) {
+    const currentText = current.join(' ');
+    const candidate = current.length ? `${currentText} ${word}` : word;
+    const visibleLength = candidate.replace(/\*\*/g, '').length;
+    const insideBold = ((currentText.match(/\*\*/g) || []).length % 2) === 1;
+
+    if (current.length && visibleLength > targetLength && !insideBold) {
+      lines.push(currentText);
+      current = [word];
+    } else {
+      current.push(word);
+    }
+  }
+
+  if (current.length) lines.push(current.join(' '));
+  return lines;
+}
+
+function formatNewsParagraphs(article) {
+  article.blocks = (article.blocks || []).map((block) => {
+    if (block.type !== 'paragraph') return block;
+    const lines = String(block.text || '')
+      .split(/\n+/)
+      .flatMap((line) => wrapNewsLine(line))
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return { ...block, text: lines.join('\n') };
+  });
+  return article;
+}
+
 const NEWS_TITLE_FORBIDDEN_RE = /충격|정체|결국|소름|전부\s*공개/;
 const NEWS_PREDICTION_RE =
   /시청률.{0,12}(?:오르|나오|기록|예상)|흥행.{0,12}(?:하|성공|예상)|관계.{0,12}(?:변하|달라질|발전)|향후\s*전개|앞으로.{0,16}(?:전개|관계)|될\s*것으로\s*보|기대해도\s*좋/;
@@ -193,7 +238,7 @@ async function writeArticle(topic, refs) {
   if (!article || !article.title || !Array.isArray(article.blocks)) {
     throw new Error('글 작성 결과 형식이 올바르지 않습니다.');
   }
-  article = simplifyNewsStructure(normalize(article));
+  article = formatNewsParagraphs(simplifyNewsStructure(normalize(article)));
 
   const m = measure(article);
   const frameIssue = frame.check ? frame.check(article) : null;
@@ -204,11 +249,11 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상, quote/heading 합계 0~3개, 이미지는 1~4개로 작성하세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
+핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상, quote/heading 합계 0~3개, 이미지는 1~4개로 작성하세요. 모든 글은 왼쪽 정렬입니다. 내용이나 설명을 줄이지 말고, 완성된 문장을 약 25~40자의 자연스러운 의미 단위로 줄바꿈해 보여주세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
-        retry = simplifyNewsStructure(normalize(retry));
+        retry = formatNewsParagraphs(simplifyNewsStructure(normalize(retry)));
         const rm = measure(retry);
         const retryIssues = inspectNewsArticle(retry);
         const retryFrameIssue = frame.check ? frame.check(retry) : null;
@@ -374,7 +419,8 @@ ${skill}
    - 같은 어미를 연달아 반복하지 말고, 지나치게 조심스러운 "~할 수 있어요 / ~될 수 있어요"도 반복하지 마세요.
    - 상품을 평가하는 해설자 말투보다 "저도 처음엔 헷갈렸는데 하나씩 보니 어렵지 않았어요", "이 부분만 먼저 봐주세요"처럼 사람이 옆에서 알려주는 느낌을 내세요.
    - "정리하면 세 가지만 기억하세요"처럼 글 전체를 보고서식으로 요약하며 끝내지 마세요. 마지막에는 이 상품이 필요한 사람을 한 번 더 떠올려주고 자연스럽게 링크로 이어주세요.
-   - 굵게(**)는 꼭 필요한 1~3곳만 사용하세요.
+   - 핵심 구성, 꼭 확인할 조건, 독자가 기억해야 할 선택 기준 가운데 1~3곳은 반드시 **굵게** 표시하세요.
+   - 문장 전체를 계속 굵게 만들지 말고 짧은 핵심 구절만 강조하세요. 핵심 요약과 내용 전환은 quote 3~4개로 구분하고, 같은 내용을 굵게와 quote로 중복 강조하지 마세요.
 10. 본문 **1,300~1,600자 (반드시 1,200자 이상)**. 반복 설명 대신 생활 장면, 선택 기준, 사용 대상의 마음을 충분히 풀어주세요. 모든 글 왼쪽 정렬.
 
 ${frames.renderFrameInstruction(frame, 'product')}
@@ -489,4 +535,12 @@ async function writeProductArticle(product, detail) {
   return article;
 }
 
-module.exports = { writeArticle, writeProductArticle, measure, inspectNewsArticle, sanitizeProductArticle };
+module.exports = {
+  writeArticle,
+  writeProductArticle,
+  measure,
+  inspectNewsArticle,
+  wrapNewsLine,
+  formatNewsParagraphs,
+  sanitizeProductArticle,
+};
