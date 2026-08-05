@@ -269,7 +269,7 @@ async function runProduct(draftId, visibility, opts = {}) {
       ? 'AI 초안 작성 후 구매 설득력 자체 검수 중 — 수 분 걸릴 수 있어요'
       : 'AI가 상품 소개 글 작성 중 — 수 분 걸릴 수 있어요');
     const article = await writer.writeProductArticle(product, detail, selectedHook, {
-      minImages: automaticSelection ? 4 : 2,
+      minImages: 4,
       selfReview: automaticSelection,
     });
     store.saveArticle(draftId, article);

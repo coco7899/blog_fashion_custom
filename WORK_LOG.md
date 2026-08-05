@@ -1145,3 +1145,65 @@
 ### 주의사항
 
 - 실행 중 생성되는 `logs/` 폴더는 GitHub에 올리지 않습니다.
+
+## 2026-08-05 (건강 전문 블로그 스킬 전환)
+
+### 완료한 작업
+
+- `coco7899/blog_fashion_custom` 저장소를 현재 작업 폴더에 복제했습니다.
+- `03-health-affiliate-blog-skill.zip`의 건강 전문 스킬과 템플릿·참고 가이드를 프로젝트에 추가했습니다.
+- 기존 연예 뉴스 글과 쇼핑커넥트 글 화면은 그대로 유지하면서, 두 모드가 모두 `03-health-affiliate-blog` 지침을 읽도록 연결했습니다.
+- 뉴스 글감은 최근 3일을 우선하고 부족하면 7일·30일로 넓히며, 생활 건강·공식 출처·과장 금지 기준을 적용했습니다.
+- 자동 쇼핑커넥트 상품과 예약 글 키워드를 식재료·생활 건강·건강기능식품 중심으로 교체했습니다.
+- 건강 글 최소 분량을 1,200자로 높이고 이미지 슬롯 4개와 해시태그 6개를 적용했습니다.
+- 기본 실행 포트를 8000으로 변경하고 실제 메인 화면과 상태 API가 200으로 응답하는 것을 확인했습니다.
+- 개인 Codex 구독 로그인 상태가 정상임을 확인하고 브라우저 콘솔 오류 없이 사이트를 열었습니다.
+
+### 수정한 파일
+
+- `.gitignore`
+- `package-lock.json`
+- `server-custom.js`
+- `src/brandconnect.js`
+- `src/pipeline.js`
+- `src/scheduler.js`
+- `src/skills.js`
+- `src/topics.js`
+- `src/writer.js`
+- `skills/03-health-affiliate-blog/SKILL.md`
+- `skills/03-health-affiliate-blog/templates/*`
+- `skills/03-health-affiliate-blog/references/*`
+- `WORK_LOG.md`
+
+### 다음 작업
+
+- 사이트에서 네이버 로그인을 연결한 뒤 건강 뉴스 글과 건강 쇼핑커넥트 글을 각각 비공개 임시저장으로 한 번씩 확인합니다.
+
+### 주의사항
+
+- `public/`의 HTML·CSS·JavaScript는 변경하지 않아 기존 PC·모바일 UI와 디자인을 그대로 유지했습니다.
+- 현재 네이버 로그인 세션은 연결되지 않았으므로 실제 임시저장·발행은 아직 검증하지 않았습니다.
+- 변경사항은 아직 커밋하거나 GitHub에 푸시하지 않았습니다.
+
+## 2026-08-05 (건강 블로그 전용 브랜치 분리)
+
+### 완료한 작업
+
+- 원본 `main`과 `origin/main`이 동일한 커밋 `c821082`를 가리키는 것을 확인했습니다.
+- 건강 블로그 변경사항을 별도 브랜치 `codex/health-blog-site`로 분리했습니다.
+- 기존 `skills/01-celebrity-news-blog`와 `skills/02-naver-shopping-connect-blog`의 파일 내용이 `main`과 동일함을 확인했습니다.
+- 기존 UI 폴더 `public/` 전체가 `main`과 동일함을 확인했습니다.
+- 건강 기능은 새 `skills/03-health-affiliate-blog`와 건강 브랜치의 서버 연결 코드에서만 동작하도록 구성했습니다.
+
+### 수정한 파일
+
+- `WORK_LOG.md`
+
+### 다음 작업
+
+- 사용자가 원하면 `codex/health-blog-site` 브랜치만 GitHub에 Push합니다.
+
+### 주의사항
+
+- 원본 `main`에는 건강 블로그 변경사항을 병합하지 않습니다.
+- 기존 01 네이버 블로그 자동화는 원본 브랜치에서 그대로 유지합니다.
