@@ -88,7 +88,7 @@ async function suggestTopics(
     ? `\n이미 발행한 글 제목들 (이 주제들과 겹치지 않게 하세요):\n${avoidTitles.map((t) => `- ${t}`).join('\n')}\n`
     : '';
 
-  const skill = skills.loadSkill('01-celebrity-news-blog');
+  const skill = skills.loadSkill('03-health-affiliate-blog');
 
   const prompt = `당신은 사실 기반 생활 건강 블로그 콘텐츠 기획 전문가입니다.
 관심분야 키워드: "${keyword}"
@@ -119,20 +119,27 @@ ${avoid}
 - 연구 결과를 모든 사람에게 적용되는 사실처럼 확대하지 마세요.
 - **제목은 네이버 홈판용으로 새로 구성**하세요:
   · 제목만으로 무슨 소식인지 이해되고, 무엇이 새롭거나 달라졌는지 보여야 합니다.
-  · 인물 이름을 반드시 맨 앞에 둘 필요는 없습니다.
   · 기사 제목이나 검색어를 나열하지 말고, 독자가 읽을 이유를 한 가지 보여주세요.
   · 확인되지 않은 내용·과장·거짓 낚시는 금지하고, 기사에서 확인되는 사실만 담으세요.
   · "충격", "정체", "결국", "소름", "전부 공개"는 쓰지 마세요.
-- 같은 인물·같은 소재가 후보에서 과도하게 반복되지 않게 구성하세요.
+- 같은 질환·영양소·식재료가 후보에서 과도하게 반복되지 않게 구성하세요.
 - refs 에는 참고할 위 목록의 번호를 2~4개 넣되, **뉴스 기사를 최소 1개 이상 포함**시키세요 (출처로 밝힐 수 있도록).
+- 각 후보마다 독자의 생활 문제 하나, 연결 가능한 일반 식재료, 건강식품, 주력 상품 하나, 현실적인 상품 필요 이유를 반드시 구체적으로 작성하세요.
+- productKeywords에는 쇼핑커넥트에서 실제 상품을 찾을 수 있는 짧은 검색어를 1~3개 넣으세요. 질병명만 넣지 말고 식재료·제품 유형을 사용하세요.
 
 다음 JSON 배열 형식으로만 출력:
 [
   {
-    "title": "새로움과 읽을 이유가 보이는 홈판형 제목",
-    "field": "짧은 분야 라벨 (예: 드라마, 예능, 핫딜, 건강, 패션, 뷰티)",
+    "title": "생활 문제와 실천 방향이 보이는 건강 글감 제목",
+    "field": "짧은 건강 분야 라벨 (예: 장 건강, 혈당 관리, 중년 영양, 수면)",
     "fact": "확인된 핵심 사실 한 문장",
     "angle": "어떤 관점/구성으로 쓸지 한두 문장 (블로그 포인트)",
+    "problem": "독자가 실제로 겪는 생활 건강 문제 하나",
+    "ingredient": "연결 가능한 일반 식재료",
+    "healthProduct": "연결 가능한 건강식품 또는 제품 유형",
+    "primaryProduct": "가장 자연스러운 주력 상품 하나",
+    "productReason": "그 상품이 필요한 가장 현실적인 이유",
+    "productKeywords": ["실제 상품 검색어1", "실제 상품 검색어2"],
     "refs": [0, 3],
     "keywords": ["핵심키워드1", "핵심키워드2"],
     "recommended": true
@@ -156,6 +163,15 @@ ${avoid}
         field: String(t.field || ''),
         fact: String(t.fact || ''),
         angle: String(t.angle || ''),
+        problem: String(t.problem || ''),
+        ingredient: String(t.ingredient || ''),
+        healthProduct: String(t.healthProduct || ''),
+        primaryProduct: String(t.primaryProduct || ''),
+        productReason: String(t.productReason || ''),
+        productKeywords: (Array.isArray(t.productKeywords) ? t.productKeywords : [])
+          .map(String)
+          .filter(Boolean)
+          .slice(0, 3),
         refs: keptIdx.map((i) => kept[i].originalIndex),
         keywords: (Array.isArray(t.keywords) ? t.keywords : []).map(String).slice(0, 8),
         recommended: !!t.recommended,

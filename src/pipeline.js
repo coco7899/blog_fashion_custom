@@ -123,59 +123,183 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       refs: refs.map((r) => ({ title: r.title, url: r.url, source: r.source, kind: r.kind })),
     });
 
-    // 2. AI 글 작성
-    setStep('writing', `AI가 글 작성 중 (참고자료 ${refs.length}건) — 수 분 걸릴 수 있어요`);
-    const article = await writer.writeArticle(topic, refs);
-    // 연예·생활 뉴스 글은 작성이 끝나면 원고를 바로 저장한다.
-    // automaticSelection은 상품 글 전용 변수이므로 이 흐름에서 참조하지 않는다.
+    // 2. 건강 글감과 자연스럽게 연결되는 주력 상품 하나를 자동 선정한다.
+    setStep('collecting', '건강 글감과 연결할 주력 상품을 찾는 중');
+    const avoidIds = store
+      .listDrafts()
+      .map((draft) => draft.product && draft.product.id)
+      .filter(Boolean)
+      .slice(0, 20);
+    let productQueries = [
+      ...(Array.isArray(topic.productKeywords) ? topic.productKeywords : []),
+      topic.primaryProduct,
+      topic.ingredient,
+      topic.healthProduct,
+    ]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .slice(0, 5);
+    if (!productQueries.length) {
+      const suggested = await brandconnect.suggestHealthProductKeywords(topic, refs);
+      productQueries = suggested.keywords;
+      if (!topic.primaryProduct) topic.primaryProduct = suggested.primaryProduct;
+      if (!topic.productReason) topic.productReason = suggested.productReason;
+    }
+    const product = await brandconnect.getBestProduct({ keywords: productQueries, avoidIds });
+    if (!product) throw new Error('건강 글감과 자연스럽게 연결할 제휴 상품을 찾지 못했습니다.');
+
+    setStep('collecting', '주력 상품의 제휴 링크를 발급하는 중');
+    const link = await brandconnect.issueAffiliateLink(product.url);
+    if (!link) throw new Error('선정한 건강 상품의 제휴 링크 발급에 실패했습니다.');
+
+    setStep('collecting', '주력 상품의 정확한 정보와 이미지를 확인하는 중');
+    let detail = await brandconnect.getStoreDetail(link).catch(() => ({}));
+    if (!detail || !Array.isArray(detail.images) || !detail.images.length) {
+      detail = await brandconnect.getProductDetail(product.url).catch(() => ({}));
+    }
+    if (!Array.isArray(detail.images)) detail.images = [];
+    if (!detail.images.length && product.image) detail.images = [product.image];
+
+    const products = [{ name: product.name, price: product.price, commission: product.commission, link }];
+    store.updateDraft(draftId, {
+      product,
+      products,
+      healthPlan: {
+        problem: topic.problem || '',
+        primaryProduct: topic.primaryProduct || product.query || product.name,
+        productReason: topic.productReason || '',
+      },
+    });
+
+    // 3. 건강 기사와 상품 자료를 함께 사용해 최종 제휴 글을 작성하고 90점 검수한다.
+    setStep('writing', `건강 기사와 주력 상품으로 글 작성·90점 자체 검수 중 (참고자료 ${refs.length}건)`);
+    const article = await writer.writeProductArticle(product, detail, null, {
+      minImages: 4,
+      selfReview: true,
+      healthContext: { topic, refs },
+    });
     store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
       title: article.title,
       frameKey: article.frameKey,
       frameLabel: article.frameLabel,
+      qualityScore: article.qualityReview?.score || null,
+      qualityPassed: true,
     });
 
-    // 3. 이미지 수집 + AI 판정
-    //    ※ 타인 블로그 이미지는 절대 사용 금지 — 뉴스 이미지에서만.
-    //    ① 참고 뉴스 본문 이미지 + ② 네이버 이미지검색(주제 맞춤) 으로 넉넉한 후보 풀을 만든다.
-    setStep('images', '주제에 맞는 뉴스 이미지 검색 중');
-    const imageList = [];
-    for (const r of refs) {
-      if (r.kind !== 'news') continue; // 블로그 참고글의 이미지는 제외
-      for (const u of r.images || []) {
-        if (collector.isBlogImage(u)) continue;
-        imageList.push({ url: u, referer: r.url, sourceName: r.source || r.title });
-      }
-    }
-    // 주제 맞춤 이미지 검색 — 글에 실제로 등장하는 구체 키워드로 검색해 관련 이미지를 폭넓게 확보
-    const queries = buildImageQueries(topic, article);
-    for (const q of queries) {
-      try {
-        const found = await collector.searchImages(q, { maxCount: 15 });
-        imageList.push(...found);
-        console.log(`[pipeline] 이미지검색 "${q}" → ${found.length}건`);
-      } catch (e) {
-        console.log(`[pipeline] 이미지검색 실패 (${q}): ${e.message}`);
-      }
-    }
+    // 4. 공식 상품 이미지와 건강 생활 연출 이미지를 조합해 최소 4장을 준비한다.
+    setStep('images', '건강 포스팅 이미지 4장 이상을 준비하는 중');
     const rawDir = path.join(store.imagesDir(draftId), 'raw');
-    // 슬롯 수에 여유를 둔 만큼 후보를 넉넉히 받아 AI가 잘 맞는 것을 고르게 한다
-    const slotCount = article.blocks.filter((b) => b.type === 'image').length;
-    const candidates = await collector.downloadImages(imageList, rawDir, { maxCount: Math.max(12, slotCount * 3) });
-    store.writeJson(path.join(store.imagesDir(draftId), 'candidates.json'), candidates);
-    let judgments = [];
-    if (candidates.length) {
-      setStep('images', `이미지 ${candidates.length}장을 AI가 확인하는 중`);
-      judgments = await images.judgeImages(article, candidates, rawDir);
-    } else {
-      judgments = article.blocks
-        .filter((b) => b.type === 'image')
-        .map((b) => ({ slot: b.slot, file: null, reason: '사용 가능한 이미지 없음' }));
+    const slots = article.blocks.filter((block) => block.type === 'image');
+
+    const productImageList = detail.images.map((url) => ({
+      url,
+      referer: product.url,
+      sourceName: '공식 스토어',
+    }));
+    const productCandidates = await collector.downloadImages(productImageList, rawDir, {
+      maxCount: Math.min(2, Math.max(1, productImageList.length)),
+    });
+
+    const newsImageList = [];
+    for (const ref of refs) {
+      if (ref.kind !== 'news') continue;
+      for (const url of ref.images || []) {
+        if (!collector.isBlogImage(url)) {
+          newsImageList.push({ url, referer: ref.url, sourceName: ref.source || ref.title });
+        }
+      }
     }
+    const newsCandidates = await collector.downloadImages(newsImageList, rawDir, { maxCount: 4 });
+
+    const lifestyleSlots = slots.filter((slot) => !/상품|제품|식재료|주력/.test(`${slot.desc || ''} ${slot.caption || ''}`));
+    const lifestyleDescriptions = lifestyleSlots.map((slot, index) => {
+      const role = slot.desc || slot.caption || `건강한 생활 활용 장면 ${index + 1}`;
+      return `${role}. 밝고 자연스러운 한국 가정의 건강정보 블로그 사진, 실제 생활 장면, 텍스트·로고·워터마크 없음, 특정 브랜드 포장 재현 금지`;
+    });
+    let aiImages = [];
+    if (lifestyleDescriptions.length) {
+      try {
+        aiImages = await aiimage.generateMany(lifestyleDescriptions, rawDir, {
+          prefix: 'health',
+          category: topic.primaryProduct || product.query || '건강 식생활',
+        });
+      } catch (error) {
+        console.log(`[pipeline] 건강 생활 이미지 생성 실패(뉴스 이미지로 보강): ${error.message}`);
+      }
+    }
+
+    const productPool = [...productCandidates];
+    const aiPool = [...aiImages];
+    const newsPool = [...newsCandidates];
+    const fallbackPool = [...newsCandidates, ...productCandidates];
+    const usedFiles = new Set();
+    const takeUnused = (pool) => {
+      while (pool.length) {
+        const candidate = pool.shift();
+        if (candidate?.file && !usedFiles.has(candidate.file)) {
+          usedFiles.add(candidate.file);
+          return candidate;
+        }
+      }
+      return null;
+    };
+
+    const judgments = slots.map((slot) => {
+      const isProductRole = /상품|제품|식재료|주력/.test(`${slot.desc || ''} ${slot.caption || ''}`);
+      let picked = isProductRole ? takeUnused(productPool) : takeUnused(aiPool);
+      let sourceName = isProductRole ? '공식 스토어' : 'AI 연출 이미지';
+      let isAi = !isProductRole && Boolean(picked);
+
+      if (!picked) {
+        picked = takeUnused(newsPool) || takeUnused(fallbackPool);
+        sourceName = picked ? (picked.sourceName || '건강 기사 이미지') : '';
+        isAi = false;
+      }
+      return {
+        slot: slot.slot,
+        file: picked?.file || null,
+        caption: isAi ? `${slot.caption || ''} (AI 연출 이미지)`.trim() : slot.caption || '',
+        sourceName,
+        sourceUrl: sourceName === '공식 스토어' ? product.url : '',
+        ai: isAi,
+        reason: isProductRole
+          ? '주력 상품 또는 식재료 이미지'
+          : isAi
+            ? '본문과 직접 연결된 건강 생활 AI 연출 이미지'
+            : '본문과 직접 연결된 건강 기사 이미지',
+      };
+    });
     store.saveJudgments(draftId, judgments);
 
-    // 4~5. 임시저장(기본) 또는 발행
-    //      (연예인 뉴스 글은 상품 링크 없이 출처 링크만 — 상품 소개는 runProduct 별도 모드)
+    const usable = judgments.filter((judgment) => judgment.file && fs.existsSync(judgment.file));
+    if (usable.length < 4) {
+      throw new Error(`건강 포스팅 이미지가 ${usable.length}장뿐입니다. 최소 4장을 확보해야 저장합니다.`);
+    }
+    const zipPath = path.join(store.imagesDir(draftId), 'product-images.zip');
+    const zip = imageZip.createZip(usable, zipPath);
+    if (zip.count !== usable.length || !fs.existsSync(zipPath)) {
+      throw new Error('건강 포스팅 이미지 ZIP에 누락된 파일이 있습니다.');
+    }
+
+    article.assetReview = {
+      passed: true,
+      imageCount: usable.length,
+      imagesDirectlyRelated: judgments.every((judgment) => Boolean(judgment.reason && judgment.file)),
+      zipComplete: true,
+    };
+    if (!article.assetReview.imagesDirectlyRelated) {
+      throw new Error('건강 포스팅과 직접 연결되지 않은 이미지가 있습니다.');
+    }
+    store.saveArticle(draftId, article);
+    store.updateDraft(draftId, {
+      imageCount: usable.length,
+      imageZipAvailable: true,
+      zipComplete: true,
+    });
+
+    // 5. 기사 출처를 표시하고 상품 링크가 글의 마지막에 오도록 임시저장/발행한다.
     const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.mode || 'draft');
     return { ok: true, postUrl };
   } catch (e) {

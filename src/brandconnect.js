@@ -166,6 +166,38 @@ async function getBestProduct({ keywords, avoidIds = [] } = {}) {
   });
 }
 
+// 건강 기사 링크처럼 상품 검색어가 없는 글감에서 자연스러운 주력 상품 검색어를 만든다.
+async function suggestHealthProductKeywords(topic, refs = []) {
+  const referenceText = refs
+    .map((ref) => `${ref.title || ''}\n${String(ref.text || '').slice(0, 1800)}`)
+    .join('\n\n')
+    .slice(0, 6000);
+  const prompt = `아래 건강 기사와 글감에서 억지스럽지 않게 연결할 수 있는 주력 상품 하나를 정하세요.
+
+글감: ${topic?.title || ''}
+관점: ${topic?.angle || ''}
+참고자료:
+${referenceText}
+
+원칙:
+- 치료·예방 효과를 주장해야만 팔 수 있는 상품은 제외합니다.
+- 독자의 준비·손질·보관·활용 불편을 현실적으로 줄이는 일반 식재료나 건강식품을 우선합니다.
+- 한 글에는 주력 상품 하나만 정합니다.
+- keywords는 쇼핑커넥트에서 실제로 검색할 수 있는 짧은 상품명 1~3개입니다.
+
+JSON 형식:
+{"primaryProduct":"주력 상품 하나","productReason":"필요한 현실적인 이유","keywords":["상품 검색어1","상품 검색어2"]}`;
+  const result = await codex.invokeJson(prompt, { timeoutMs: 120000 });
+  return {
+    primaryProduct: String(result?.primaryProduct || '').trim(),
+    productReason: String(result?.productReason || '').trim(),
+    keywords: (Array.isArray(result?.keywords) ? result.keywords : [])
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .slice(0, 3),
+  };
+}
+
 // 상세페이지 텍스트에서 가격·수수료·리뷰 파싱
 function parseDetailText(text) {
   const t = String(text).replace(/\s+/g, ' ');
@@ -370,6 +402,7 @@ module.exports = {
   recommendProducts,
   aiShoppingKeywords,
   getBestProduct,
+  suggestHealthProductKeywords,
   resolveProductByUrl,
   getProductDetail,
   getStoreDetail,

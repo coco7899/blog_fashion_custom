@@ -1,4 +1,4 @@
-// 네이버 블로그 자동화 대시보드 서버
+// 건강블로그자동화 대시보드 서버
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -441,7 +441,13 @@ app.get('/api/drafts/:id/product-images.zip', (req, res) => {
   if (!meta || !meta.imageZipAvailable) return res.status(404).json({ error: '준비된 상품 이미지 ZIP이 없습니다.' });
   const zipPath = path.join(store.imagesDir(req.params.id), 'product-images.zip');
   if (!fs.existsSync(zipPath)) return res.status(404).json({ error: '상품 이미지 ZIP 파일을 찾을 수 없습니다.' });
-  const name = `${String(meta.title || 'product-images').replace(/[\\/:*?"<>|]/g, '').slice(0, 40)}-images.zip`;
+  const now = new Date();
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const topic = String(meta.topic?.primaryProduct || meta.product?.query || meta.title || 'health')
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 40);
+  const name = `health-blog-images-${topic}-${date}.zip`;
   res.download(zipPath, name);
 });
 
@@ -624,6 +630,6 @@ function cleanupOrphanDrafts() {
   }
   scheduler.start();
   app.listen(PORT, () => {
-    console.log(`\n네이버 블로그 자동화 대시보드: http://localhost:${PORT}\n`);
+    console.log(`\n건강블로그자동화: http://localhost:${PORT}\n`);
   });
 })();

@@ -6,10 +6,6 @@ const path = require('path');
 
 const SKILLS_DIR = path.join(__dirname, '..', 'skills');
 const cache = new Map();
-const SKILL_ALIASES = {
-  '01-celebrity-news-blog': '03-health-affiliate-blog',
-  '02-naver-shopping-connect-blog': '03-health-affiliate-blog',
-};
 
 /**
  * 스킬 지침 본문을 반환한다 (YAML frontmatter 제거).
@@ -19,9 +15,7 @@ const SKILL_ALIASES = {
 function loadSkill(name) {
   if (cache.has(name)) return cache.get(name);
   try {
-    // 기존 두 화면 모드는 유지하되, 실제 글쓰기 지침은 같은 건강 전문 스킬을 사용한다.
-    const resolvedName = SKILL_ALIASES[name] || name;
-    const file = path.join(SKILLS_DIR, resolvedName, 'SKILL.md');
+    const file = path.join(SKILLS_DIR, name, 'SKILL.md');
     let text = fs.readFileSync(file, 'utf8');
     // frontmatter (--- ... ---) 제거
     text = text.replace(/^---[\s\S]*?---\s*/m, '').trim();

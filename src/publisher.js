@@ -391,6 +391,11 @@ async function publish(article, judgments, opts) {
   const { mode = 'draft', visibility = 'public', imagesDir, errorShotPath, onStep = () => {}, sources = [], products = [] } = opts;
   const hasProducts = (products || []).some((product) => product && product.link);
   const publishArticle = hasProducts ? cleanProductPostArticle(article, products) : article;
+  const deferredCtaBlock = hasProducts
+    ? [...(publishArticle.blocks || [])].reverse().find(
+        (block) => block.type === 'paragraph' && !block.disclosure
+      )
+    : null;
 
   const status = await auth.verify(true);
   if (!status.loggedIn || !status.blogId) {
@@ -439,6 +444,7 @@ async function publish(article, judgments, opts) {
     await sleep(200);
 
     for (const block of publishArticle.blocks) {
+      if (block === deferredCtaBlock) continue;
       if (block.type === 'heading') {
         await insertHeading(frame, page, block.text);
       } else if (block.type === 'paragraph') {
@@ -480,6 +486,23 @@ async function publish(article, judgments, opts) {
       await sleep(250);
     }
 
+    // 건강 제휴 글은 기사 출처를 해시태그·CTA·상품 링크보다 먼저 정리한다.
+    const linkSources = (sources || []).filter((source) => source && source.url).slice(0, 8);
+    if (hasProducts && linkSources.length) {
+      onStep('건강 기사 출처 정리 중');
+      await insertDivider(frame, page);
+      await insertHeading(frame, page, '📌 참고한 건강 기사');
+      for (const source of linkSources) {
+        if (source.title) {
+          await typeRich(page, `· ${String(source.title).replace(/\s+/g, ' ').trim()}`);
+          await page.keyboard.press('Shift+Enter');
+        }
+        await page.keyboard.insertText(source.url);
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Enter');
+      }
+    }
+
     // ── 해시태그 (본문 끝) ──────────────────────────
     const tagLine = (publishArticle.tags || [])
       .map((t) => '#' + String(t).replace(/^#+/, '').replace(/\s+/g, ''))
@@ -494,7 +517,6 @@ async function publish(article, judgments, opts) {
 
     // ── 출처 링크 (글 맨 아래) ──────────────────────
     // 뉴스 기사 URL을 그대로 입력하면 스마트에디터가 클릭 가능한 링크로 자동 변환한다.
-    const linkSources = (sources || []).filter((s) => s && s.url).slice(0, 8);
     if (!hasProducts && linkSources.length) {
       onStep('출처 링크 정리 중');
       await insertDivider(frame, page);
@@ -511,15 +533,20 @@ async function publish(article, judgments, opts) {
       }
     }
 
-    // ── 추천 상품 (브랜드커넥트 제휴 링크, 글 맨 끝) ─────────
+    // 건강 제휴 글의 마지막 순서: 해시태그 → CTA → 상품 링크.
+    if (deferredCtaBlock?.text) {
+      await typeParagraph(page, deferredCtaBlock.text);
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Enter');
+    }
+
+    // ── 주력 상품 제휴 링크 (항상 글의 맨 끝) ──────────────
     const linkProducts = (products || []).filter((p) => p && p.link).slice(0, 5);
     if (linkProducts.length) {
-      onStep('추천 상품 링크 삽입 중');
-      await insertDivider(frame, page);
-      await insertHeading(frame, page, '🛍 함께 보면 좋은 상품');
+      onStep('주력 상품 링크 삽입 중');
       for (const p of linkProducts) {
         const nameLine = String(p.name || '상품').replace(/\s+/g, ' ').trim().slice(0, 45);
-        await typeRich(page, `· ${nameLine}`);
+        await typeRich(page, `▶ ${nameLine} 선택 기준 확인하기`);
         await page.keyboard.press('Shift+Enter');
         await page.keyboard.insertText(p.link);
         await page.keyboard.press('Enter'); // URL 뒤 Enter → 자동 링크화

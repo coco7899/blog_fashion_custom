@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>네이버 블로그 자동화 + 숏폼 (커스텀)</title>
+  <title>건강블로그자동화</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
     <div class="wrap header-inner">
-      <h1>📝 네이버 블로그 자동화 <span style="color:#7c3aed">+ 🎬 숏폼</span> <span style="font-size:11px;background:#f3e8ff;color:#7c3aed;padding:2px 8px;border-radius:999px;vertical-align:middle;font-weight:700">커스텀 · 4000</span></h1>
+      <h1>🌿 건강블로그자동화 <span style="color:#7c3aed">+ 🎬 숏폼</span> <span style="font-size:11px;background:#e8f7ee;color:#16733a;padding:2px 8px;border-radius:999px;vertical-align:middle;font-weight:700">건강 전용 · 8000</span></h1>
       <div class="login-area">
         <span id="envBadge" class="badge" hidden></span>
         <span id="loginBadge" class="badge badge-off">확인 중...</span>
@@ -20,9 +20,9 @@
   </header>
 
   <main class="wrap">
-    <!-- 글쓰기 모드 선택 -->
+    <!-- 건강 포스팅 만들기 -->
     <section class="card">
-      <h2>✍️ 글쓰기 모드 선택</h2>
+      <h2>✍️ 건강 포스팅 만들기</h2>
       <div class="row" style="margin-bottom:12px">
         <select id="runMode" title="임시저장할지 바로 발행할지">
           <option value="draft">임시저장 (직접 발행)</option>
@@ -35,14 +35,14 @@
       </div>
       <div class="mode-grid">
         <div class="mode-box">
-          <h3>📰 연예인 뉴스 글</h3>
-          <p class="hint">최신 연예인 패션·뷰티·생활용품·건강·방송/SNS 화제에서 AI가 글감을 찾아 글을 씁니다.<br />글 맨 아래에 <b>출처 링크</b>가 달립니다.</p>
+          <h3>🌿 건강블로그 글감찾기</h3>
+          <p class="hint">최신 건강 기사와 신뢰할 수 있는 자료에서 생활 문제를 찾고, 주력 상품 하나를 자연스럽게 연결합니다.<br /><b>공정위 문구·활용 장면·주의점·해시태그 6개·제휴 링크·이미지 4장과 ZIP</b>까지 한 번에 준비합니다.</p>
           <div class="row" style="gap:8px">
             <button id="newsModeBtn" class="btn btn-primary">🎲 자동 글감 찾기</button>
             <button id="newsStopBtn" class="btn btn-danger" type="button" hidden>글감 찾기 중지</button>
           </div>
           <div class="row" style="margin-top:10px; width:100%">
-            <input id="keywordInput" type="text" placeholder="키워드로 관련 기사 찾기 (예: 아이유 공항패션)" style="flex:1; min-width:180px"
+            <input id="keywordInput" type="text" placeholder="건강 키워드로 찾기 (예: 혈당스파이크, 중년 단백질, 장 건강)" style="flex:1; min-width:180px"
               onkeydown="if(event.key==='Enter'){document.getElementById('keywordModeBtn').click();}" />
             <button id="keywordModeBtn" class="btn btn-primary">🔎 키워드로 찾기</button>
           </div>
@@ -52,22 +52,10 @@
           </div>
           <p id="newsModeStatus" class="status" hidden></p>
         </div>
-        <div class="mode-box">
-          <h3>🛒 쇼핑커넥트 소개 글</h3>
-          <p class="hint">쇼핑커넥트에서 <b>지금 반응 좋은 상품 1개</b>를 자동 선정해 소개 글을 씁니다.<br />상세페이지 사진 사용, 맨 아래 <b>제휴 링크</b>가 달립니다.</p>
-          <button id="productModeBtn" class="btn btn-green">상품 자동 선정 글쓰기</button>
-          <div class="row" style="margin-top:10px; width:100%">
-            <input id="productLinkInput" type="text" placeholder="또는 상품 링크 붙여넣기 (쇼핑커넥트/스마트스토어)" style="flex:1; min-width:180px" />
-            <button id="productLinkBtn" class="btn btn-ghost">고민 제목 3개 받기</button>
-            <button id="productLinkDeleteBtn" class="btn btn-delete" type="button" title="입력한 상품 링크 삭제" hidden>링크 삭제</button>
-          </div>
-          <div id="productHookChoices" class="product-hook-choices" hidden></div>
-          <p id="productModeStatus" class="status" hidden></p>
-        </div>
       </div>
     </section>
 
-    <!-- 글감 목록 (연예인 뉴스 모드) -->
+    <!-- 건강 글감 목록 -->
     <section class="card" id="topicsCard" hidden>
       <h2>글감 선택 <span class="hint-inline">— 여러 개를 눌러 대기열에 쌓으면 하나씩 자동 진행돼요</span>
         <button id="clearTopicsBtn" class="btn btn-ghost btn-sm" style="float:right">모든 글감 삭제</button>

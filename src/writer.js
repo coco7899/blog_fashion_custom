@@ -13,7 +13,7 @@ const MIN_CHARS = 1200;         // 건강 전문 스킬의 기본 본문 최소 
 const MIN_IMAGES = 4;           // 문제 상황·식재료·실천 장면을 포함한 이미지 슬롯
 
 function buildPrompt(topic, refText, frame, retryNote) {
-  const skill = skills.loadSkill('01-celebrity-news-blog');
+  const skill = skills.loadSkill('03-health-affiliate-blog');
   return `아래 건강 전문 스킬을 핵심 지침으로 삼아 사실 기반 생활 건강 정보 글을 작성하세요.
 
 ═══════════ 건강 전문 스킬 시작 ═══════════
@@ -485,9 +485,13 @@ function ensureProductImageSlots(article, minImages) {
   return article;
 }
 
-function automaticProductAuditPrompt(article, product, detail) {
+function automaticProductAuditPrompt(article, product, detail, healthContext = null) {
+  const healthAudit = healthContext
+    ? `\n건강 제휴 글 추가 검수:\n- 기사·공식자료의 발표 기관과 날짜가 본문에 명확히 있는가?\n- 기사 요약이 2~4문단 이내이며 생활 문제 해결로 확장되는가?\n- 상품 전에 비용 없이 실천할 방법 3~5개가 있는가?\n- 활용 장면이 3~6개이며 실제로 따라 하기 쉬운가?\n- 소제목이 5~7개이고 각 소제목에 새로운 정보가 있는가?\n- 해시태그가 정확히 6개인가?\n- 치료·예방·효과를 단정하지 않고 알레르기·식사 제한·한계를 안내하는가?\n위 항목 중 하나라도 빠지면 passed=false로 평가하세요.\n`
+    : '';
   return `당신은 쇼핑커넥트 블로그의 최종 품질 검수자입니다.
 아래 초안을 호의적으로 추측하지 말고 실제 구매 설득력과 사실성만으로 엄격하게 평가하세요.
+${healthAudit}
 
 상품명: ${product.name || ''}
 확인된 상품 자료:
@@ -512,17 +516,21 @@ ${JSON.stringify(article)}
 13. 잘 맞는 사람과 다른 방식이 더 맞을 수 있는 사람이 함께 제시됐는가?
 14. CTA가 독자의 반복 불편, 다른 선택, 상품 페이지에서 확인할 구체적인 항목을 연결하는가?
 15. 직접 사용한 것처럼 꾸민 문장과 치료·개선·예방 단정이 없는가?
+16. 기사와 상품의 연결이 자연스럽고 기사 요약만으로 끝나지 않는가?
+17. 소제목 5~7개, 해시태그 정확히 6개, 공정위 문구와 마지막 형식이 모두 지켜졌는가?
+18. 관련 이미지 역할이 4개 이상이며 ZIP 준비를 위한 이미지 블록이 빠짐없이 있는가?
 
 100점 배점:
 - 제목의 클릭 유도력 10
 - 독자 문제의 구체성 15
 - 상품과 생활 문제 연결의 자연스러움 10
-- 상품 구매 이유의 명확성 25
+- 상품 구매 이유의 명확성 20
 - 실제 활용 장면 10
 - 대상 독자의 구체성 10
 - 정보 신뢰성과 과장 방지 10
 - 반복과 늘어지는 문장 제거 5
 - CTA의 자연스러움 5
+- 고지·해시태그·마지막 형식 5
 
 최종 질문: 상품 링크를 지워도 독자가 이 상품을 직접 검색해서 사고 싶을 만큼 구매 이유가 충분히 설득됐는가?
 
@@ -531,14 +539,17 @@ JSON 형식:
   "score": 0,
   "passed": false,
   "checks": [{"id":1,"passed":false,"reason":"구체적인 근거"}],
-  "scoreBreakdown": {"title":0,"problem":0,"connection":0,"purchaseReason":0,"usage":0,"audience":0,"trust":0,"repetition":0,"cta":0},
+  "scoreBreakdown": {"title":0,"problem":0,"connection":0,"purchaseReason":0,"usage":0,"audience":0,"trust":0,"repetition":0,"cta":0,"format":0},
   "finalQuestionPassed": false,
   "weaknesses": ["수정할 점"],
   "revisionInstructions": ["구체적인 수정 지시"]
 }`;
 }
 
-function automaticProductRevisionPrompt(article, audit, product, detail, imgCount) {
+function automaticProductRevisionPrompt(article, audit, product, detail, imgCount, healthContext = null) {
+  const healthRevision = healthContext
+    ? `\n- 건강 기사·공식자료의 발표 기관과 날짜를 밝히고 기사 요약은 2~4문단 이내로 제한하세요.\n- 상품 소개 전에 비용 없이 실천할 방법 3~5개를 제시하세요.\n- 쉬운 활용 장면 3~6개, 잘 맞는 사람과 주의할 사람, 정확한 선택 기준을 포함하세요.\n- 소제목 5~7개, 본문 1,200자 이상, 해시태그 정확히 6개를 지키세요.\n- 질병 치료·예방·효과를 단정하지 마세요.\n`
+    : '';
   return `쇼핑커넥트 상품 글 초안이 자체 검수에서 통과하지 못했습니다. 검수 지시를 모두 반영해 완성본 전체를 다시 작성하세요.
 
 상품명: ${product.name || ''}
@@ -562,22 +573,23 @@ ${JSON.stringify(audit)}
 - 상단 스펙에는 확인된 선택 정보만 쓰고 가격·배송·쿠폰·적립·기본 수량·수량별 옵션은 넣지 마세요.
 - 기존 방법의 불편, 상품만의 차이, 사용 장면, 잘 맞는 사람과 맞지 않는 사람, 구체적인 CTA를 빠뜨리지 마세요.
 - image 블록은 글 내용과 직접 연결되는 역할로 ${imgCount}개 넣으세요.
+${healthRevision}
 
 JSON 형식:
 {
   "title":"후킹 제목",
   "titleAlternatives":["대안1","대안2","대안3"],
   "purchaseReason":"현실적인 핵심 구매 이유 한 문장",
-  "tags":["태그1"],
-  "blocks":[{"type":"paragraph","text":"${SHOPPING_CONNECT_DISCLOSURE}"},{"type":"image","slot":1,"caption":"사진 설명","desc":"대표"},{"type":"paragraph","text":"본문"},{"type":"quote","text":"상품명 한눈에 보는 상품 스펙\\n· 제품 형태: ...\\n· 사용 방식: ..."}]
+  "tags":["건강태그1","건강태그2","생활태그1","생활태그2","상품태그1","상품태그2"],
+  "blocks":[{"type":"paragraph","text":"${SHOPPING_CONNECT_DISCLOSURE}"},{"type":"image","slot":1,"caption":"사진 설명","desc":"대표"},{"type":"paragraph","text":"본문"},{"type":"quote","text":"상품명 한눈에 보는 상품 스펙\\n· 제품 형태: ...\\n· 사용 방식: ..."},{"type":"heading","text":"생활 문제"},{"type":"heading","text":"기사 핵심"},{"type":"heading","text":"먼저 실천할 방법"},{"type":"heading","text":"활용 장면"},{"type":"heading","text":"선택 기준과 주의점"}]
 }`;
 }
 
-async function selfReviewAutomaticProductArticle(article, product, detail, imgCount) {
+async function selfReviewAutomaticProductArticle(article, product, detail, imgCount, healthContext = null) {
   let current = article;
   let lastAudit = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const audit = await codex.invokeJson(automaticProductAuditPrompt(current, product, detail), {
+    const audit = await codex.invokeJson(automaticProductAuditPrompt(current, product, detail, healthContext), {
       timeoutMs: WRITE_TIMEOUT_MS,
     });
     const checks = Array.isArray(audit?.checks) ? audit.checks : [];
@@ -586,18 +598,27 @@ async function selfReviewAutomaticProductArticle(article, product, detail, imgCo
     );
     const firstThree = paragraphs.slice(0, 3).map((block) => block.text || '').join(' ');
     const lastParagraph = [...current.blocks].reverse().find((block) => block.type === 'paragraph');
+    const currentMeasure = measure(current);
+    const healthChecksPassed = !healthContext || (
+      currentMeasure.chars >= 1200 &&
+      currentMeasure.headings >= 5 &&
+      currentMeasure.headings <= 7 &&
+      Array.isArray(current.tags) &&
+      current.tags.length === 6
+    );
     const localChecksPassed =
       /고민|불편|번거|어렵|부담|헷갈|필요/.test(firstThree) &&
       Boolean(current.purchaseReason) &&
       /링크|확인|살펴|골라|선택/.test(lastParagraph?.text || '') &&
       current.blocks.filter((block) => block.type === 'image').length >= imgCount &&
       current.blocks[0]?.text === SHOPPING_CONNECT_DISCLOSURE &&
-      current.blocks.some((block) => block.type === 'quote' && /상품\s*스펙/.test(block.text || ''));
+      current.blocks.some((block) => block.type === 'quote' && /상품\s*스펙/.test(block.text || '')) &&
+      healthChecksPassed;
     const passed =
       Number(audit?.score) >= 90 &&
       audit?.passed === true &&
       audit?.finalQuestionPassed === true &&
-      checks.length >= 15 &&
+      checks.length >= 18 &&
       checks.every((check) => check && check.passed === true) &&
       localChecksPassed;
     lastAudit = { ...audit, attempt, localChecksPassed, passed };
@@ -609,7 +630,7 @@ async function selfReviewAutomaticProductArticle(article, product, detail, imgCo
     if (attempt === 3) break;
 
     const revised = await codex.invokeJson(
-      automaticProductRevisionPrompt(current, lastAudit, product, detail, imgCount),
+      automaticProductRevisionPrompt(current, lastAudit, product, detail, imgCount, healthContext),
       { timeoutMs: WRITE_TIMEOUT_MS }
     );
     if (!revised || !revised.title || !Array.isArray(revised.blocks)) {
@@ -633,9 +654,35 @@ async function selfReviewAutomaticProductArticle(article, product, detail, imgCo
  * @param {object} detail {description, images}
  * @returns {object} {title, titleAlternatives, tags, blocks}
  */
-function buildProductPrompt(product, detail, frame, imgCount, retryNote, selectedHook) {
-  const skill = skills.loadSkill('02-naver-shopping-connect-blog');
-  if (!skill) throw new Error('쇼핑커넥트 스킬(skills/02-naver-shopping-connect-blog/SKILL.md)을 찾을 수 없습니다.');
+function buildProductPrompt(product, detail, frame, imgCount, retryNote, selectedHook, healthContext = null) {
+  const skill = skills.loadSkill('03-health-affiliate-blog');
+  if (!skill) throw new Error('건강 블로그 스킬(skills/03-health-affiliate-blog/SKILL.md)을 찾을 수 없습니다.');
+
+  const healthReferences = (healthContext?.refs || [])
+    .map((ref, index) => `--- 건강 참고자료 ${index + 1} (${ref.source || ref.title || '자료'}) ---\n제목: ${ref.title || ''}\n${String(ref.text || '').slice(0, 2500)}`)
+    .join('\n\n');
+  const healthTopic = healthContext?.topic || {};
+  const healthInstruction = healthContext
+    ? `【건강 기사 기반 제휴 포스팅 — 아래 기준이 최우선】
+- 글감 제목: ${healthTopic.title || ''}
+- 독자의 생활 문제: ${healthTopic.problem || ''}
+- 주력 상품: ${healthTopic.primaryProduct || product.name || ''}
+- 상품이 필요한 현실적인 이유: ${healthTopic.productReason || ''}
+- 첫 3개 일반 문단 안에 생활 문제 하나만 구체적으로 보여주세요.
+- 기사·공식자료 핵심은 2~4문단 이내로 새 문장으로 설명하고 발표 기관과 날짜를 명확히 쓰세요.
+- 상품을 소개하기 전에 돈을 쓰지 않고 먼저 실천할 방법을 3~5개 제시하세요.
+- 상품의 효능보다 준비·손질·보관·활용의 현실적인 편의를 설명하고, 사용 장면을 3~6개 제시하세요.
+- 잘 맞을 수 있는 사람과 알레르기·식사 제한·이미 충분히 섭취하는 사람 등 주의할 사람을 함께 안내하세요.
+- 일반 식재료 또는 건강기능식품에 맞는 원산지·내용량·손질 여부·기능성 원료·섭취량·알레르기·보관법 중 확인된 선택 기준만 쓰세요.
+- 질병 치료·예방·수치 개선을 단정하지 말고 직접 먹어본 후기처럼 쓰지 마세요.
+- 소제목은 5~7개, 본문은 최소 1,200자·권장 1,500~2,200자, 해시태그는 정확히 6개로 작성하세요.
+- image 블록은 문제 상황, 주력 상품, 활용 장면 1, 활용 장면 2 역할을 포함해 ${imgCount}개 작성하세요.
+- 마지막 일반 문단은 구체적인 CTA 문장으로 끝내고, 그 뒤에는 시스템이 제휴 상품 링크를 붙입니다.
+
+【건강 기사·공식자료】
+${healthReferences}
+`
+    : '';
 
   return `아래는 "네이버 쇼핑커넥트 블로그" 스킬 지침입니다. 이 지침을 반드시 따라 상품 소개 글을 작성하세요.
 
@@ -650,6 +697,8 @@ ${skill}
 - 본문 최상단 첫 paragraph는 반드시 "${SHOPPING_CONNECT_DISCLOSURE}"로 정확히 쓰세요. 다른 광고 고지 문구를 덧붙이지 마세요.
 - 출처·공식 스토어·상세페이지 주소는 제목·본문·요약·캡션에 쓰지 마세요.
 - 가격·판매가·할인가·배송비·쿠폰·적립·무료배송·사은품처럼 변동 가능한 금액과 혜택은 본문 어디에도 쓰지 마세요.
+
+${healthInstruction}
 
 【생활밀착형 소개 글 스타일 — 반드시 이 형태로 쓸 것】
 1. 첫 문단은 상품 설명이 아니라 **이 상품이 필요한 사람의 실제 고민과 생활 장면**으로 시작하세요.
@@ -729,23 +778,32 @@ ${String(detail.description || '').slice(0, 6000)}
   "title": "독자 문제 + 해결 실마리, 상품명 흐름의 제목",
   "titleAlternatives": ["제목 대안1", "제목 대안2", "제목 대안3"],
   "purchaseReason": "확인된 제품 특징과 구매자의 고민을 연결한 핵심 구매 이유 한 문장",
-  "tags": ["해시태그1", "해시태그2"],
+  "tags": ["건강태그1", "건강태그2", "생활태그1", "생활태그2", "상품태그1", "상품태그2"],
   "blocks": [
     {"type":"paragraph","text":"${SHOPPING_CONNECT_DISCLOSURE}"},
-    {"type":"image","slot":1,"caption":"자연스러운 사진 설명","desc":"대표"},
-    {"type":"paragraph","text":"정품과 호환품 사이에서 헷갈리는 분들 많으시죠? 내 생활 속 고민을 먼저 꺼내는 도입입니다."},
-    {"type":"paragraph","text":"왜 이 상품을 찾아보게 되는지 공감하며 선택 기준을 자연스럽게 예고합니다."},
+    {"type":"image","slot":1,"caption":"건강 주제 대표 장면","desc":"독자의 문제 상황 대표 이미지"},
+    {"type":"paragraph","text":"독자가 실제 생활에서 겪는 건강 문제 하나를 구체적으로 보여주는 도입입니다."},
+    {"type":"heading","text":"이 문제가 반복되는 현실적인 이유"},
+    {"type":"paragraph","text":"독자를 탓하지 않고 준비 시간과 생활 환경을 설명합니다."},
+    {"type":"heading","text":"최근 건강 기사에서 확인할 핵심"},
+    {"type":"paragraph","text":"발표 기관과 날짜를 밝히고 기사 핵심을 2~4문단 안에서 쉽게 설명합니다."},
+    {"type":"heading","text":"돈을 쓰기 전에 먼저 실천할 방법"},
+    {"type":"paragraph","text":"비용 없이 할 수 있는 방법 3~5개를 제시합니다."},
+    {"type":"image","slot":2,"caption":"주력 상품 또는 식재료","desc":"주력 상품 또는 식재료 중심 이미지"},
     {"type":"quote","text":"○○○ 한눈에 보는 상품 스펙\\n· 형태: ...\\n· 크기/용량: ...\\n· 선택 옵션: ...\\n· 이런 분께: ..."},
-    {"type":"quote","text":"구간을 여는 짧은 구절"},
-    {"type":"paragraph","text":"본문 1~2문장.\\n다음 줄."},
-    {"type":"image","slot":2,"caption":"사진 설명","desc":"핵심 특징"},
-    {"type":"paragraph","text":"..."},
-    {"type":"quote","text":"생활 속 사용 장면을 여는 짧은 구절"},
-    {"type":"paragraph","text":"이 상품이 필요한 사람과 실제 생활 장면을 자연스럽게 풀어 쓴 문단"},
-    {"type":"paragraph","text":"마무리와 링크 유도 문단"}
+    {"type":"heading","text":"이 상품이 생활에서 유용한 이유"},
+    {"type":"paragraph","text":"상품이 없을 때의 불편과 준비했을 때 달라지는 점을 설명합니다."},
+    {"type":"image","slot":3,"caption":"첫 번째 활용 장면","desc":"실제 활용 장면 1"},
+    {"type":"paragraph","text":"쉽게 따라 할 수 있는 활용 장면을 3~6개 제시합니다."},
+    {"type":"image","slot":4,"caption":"두 번째 활용 장면","desc":"실제 활용 장면 2"},
+    {"type":"heading","text":"이런 분께 맞고 이런 분은 주의하세요"},
+    {"type":"paragraph","text":"잘 맞는 사람과 알레르기·식사 제한 등 한계를 함께 안내합니다."},
+    {"type":"heading","text":"구매 전에 확인할 선택 기준"},
+    {"type":"paragraph","text":"확인된 상품 정보만으로 구체적인 선택 기준을 설명합니다."},
+    {"type":"paragraph","text":"반복되는 불편과 상품 페이지에서 확인할 항목을 연결한 자연스러운 CTA 문장"}
   ]
 }
-tags는 5~10개. 본문 분량은 상품 정보량과 구매 판단에 필요한 설명을 기준으로 유연하게 정하고, 고정된 글자 수 목표를 적용하거나 필요한 상세 안내를 생략하지 마세요.
+tags는 정확히 6개. 건강 기사 기반 글은 소제목 5~7개와 본문 1,200자 이상을 지키고, 상품 정보량과 구매 판단에 필요한 설명을 충분히 담으세요.
 ${retryNote || ''}`;
 }
 
@@ -761,10 +819,12 @@ async function writeProductArticle(product, detail, selectedHook = null, options
 
   // 이번 글의 구성 프레임 선택 — 상세페이지 내용으로 적합성을 판정한다
   const detailText = `${product.name || ''}\n${String(detail.description || '')}`;
-  const frame = frames.pickFrame('product', { detailText });
+  const frame = options.healthContext
+    ? { key: 'health-affiliate', label: '건강 생활문제 해결형', check: null }
+    : frames.pickFrame('product', { detailText });
 
   const run = async (note) => {
-    const raw = await codex.invokeJson(buildProductPrompt(product, detail, frame, imgCount, note, selectedHook), {
+    const raw = await codex.invokeJson(buildProductPrompt(product, detail, frame, imgCount, note, selectedHook, options.healthContext), {
       timeoutMs: WRITE_TIMEOUT_MS,
     });
     if (!raw || !raw.title || !Array.isArray(raw.blocks)) {
@@ -839,7 +899,7 @@ async function writeProductArticle(product, detail, selectedHook = null, options
   article.frameLabel = frame.label;
   article = formatProductParagraphs(article);
   if (options.selfReview) {
-    article = await selfReviewAutomaticProductArticle(article, product, detail, minimumImages);
+    article = await selfReviewAutomaticProductArticle(article, product, detail, minimumImages, options.healthContext);
     article.frameKey = frame.key;
     article.frameLabel = frame.label;
     article = formatProductParagraphs(article);
