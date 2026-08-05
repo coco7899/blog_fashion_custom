@@ -392,9 +392,13 @@ async function publish(article, judgments, opts) {
   const hasProducts = (products || []).some((product) => product && product.link);
   const publishArticle = hasProducts ? cleanProductPostArticle(article, products) : article;
   // 마지막 행동 제안과 제휴 추천은 출처·해시태그 다음, 글의 실제 마지막에 둔다.
-  const deferredCtaBlock = [...(publishArticle.blocks || [])].reverse().find(
-    (block) => block.type === 'paragraph' && !block.disclosure
+  const publishBlocks = publishArticle.blocks || [];
+  const deferredCtaIndex = publishBlocks.reduce(
+    (lastIndex, block, index) =>
+      block.type === 'paragraph' && !block.disclosure ? index : lastIndex,
+    -1
   );
+  const deferredCtaBlock = deferredCtaIndex >= 0 ? publishBlocks[deferredCtaIndex] : null;
 
   const status = await auth.verify(true);
   if (!status.loggedIn || !status.blogId) {
@@ -442,8 +446,8 @@ async function publish(article, judgments, opts) {
     await frame.locator(SEL.bodyArea).first().click();
     await sleep(200);
 
-    for (const block of publishArticle.blocks) {
-      if (block === deferredCtaBlock) continue;
+    for (const [blockIndex, block] of publishBlocks.entries()) {
+      if (blockIndex === deferredCtaIndex) continue;
       if (block.type === 'heading') {
         await insertHeading(frame, page, block.text);
       } else if (block.type === 'paragraph') {
@@ -509,19 +513,7 @@ async function publish(article, judgments, opts) {
       }
     }
 
-    // ── 해시태그 (본문 끝) ──────────────────────────
-    const tagLine = (publishArticle.tags || [])
-      .map((t) => '#' + String(t).replace(/^#+/, '').replace(/\s+/g, ''))
-      .filter((t) => t.length > 1)
-      .slice(0, 10)
-      .join(' ');
-    if (tagLine) {
-      await typeRich(page, tagLine);
-      await page.keyboard.press('Enter');
-      await page.keyboard.press('Enter');
-    }
-
-    // ── 출처 링크 (글 맨 아래) ──────────────────────
+    // ── 출처 링크 (건강 글의 본문 다음) ──────────────
     // 뉴스 기사 URL을 그대로 입력하면 스마트에디터가 클릭 가능한 링크로 자동 변환한다.
     if (!hasProducts && linkSources.length) {
       onStep('출처 링크 정리 중');
@@ -537,6 +529,18 @@ async function publish(article, judgments, opts) {
         await page.keyboard.press('Enter'); // 항목 간 한 줄 띄우기
         await sleep(300);
       }
+    }
+
+    // ── 해시태그 (출처 다음) ─────────────────────────
+    const tagLine = (publishArticle.tags || [])
+      .map((t) => '#' + String(t).replace(/^#+/, '').replace(/\s+/g, ''))
+      .filter((t) => t.length > 1)
+      .slice(0, 10)
+      .join(' ');
+    if (tagLine) {
+      await typeRich(page, tagLine);
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Enter');
     }
 
     // 건강 제휴 글의 마지막 순서: 해시태그 → CTA → 상품 링크.

@@ -700,11 +700,16 @@ async function openPreview(id) {
           ),
         ]
       : article.blocks || [];
-    const deferredPreviewCta = isProductPost
-      ? [...previewBlocks].reverse().find((block) => block.type === 'paragraph' && !block.disclosure)
+    const deferredPreviewCtaIndex = previewBlocks.reduce(
+      (lastIndex, block, index) =>
+        block.type === 'paragraph' && !block.disclosure ? index : lastIndex,
+      -1
+    );
+    const deferredPreviewCta = deferredPreviewCtaIndex >= 0
+      ? previewBlocks[deferredPreviewCtaIndex]
       : null;
-    for (const b of previewBlocks) {
-      if (b === deferredPreviewCta) continue;
+    for (const [blockIndex, b] of previewBlocks.entries()) {
+      if (blockIndex === deferredPreviewCtaIndex) continue;
       if (b.type === 'heading') {
         const blockText = isProductPost ? cleanProductText(b.text) : b.text;
         if (!blockText) continue;
