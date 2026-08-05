@@ -47,7 +47,7 @@ function uiConfirm(message) {
 const STEPS = [
   { key: 'collecting', label: '자료 수집' },
   { key: 'writing', label: 'AI 글 작성' },
-  { key: 'images', label: '이미지·ZIP' },
+  { key: 'images', label: '본문 이미지 생성' },
   { key: 'publishing', label: '임시저장' },
   { key: 'saved', label: '완료' },
 ];
@@ -326,12 +326,14 @@ function renderTopics(data, visOverride, { scroll = true } = {}) {
     }
     div.querySelector('.t-title').textContent = t.title;
     div.querySelector('.t-fact').textContent = t.fact ? '✓ ' + t.fact : '';
-    div.querySelector('.t-angle').textContent = t.angle;
+    div.querySelector('.t-angle').textContent = String(t.angle || '')
+      .split(/(?<=[.!?。])\s+/)
+      .filter((sentence) => !/제휴|쇼핑\s*커넥트|주력\s*상품|상품으로\s*연결/.test(sentence))
+      .join(' ');
     const healthPlan = div.querySelector('.t-health-plan');
     const planLines = [
       t.problem ? `생활 문제: ${t.problem}` : '',
-      t.primaryProduct ? `주력 상품: ${t.primaryProduct}` : '',
-      t.productReason ? `연결 이유: ${t.productReason}` : '',
+      t.action ? `실천 방향: ${t.action}` : '',
     ].filter(Boolean);
     healthPlan.textContent = planLines.join('\n');
     div.querySelector('.t-keywords').textContent = (t.keywords || []).map((k) => '#' + k).join(' ');
@@ -612,7 +614,6 @@ async function loadDrafts() {
         <span class="tag-status ${tag}">${tagText}</span>
         ${d.status === 'error' && d.title && !d.recovered ? `<button class="btn btn-primary btn-retry">${d.mode === 'publish' ? '발행' : '임시저장'} 재시도</button>` : ''}
         ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
-        ${d.imageZipAvailable ? `<a class="btn btn-ghost btn-sm" href="/api/drafts/${encodeURIComponent(d.id)}/product-images.zip" download>건강 이미지 ZIP</a>` : ''}
         ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
         ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
       </div>`;

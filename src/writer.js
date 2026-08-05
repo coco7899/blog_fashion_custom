@@ -9,7 +9,7 @@ const BLOCK_TYPES = new Set(['heading', 'paragraph', 'quote', 'divider', 'image'
 // 걸려서 5분 제한으로는 절반 가까이 실패했다. 여유를 둬 타임아웃 실패를 없앤다.
 const WRITE_TIMEOUT_MS = 600000; // 10분
 
-const MIN_CHARS = 1200;         // 건강 전문 스킬의 기본 본문 최소 글자 수
+const MIN_CHARS = 1500;         // 건강 전문 글의 권장 분량 하한
 const MIN_IMAGES = 4;           // 문제 상황·식재료·실천 장면을 포함한 이미지 슬롯
 
 function buildPrompt(topic, refText, frame, retryNote) {
@@ -23,7 +23,7 @@ ${skill}
 【이 자동화 환경에 맞춘 조정 — 최우선】
 - 글감 선택은 이미 끝났습니다. 후보 제안 없이 곧바로 선택 주제 글쓰기를 실행하세요.
 - 이 뉴스 글 모드에는 제휴 상품 링크가 없으므로 쇼핑커넥트 고지·CTA·상품 링크는 넣지 마세요. 상품 구매 권유 대신 건강 정보와 선택 기준을 중심으로 쓰세요.
-- 이미지는 시스템이 뉴스에서 수집해 image 블록 순서대로 배치합니다. 이미지 다운로드·생성·ZIP·목록·표는 생략하세요.
+- 이미지는 시스템이 image 블록 설명에 맞춰 직접 생성하고 본문에 배치합니다. 이미지 다운로드·생성 과정·ZIP·목록·표는 글에 쓰지 마세요.
 - 출처 링크는 시스템이 글 끝에 자동으로 정리합니다. 본문에 출처 목록을 넣지 마세요.
 - image desc/caption은 기사 속 건강 주제, 식재료, 생활 실천 장면과 직접 관련되게 쓰세요.
 
@@ -33,8 +33,8 @@ ${skill}
 3. 연구 결과를 모든 사람에게 적용되는 사실처럼 단정하지 말고, 질병 치료·예방 효과를 약속하지 마세요.
 4. 비용 없이 먼저 할 수 있는 실천 방법과 식재료·건강식품을 고를 때 확인할 기준을 함께 안내하세요.
 5. 잘 맞을 수 있는 사람과 알레르기·식사 제한 등 주의가 필요한 사람을 균형 있게 설명하세요.
-6. 친근한 존댓말, 문단당 1~3문장, 공백 포함 최소 ${MIN_CHARS}자 이상으로 쓰세요.
-7. heading과 quote는 합계 1~3개, 굵은 핵심 구절은 1~3곳만 사용하세요.
+6. 친근한 존댓말, 문단당 1~3문장, 공백 포함 ${MIN_CHARS}~2,200자 안팎으로 충분히 쓰세요.
+7. 소제목(heading)은 5~7개, quote는 최대 1개, 굵은 핵심 구절은 2~4곳만 사용하세요.
 8. image 블록은 정확히 4개 사용하고 대표 이미지, 문제 상황, 식재료·건강식품, 실천 장면의 역할이 겹치지 않게 하세요.
 9. 해시태그는 건강 키워드·생활 문제·식재료를 섞어 정확히 6개 작성하세요.
 10. "충격", "정체", "결국", "소름", "전부 공개"와 공포·과장 표현을 쓰지 마세요.
@@ -57,10 +57,16 @@ ${retryNote || ''}
     {"type": "heading", "text": "문제가 반복되는 현실적인 이유"},
     {"type": "paragraph", "text": "공식 자료와 기사 핵심을 쉬운 말로 설명하고 **과장 없는 핵심 정보**를 강조합니다."},
     {"type": "image", "slot": 2, "caption": "생활 속 문제 상황", "desc": "독자의 현실적인 건강 생활 문제"},
+    {"type": "heading", "text": "공식 자료에서 확인된 핵심"},
     {"type": "quote", "text": "오늘 바꿀 수 있는 한 가지"},
     {"type": "image", "slot": 3, "caption": "식재료 또는 건강식품", "desc": "글에서 설명한 식재료나 건강식품"},
-    {"type": "paragraph", "text": "비용 없이 먼저 실천할 방법과 선택 기준, 주의할 사람을 안내합니다."},
-    {"type": "image", "slot": 4, "caption": "건강한 활용 장면", "desc": "실생활에서 적용하는 구체적인 장면"}
+    {"type": "heading", "text": "비용 없이 먼저 해볼 일"},
+    {"type": "paragraph", "text": "비용 없이 먼저 실천할 방법을 구체적으로 안내합니다."},
+    {"type": "heading", "text": "식재료와 건강식품을 고르는 기준"},
+    {"type": "paragraph", "text": "광고가 아니라 성분과 표시사항을 확인하는 기준을 안내합니다."},
+    {"type": "image", "slot": 4, "caption": "건강한 활용 장면", "desc": "실생활에서 적용하는 구체적인 장면"},
+    {"type": "heading", "text": "특히 주의해서 볼 사람"},
+    {"type": "paragraph", "text": "알레르기, 복용 약, 식사 제한 등 주의가 필요한 사람과 한계를 설명합니다."}
   ]
 }
 각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. 첫 image는 blocks 배열 맨 앞에 두고 나머지는 관련 단락 사이에 놓으세요. tags는 정확히 6개이며 모두 왼쪽 정렬입니다.`;
@@ -83,7 +89,7 @@ function normalize(article) {
   article.tags = (Array.isArray(article.tags) ? article.tags : [])
     .map((t) => String(t).replace(/[#\s]+/g, ''))
     .filter(Boolean)
-    .slice(0, 10);
+    .slice(0, 6);
   return article;
 }
 
@@ -97,14 +103,19 @@ function measure(article) {
   return { chars, images, headings, quotes };
 }
 
-// 뉴스 글은 소제목과 이미지가 과하게 늘어나지 않도록 최종 구조를 정리한다.
+// 건강 글은 소제목 5~7개, 이미지 4개, 인용구 최대 1개로 최종 구조를 정리한다.
 function simplifyNewsStructure(article) {
-  let sectionCount = 0;
+  let headingCount = 0;
+  let quoteCount = 0;
   let imageCount = 0;
   article.blocks = article.blocks.filter((block) => {
-    if (block.type === 'quote' || block.type === 'heading') {
-      sectionCount += 1;
-      return sectionCount <= 3;
+    if (block.type === 'heading') {
+      headingCount += 1;
+      return headingCount <= 7;
+    }
+    if (block.type === 'quote') {
+      quoteCount += 1;
+      return quoteCount <= 1;
     }
     if (block.type === 'image') {
       imageCount += 1;
@@ -251,13 +262,14 @@ function inspectNewsArticle(article) {
   const m = measure(article);
   const text = (article.blocks || []).map((block) => block.text || '').join(' ');
   const issues = [];
-  const emphasisCount = m.headings + m.quotes;
   const boldCount = (text.match(/\*\*(.+?)\*\*/g) || []).length;
 
   if (m.chars < MIN_CHARS) issues.push(`본문 ${m.chars}자(최소 ${MIN_CHARS}자)`);
-  if (m.images < MIN_IMAGES || m.images > 4) issues.push(`이미지 슬롯 ${m.images}개(기본 2~4개, 관련 사진이 1장뿐이면 게시 단계에서 1장 허용)`);
-  if (emphasisCount < 1 || emphasisCount > 3) issues.push(`강조 블록 ${emphasisCount}개(허용 1~3개)`);
-  if (boldCount < 1 || boldCount > 3) issues.push(`굵은 핵심 구절 ${boldCount}개(허용 1~3개)`);
+  if (m.images !== MIN_IMAGES) issues.push(`이미지 슬롯 ${m.images}개(정확히 ${MIN_IMAGES}개 필요)`);
+  if (m.headings < 5 || m.headings > 7) issues.push(`소제목 ${m.headings}개(허용 5~7개)`);
+  if (m.quotes > 1) issues.push(`인용구 ${m.quotes}개(최대 1개)`);
+  if (boldCount < 2 || boldCount > 4) issues.push(`굵은 핵심 구절 ${boldCount}개(허용 2~4개)`);
+  if (!Array.isArray(article.tags) || article.tags.length !== 6) issues.push(`해시태그 ${(article.tags || []).length}개(정확히 6개 필요)`);
   if ((article.blocks || []).some((block, index, blocks) =>
     index > 0 &&
     (block.type === 'quote' || block.type === 'heading') &&
@@ -302,7 +314,7 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-생활 건강 문제 하나에 집중하고 기사 문장을 복사하지 마세요. 본문은 ${MIN_CHARS}자 이상 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. quote와 heading 합계 1~3개, 굵은 핵심 구절 1~3곳, 이미지 슬롯 4개, 해시태그 6개를 지키세요. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요.\n`;
+생활 건강 문제 하나에 집중하고 기사 문장을 복사하지 마세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개, quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4개, 해시태그 6개를 지키세요. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
@@ -319,6 +331,11 @@ async function writeArticle(topic, refs) {
     } catch (e) {
       console.log(`[writer] 재작성 실패(원본 사용): ${e.message}`);
     }
+  }
+
+  const finalIssues = inspectNewsArticle(article);
+  if (finalIssues.length) {
+    throw new Error(`건강 원고 최종 검수 미달: ${finalIssues.join(', ')}`);
   }
 
   // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)

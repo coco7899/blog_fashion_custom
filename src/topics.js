@@ -1,5 +1,6 @@
 // 수집된 뉴스/블로그 목록 → Codex로 글감 후보 생성
-// 03-health-affiliate-blog 스킬 명세 반영: 건강 기사 최신성·신뢰도·생활 적용성·상품 연결성
+// 03-health-affiliate-blog의 건강 기사 선정 원칙을 반영하되,
+// 제휴상품은 사용자가 나중에 직접 넣을 수 있도록 글감 단계에서는 건강정보에만 집중한다.
 const codex = require('./codex');
 const skills = require('./skills');
 
@@ -107,7 +108,7 @@ ${avoid}
 가장 좋은 글감을 배열의 첫 번째에 놓고 "recommended": true 로 표시하세요 (1개만).
 
 주제 방향: 식생활, 수면, 운동, 중년 건강, 장 건강, 혈당 관리, 눈 건강, 생활습관처럼 일반 독자가 실천할 수 있는 건강 분야에서 고르세요.
-각 후보는 하나의 현실적인 생활 문제와 연결하고, 일반 식재료 또는 건강식품을 억지스럽지 않게 연결할 수 있어야 합니다.
+각 후보는 하나의 현실적인 생활 문제와 연결하고, 독자가 바로 실천할 수 있는 행동이 보여야 합니다.
 단순 기사 요약보다 “독자가 오늘 생활에서 무엇을 바꿀 수 있는가”가 드러나는 건강정보형 각도를 우선하세요.
 
 반드시 지킬 것 (안전·품질):
@@ -124,8 +125,8 @@ ${avoid}
   · "충격", "정체", "결국", "소름", "전부 공개"는 쓰지 마세요.
 - 같은 질환·영양소·식재료가 후보에서 과도하게 반복되지 않게 구성하세요.
 - refs 에는 참고할 위 목록의 번호를 2~4개 넣되, **뉴스 기사를 최소 1개 이상 포함**시키세요 (출처로 밝힐 수 있도록).
-- 각 후보마다 독자의 생활 문제 하나, 연결 가능한 일반 식재료, 건강식품, 주력 상품 하나, 현실적인 상품 필요 이유를 반드시 구체적으로 작성하세요.
-- productKeywords에는 쇼핑커넥트에서 실제 상품을 찾을 수 있는 짧은 검색어를 1~3개 넣으세요. 질병명만 넣지 말고 식재료·제품 유형을 사용하세요.
+- 각 후보마다 독자의 생활 문제 하나와 비용 없이 먼저 해볼 수 있는 실천 방향을 구체적으로 작성하세요.
+- 제휴상품, 상품명, 쇼핑 링크, 구매 유도 문구는 제안하지 마세요. 상품은 사용자가 나중에 직접 추가합니다.
 
 다음 JSON 배열 형식으로만 출력:
 [
@@ -135,11 +136,7 @@ ${avoid}
     "fact": "확인된 핵심 사실 한 문장",
     "angle": "어떤 관점/구성으로 쓸지 한두 문장 (블로그 포인트)",
     "problem": "독자가 실제로 겪는 생활 건강 문제 하나",
-    "ingredient": "연결 가능한 일반 식재료",
-    "healthProduct": "연결 가능한 건강식품 또는 제품 유형",
-    "primaryProduct": "가장 자연스러운 주력 상품 하나",
-    "productReason": "그 상품이 필요한 가장 현실적인 이유",
-    "productKeywords": ["실제 상품 검색어1", "실제 상품 검색어2"],
+    "action": "비용 없이 먼저 해볼 수 있는 구체적인 실천 방향",
     "refs": [0, 3],
     "keywords": ["핵심키워드1", "핵심키워드2"],
     "recommended": true
@@ -164,14 +161,7 @@ ${avoid}
         fact: String(t.fact || ''),
         angle: String(t.angle || ''),
         problem: String(t.problem || ''),
-        ingredient: String(t.ingredient || ''),
-        healthProduct: String(t.healthProduct || ''),
-        primaryProduct: String(t.primaryProduct || ''),
-        productReason: String(t.productReason || ''),
-        productKeywords: (Array.isArray(t.productKeywords) ? t.productKeywords : [])
-          .map(String)
-          .filter(Boolean)
-          .slice(0, 3),
+        action: String(t.action || ''),
         refs: keptIdx.map((i) => kept[i].originalIndex),
         keywords: (Array.isArray(t.keywords) ? t.keywords : []).map(String).slice(0, 8),
         recommended: !!t.recommended,
