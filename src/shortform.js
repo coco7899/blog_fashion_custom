@@ -170,12 +170,12 @@ async function prepareImages(draftId, script, { mode = 'article', onStep } = {})
       height: 1344,
       onProgress: (n, total) => onStep && onStep(`AI 배경 이미지 생성 중 (${n}/${total})`),
     });
-    made.forEach((m, i) => {
-      const s = needAi[i];
+    made.forEach((m) => {
+      const s = needAi[m.index];
       if (!s) return;
       s.file = m.file;
-      s.ai = true;
-      s.source = 'ai';
+      s.ai = m.ai;
+      s.source = m.fallback ? 'generated' : 'ai';
     });
   }
   return script;

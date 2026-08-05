@@ -460,11 +460,11 @@ async function publish(article, judgments, opts) {
         const j = bySlot.get(block.slot);
         if (j && j.file) {
           onStep(`이미지 ${block.slot} 업로드 중`);
-          const cleanCap = String(j.caption || '').replace(/\s*\(AI 연출 이미지\)\s*$/, '').trim();
+          const cleanCap = String(j.caption || '').replace(/\s*\((?:AI 연출|생성) 이미지\)\s*$/, '').trim();
           let captionLine;
-          if (j.ai) {
-            // AI 연출 이미지는 출처 대신 "AI 연출 이미지"로 명확히 표시(스킬 규칙)
-            captionLine = cleanCap ? `${cleanCap}(AI 연출 이미지)` : 'AI 연출 이미지';
+          if (j.generated) {
+            const generatedLabel = j.ai ? 'AI 연출 이미지' : '생성 이미지';
+            captionLine = cleanCap ? `${cleanCap}(${generatedLabel})` : generatedLabel;
           } else if (hasProducts) {
             // 쇼핑커넥트 포스팅은 자연스러운 사진 설명만 쓰고 출처 문구는 붙이지 않는다.
             captionLine = cleanCap;

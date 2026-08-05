@@ -159,7 +159,7 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     });
 
     // 4. 원고의 각 이미지 자리에 맞는 건강 생활 이미지를 직접 생성한다.
-    setStep('images', '본문에 넣을 건강 이미지 4장을 생성하는 중');
+    setStep('images', '본문에 넣을 건강 이미지 최소 4장을 생성하는 중');
     const rawDir = path.join(store.imagesDir(draftId), 'raw');
     const slots = article.blocks.filter((block) => block.type === 'image');
     if (slots.length < 4) throw new Error('건강 원고의 이미지 자리가 4개보다 적습니다.');
@@ -173,26 +173,32 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       onProgress: (current, total) =>
         store.updateDraft(draftId, { step: `본문 이미지 생성 중 (${current}/${total})` }),
     });
-    const judgments = slots.map((slot, index) => ({
-      slot: slot.slot,
-      file: aiImages[index]?.file || null,
-      caption: `${slot.caption || ''} (AI 연출 이미지)`.trim(),
-      sourceName: 'AI 연출 이미지',
-      sourceUrl: '',
-      ai: true,
-      reason: '본문의 해당 건강 정보와 직접 연결된 AI 연출 이미지',
-    }));
+    const generatedByIndex = new Map(aiImages.map((image) => [image.index, image]));
+    const judgments = slots.map((slot, index) => {
+      const generated = generatedByIndex.get(index);
+      const label = generated?.fallback ? '생성 이미지' : 'AI 연출 이미지';
+      return {
+        slot: slot.slot,
+        file: generated?.file || null,
+        caption: generated ? `${slot.caption || ''} (${label})`.trim() : slot.caption || '',
+        sourceName: generated?.provider || label,
+        sourceUrl: '',
+        ai: Boolean(generated && !generated.fallback),
+        generated: Boolean(generated),
+        reason: generated ? '본문의 해당 건강 정보와 직접 연결된 생성 이미지' : '',
+      };
+    });
     store.saveJudgments(draftId, judgments);
 
     const usable = judgments.filter((judgment) => judgment.file && fs.existsSync(judgment.file));
-    if (usable.length !== slots.length) {
-      throw new Error(`건강 이미지 ${slots.length}장 중 ${usable.length}장만 생성되었습니다. 누락 없이 생성해야 저장합니다.`);
+    if (usable.length < 4) {
+      throw new Error(`건강 이미지가 ${usable.length}장만 준비되었습니다. 최소 4장 이상이어야 저장합니다.`);
     }
 
     article.assetReview = {
       passed: true,
       imageCount: usable.length,
-      imagesDirectlyRelated: judgments.every((judgment) => Boolean(judgment.reason && judgment.file)),
+      imagesDirectlyRelated: usable.every((judgment) => Boolean(judgment.reason && judgment.file)),
     };
     if (!article.assetReview.imagesDirectlyRelated) {
       throw new Error('건강 포스팅과 직접 연결되지 않은 이미지가 있습니다.');

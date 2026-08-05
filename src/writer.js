@@ -11,6 +11,7 @@ const WRITE_TIMEOUT_MS = 600000; // 10분
 
 const MIN_CHARS = 1500;         // 건강 전문 글의 권장 분량 하한
 const MIN_IMAGES = 4;           // 문제 상황·식재료·실천 장면을 포함한 이미지 슬롯
+const MAX_IMAGES = 6;           // 글 흐름상 필요한 경우 이미지 자리를 더 만들 수 있다.
 
 function buildPrompt(topic, refText, frame, retryNote) {
   const skill = skills.loadSkill('03-health-affiliate-blog');
@@ -35,7 +36,7 @@ ${skill}
 5. 잘 맞을 수 있는 사람과 알레르기·식사 제한 등 주의가 필요한 사람을 균형 있게 설명하세요.
 6. 친근한 존댓말, 문단당 1~3문장, 공백 포함 ${MIN_CHARS}~2,200자 안팎으로 충분히 쓰세요.
 7. 소제목(heading)은 5~7개, quote는 최대 1개, 굵은 핵심 구절은 2~4곳만 사용하세요.
-8. image 블록은 정확히 4개 사용하고 대표 이미지, 문제 상황, 식재료·건강식품, 실천 장면의 역할이 겹치지 않게 하세요.
+8. image 블록은 4~6개 사용하고 대표 이미지, 문제 상황, 식재료·건강식품, 실천 장면의 역할이 겹치지 않게 하세요.
 9. 해시태그는 건강 키워드·생활 문제·식재료를 섞어 정확히 6개 작성하세요.
 10. "충격", "정체", "결국", "소름", "전부 공개"와 공포·과장 표현을 쓰지 마세요.
 
@@ -69,7 +70,7 @@ ${retryNote || ''}
     {"type": "paragraph", "text": "알레르기, 복용 약, 식사 제한 등 주의가 필요한 사람과 한계를 설명합니다."}
   ]
 }
-각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. 첫 image는 blocks 배열 맨 앞에 두고 나머지는 관련 단락 사이에 놓으세요. tags는 정확히 6개이며 모두 왼쪽 정렬입니다.`;
+각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. 위 예시는 image 4개이지만 글 흐름상 서로 다른 장면이 더 필요하면 slot 5와 slot 6까지 추가할 수 있습니다. 첫 image는 blocks 배열 맨 앞에 두고 나머지는 관련 단락 사이에 놓으세요. tags는 정확히 6개이며 모두 왼쪽 정렬입니다.`;
 }
 function normalize(article) {
   let slotNo = 0;
@@ -103,7 +104,7 @@ function measure(article) {
   return { chars, images, headings, quotes };
 }
 
-// 건강 글은 소제목 5~7개, 이미지 4개, 인용구 최대 1개로 최종 구조를 정리한다.
+// 건강 글은 소제목 5~7개, 이미지 4~6개, 인용구 최대 1개로 최종 구조를 정리한다.
 function simplifyNewsStructure(article) {
   let headingCount = 0;
   let quoteCount = 0;
@@ -119,7 +120,7 @@ function simplifyNewsStructure(article) {
     }
     if (block.type === 'image') {
       imageCount += 1;
-      return imageCount <= 4;
+      return imageCount <= MAX_IMAGES;
     }
     return true;
   });
@@ -265,7 +266,7 @@ function inspectNewsArticle(article) {
   const boldCount = (text.match(/\*\*(.+?)\*\*/g) || []).length;
 
   if (m.chars < MIN_CHARS) issues.push(`본문 ${m.chars}자(최소 ${MIN_CHARS}자)`);
-  if (m.images !== MIN_IMAGES) issues.push(`이미지 슬롯 ${m.images}개(정확히 ${MIN_IMAGES}개 필요)`);
+  if (m.images < MIN_IMAGES || m.images > MAX_IMAGES) issues.push(`이미지 슬롯 ${m.images}개(허용 ${MIN_IMAGES}~${MAX_IMAGES}개)`);
   if (m.headings < 5 || m.headings > 7) issues.push(`소제목 ${m.headings}개(허용 5~7개)`);
   if (m.quotes > 1) issues.push(`인용구 ${m.quotes}개(최대 1개)`);
   if (boldCount < 2 || boldCount > 4) issues.push(`굵은 핵심 구절 ${boldCount}개(허용 2~4개)`);
@@ -316,7 +317,7 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-생활 건강 문제 하나에 집중하고 기사 문장을 복사하지 마세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개, quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4개, 해시태그 6개를 지키세요. 소제목끼리는 본문 없이 연속 배치하지 마세요. 소제목 바로 아래 핵심 quote를 두는 것은 허용합니다. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요.\n`;
+생활 건강 문제 하나에 집중하고 기사 문장을 복사하지 마세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개, quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4~6개, 해시태그 6개를 지키세요. 소제목끼리는 본문 없이 연속 배치하지 마세요. 소제목 바로 아래 핵심 quote를 두는 것은 허용합니다. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
