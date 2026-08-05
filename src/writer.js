@@ -49,7 +49,10 @@ ${skill}
    - 완성된 한 문장이 길면 같은 paragraph 안에서 의미 단위로 줄바꿈(\\n)해 2~3줄로 보여주세요.
    - 한 줄은 약 25~40자를 권장하지만 이는 화면 배치 기준일 뿐, 본문 분량이나 정보량을 줄이는 기준이 아닙니다.
    - 단어·조사·수식어 중간을 자르지 말고 띄어쓰기나 쉼표처럼 자연스러운 지점에서 줄바꿈하세요.
-8. 소제목이나 quote는 꼭 필요한 전환점에만 **전체 0~3개** 사용하세요. 문단끼리 자연스럽게 이어지면 소제목 없이 써도 됩니다.
+8. 글의 리듬을 위해 **짧은 quote 1~2개**를 핵심 전환점에 사용하세요. heading은 정말 필요할 때만 0~1개 쓰고, quote와 heading 합계는 1~3개로 제한하세요.
+   - quote는 8~24자의 짧은 구절로 쓰고, 독자가 기억할 변화·장면·관전 포인트를 담으세요. 기사 문장이나 긴 사실 설명을 그대로 넣지 마세요.
+   - 중요한 인물 변화, 작품 설정, 스타일 포인트 가운데 **짧은 핵심 구절 1~3곳만 굵게** 표시하세요. 문장 전체나 한 문단 전체를 굵게 만들지 마세요.
+   - 굵게 표시한 내용과 quote가 같은 말을 반복하지 않게 하고, 강조 블록을 연달아 붙이지 마세요. 일반 문단 2~3개 뒤에 강조나 이미지를 배치해 읽는 리듬을 만드세요.
 9. 이미지는 **최소 1장, 기본 2장 이상, 최대 4장** 사용합니다. 첫 번째 image 블록은 어떤 글보다도 앞에 두어 본문 상단 대표 이미지로 사용하세요. 두 번째부터는 해당 사진과 직접 관련된 내용이 시작되거나 마무리되는 단락 사이에 배치하세요. 서로 다른 장면이나 인물을 보여 주는 관련 기사 사진이 더 있으면 3~4장까지 늘릴 수 있습니다. 같은 사진의 단순 크기·자르기 변형이나 내용과 무관한 사진으로 수를 채우지 말고, 실제로 관련된 적절한 후보가 1장뿐일 때만 최종 게시 사진을 1장으로 줄이세요.
 10. 본문은 공백 포함 **최소 800자 이상** 쓰세요. 확인된 내용이 충분하면 더 길게 쓰되 분량을 채우려고 사실·표현을 반복하지 마세요.
 11. 제목은 무슨 소식인지, 무엇이 새롭거나 달라졌는지 바로 보이게 쓰세요. 인물 이름을 무조건 맨 앞에 두지 말고 기사 제목이나 검색어를 나열하지 마세요.
@@ -73,13 +76,13 @@ ${retryNote || ''}
   "blocks": [
     {"type": "image", "slot": 1, "caption": "뉴스 속 장면 설명", "desc": "이 뉴스에 실제로 있을 법한 사진 — 인물/현장"},
     {"type": "paragraph", "text": "인물의 대표 이미지나 활동 맥락을 짚고 이번 소식의 새로운 지점으로 자연스럽게 연결합니다."},
-    {"type": "paragraph", "text": "확인된 핵심 사실 2~3개와 독자가 볼 만한 맥락을 완전히 새로운 문장과 흐름으로 풀어 씁니다."},
-    {"type": "quote", "text": "필요할 때만 쓰는 짧은 전환 구절"},
+    {"type": "paragraph", "text": "확인된 핵심 사실과 **이번 소식의 중요한 변화**를 새로운 문장과 흐름으로 풀어 씁니다."},
+    {"type": "quote", "text": "독자가 기억할 짧은 전환 구절"},
     {"type": "image", "slot": 2, "caption": "관련 장면", "desc": "뉴스 속 다른 사진"},
     {"type": "paragraph", "text": "기사에 나온 배경과 경과를 연결해 설명하고, 필요하면 마지막에 개인적인 생각을 짧게 덧붙입니다."}
   ]
 }
-각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. quote/heading 합계 0~3개, image 블록은 기본 ${MIN_IMAGES}개 이상 최대 4개를 사용하세요. 첫 image 블록은 반드시 blocks 배열의 맨 앞에 대표 이미지로 놓고, 나머지는 관련 내용의 단락 사이에 놓으세요. 최종 사진 판정에서는 관련 사진이 1장뿐이면 1장만 게시될 수 있습니다. tags 5~10개. 모두 왼쪽 정렬.`;
+각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. 짧은 quote 1~2개와 필요한 경우 heading 0~1개를 사용하되 합계는 1~3개여야 합니다. 짧은 핵심 구절 1~3곳만 **굵게** 표시하세요. image 블록은 기본 ${MIN_IMAGES}개 이상 최대 4개를 사용하세요. 첫 image 블록은 반드시 blocks 배열의 맨 앞에 대표 이미지로 놓고, 나머지는 관련 내용의 단락 사이에 놓으세요. 최종 사진 판정에서는 관련 사진이 실제로 1장뿐이면 1장만 게시될 수 있습니다. tags 5~10개. 모두 왼쪽 정렬.`;
 }
 
 function normalize(article) {
@@ -268,10 +271,18 @@ function inspectNewsArticle(article) {
   const m = measure(article);
   const text = (article.blocks || []).map((block) => block.text || '').join(' ');
   const issues = [];
+  const emphasisCount = m.headings + m.quotes;
+  const boldCount = (text.match(/\*\*(.+?)\*\*/g) || []).length;
 
   if (m.chars < MIN_CHARS) issues.push(`본문 ${m.chars}자(최소 ${MIN_CHARS}자)`);
   if (m.images < MIN_IMAGES || m.images > 4) issues.push(`이미지 슬롯 ${m.images}개(기본 2~4개, 관련 사진이 1장뿐이면 게시 단계에서 1장 허용)`);
-  if (m.headings + m.quotes > 3) issues.push(`소제목·구간 표시 ${m.headings + m.quotes}개(최대 3개)`);
+  if (emphasisCount < 1 || emphasisCount > 3) issues.push(`강조 블록 ${emphasisCount}개(허용 1~3개)`);
+  if (boldCount < 1 || boldCount > 3) issues.push(`굵은 핵심 구절 ${boldCount}개(허용 1~3개)`);
+  if ((article.blocks || []).some((block, index, blocks) =>
+    index > 0 &&
+    (block.type === 'quote' || block.type === 'heading') &&
+    (blocks[index - 1].type === 'quote' || blocks[index - 1].type === 'heading')
+  )) issues.push('강조 블록이 연속으로 배치됨');
   if (NEWS_TITLE_FORBIDDEN_RE.test(article.title || '')) issues.push('제목 금지 표현 포함');
   if (NEWS_TITLE_FORBIDDEN_RE.test(text)) issues.push('본문 금지 표현 포함');
   if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
@@ -311,7 +322,7 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상, quote/heading 합계 0~3개, 이미지 슬롯은 기본 2~4개로 작성하세요. 첫 이미지는 본문 맨 위의 대표 이미지이고 나머지는 관련 내용의 단락 사이에 배치하세요. 관련 사진이 실제로 1장뿐이면 게시 단계에서 1장만 사용합니다. 모든 글은 왼쪽 정렬입니다. 내용이나 설명을 줄이지 말고, 완성된 문장을 약 25~40자의 자연스러운 의미 단위로 줄바꿈해 보여주세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
+핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상 쓰세요. 독자가 기억할 짧은 quote 1~2개와 필요한 heading 0~1개를 사용하되 합계 1~3개를 지키고, 짧은 핵심 구절 1~3곳만 **굵게** 표시하세요. 같은 내용을 중복 강조하거나 강조 블록을 연달아 놓지 마세요. 이미지 슬롯은 기본 2~4개로 작성하고 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하세요. 관련 사진이 실제로 1장뿐이면 게시 단계에서 1장만 사용합니다. 모든 글은 왼쪽 정렬입니다. 내용이나 설명을 줄이지 말고, 완성된 문장을 약 25~40자의 자연스러운 의미 단위로 줄바꿈해 보여주세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {

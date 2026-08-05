@@ -446,7 +446,8 @@ async function publish(article, judgments, opts) {
         await page.keyboard.press('Enter');
         await page.keyboard.press('Enter'); // 문단 사이 빈 줄 하나
       } else if (block.type === 'quote') {
-        await insertQuote(frame, page, block.text, { emphasize: hasProducts });
+        // 연예 글과 상품 글 모두 핵심 인용구를 본문보다 크게 표시해 읽는 리듬을 만든다.
+        await insertQuote(frame, page, block.text, { emphasize: true });
       } else if (block.type === 'divider') {
         await insertDivider(frame, page);
       } else if (block.type === 'image') {
