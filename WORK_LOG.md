@@ -1308,6 +1308,33 @@
 - 실패한 실행은 원고 저장 전에 중단되어 네이버 임시글을 만들지 않았습니다.
 - 기존 01/02 스킬과 원본 `main`은 변경하지 않았습니다.
 
+## 2026-08-06 (03 건강 제휴 블로그 스킬 최신화)
+
+### 완료한 작업
+
+- `03-health-affiliate-blog` 스킬에서 예전 이미지 생성·ZIP·상품 링크 자동 삽입 지침을 제거했습니다.
+- 이미지 4~6개를 생성하지 않고, caption과 구체적인 추천 장면을 가진 이미지 자리로 작성하도록 변경했습니다.
+- 마지막 CTA에는 글과 직접 관련된 비처방 제품 1개만 추천하고, 처방약·일반의약품·약물 복용 유도는 금지하도록 반영했습니다.
+- 네이버 저장과 미리보기의 공통 순서를 `본문 → 해시태그 → CTA·제품 추천 → 출처 링크`로 스킬과 템플릿에 반영했습니다.
+- 스킬 형식 검사에서 `Skill is valid!`와 앱의 스킬 로드 검사를 모두 통과했습니다.
+
+### 수정한 파일
+
+- `skills/03-health-affiliate-blog/SKILL.md`
+- `skills/03-health-affiliate-blog/references/cta-guide.md`
+- `skills/03-health-affiliate-blog/references/image-guide.md`
+- `skills/03-health-affiliate-blog/templates/blog-output-template.md`
+- `skills/03-health-affiliate-blog/templates/image-output-template.md`
+- `WORK_LOG.md`
+
+### 다음 작업
+
+- 다음 건강 글부터 최신 스킬 기준이 원고 작성에 자동 반영됩니다.
+
+### 주의사항
+
+- 제휴 링크는 자동으로 생성하지 않으며, 사용자가 추천 제품 문단 아래에 직접 추가합니다.
+
 ## 2026-08-06 (출처 링크를 글 맨아래로 배치)
 
 ### 완료한 작업

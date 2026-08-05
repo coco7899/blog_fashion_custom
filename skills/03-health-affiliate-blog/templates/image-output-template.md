@@ -1,10 +1,13 @@
-# 이미지 산출물 템플릿
+# 이미지 자리 산출물 템플릿
 
-- 01_problem_scene.png — 문제 상황
-- 02_product_main.png — 주력 상품
-- 03_usage_scene_1.png — 활용 장면 1
-- 04_usage_scene_2.png — 활용 장면 2
-- 05_thumbnail.png — 대표 이미지(선택)
+이미지 파일과 ZIP은 만들지 않는다. 본문에 아래 형식의 이미지 자리 4~6개를 넣는다.
 
-ZIP 파일명:
-health-blog-images-[topic]-[YYYYMMDD].zip
+```json
+{"type":"image","slot":1,"caption":"대표 장면","desc":"텍스트와 로고가 없는 구체적인 생활 장면, 권장 비율 16:9"}
+```
+
+- 1: 대표 장면
+- 2: 문제 상황
+- 3: 식재료 또는 생활 도구
+- 4: 실천 장면
+- 5~6: 필요할 때만 추가하는 서로 다른 장면
