@@ -105,9 +105,9 @@ file에는 파일명만 쓰세요(경로 제외).`;
     }
   }
 
-  // 남은 쓸 만한 이미지로 빈 슬롯 채우기 (본문 전체에 고루 퍼지도록)
-  // usable 목록이 비면 후보 순서를 폴백으로 사용
-  const pool = (usableRanked.length ? usableRanked : candidates.map((c) => c.file)).filter((f) => !used.has(f));
+  // AI가 실제로 관련 있다고 판정한 이미지로만 빈 슬롯을 채운다.
+  // usable 목록이 비었을 때 원본 후보를 억지로 넣으면 다른 인물·사건 사진이 들어갈 수 있으므로 폴백하지 않는다.
+  const pool = usableRanked.filter((f) => !used.has(f));
   let pi = 0;
   for (const s of slots) {
     if (slotFile.has(s.slot)) continue;

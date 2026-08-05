@@ -1,11 +1,16 @@
 // 대시보드 프런트엔드
 const $ = (id) => document.getElementById(id);
 const api = async (url, opts = {}) => {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch {
+    throw new Error('사이트 서버 연결이 잠시 끊겼습니다. 잠시 후 다시 시도해주세요.');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `요청 실패 (${res.status})`);
   return data;
@@ -53,6 +58,7 @@ let loginPolling = false;
 let runningTopicIndex = null;        // 현재 실행 중인 글감 인덱스 (오렌지)
 const completedTopics = new Set();   // 이미 실행 완료한 글감 인덱스 (연회색)
 let runQueue = [];                   // 대기 중인 글감 인덱스 (순서대로 자동 처리)
+let productHookPlan = null;          // 상품 링크 분석 후 사용자가 고를 고민 제목 3개
 
 // 세션 파일은 있어도 실제 로그인이 만료됐을 수 있어, 유효성을 따로 확인해 배지에 반영한다.
 // (서버 verify는 10분 캐시라 자주 호출해도 부담이 적지만, 클라이언트도 2분 간격으로 throttle)
@@ -277,8 +283,16 @@ $('productModeBtn').onclick = async () => {
 };
 
 // ── 모드 2-b: 내 상품 링크로 소개 글쓰기 ──────
+function clearProductHookChoices() {
+  productHookPlan = null;
+  const box = $('productHookChoices');
+  box.innerHTML = '';
+  box.hidden = true;
+}
+
 $('productLinkInput').addEventListener('input', () => {
   $('productLinkDeleteBtn').hidden = !$('productLinkInput').value.trim();
+  clearProductHookChoices();
 });
 
 $('productLinkDeleteBtn').onclick = () => {
@@ -287,26 +301,53 @@ $('productLinkDeleteBtn').onclick = () => {
   $('productLinkDeleteBtn').hidden = true;
   $('productModeStatus').hidden = true;
   $('productModeStatus').textContent = '';
+  clearProductHookChoices();
   input.focus();
 };
 
 $('productLinkBtn').onclick = async () => {
   const url = $('productLinkInput').value.trim();
   if (!/^https?:\/\//.test(url)) return alert('상품 링크(쇼핑커넥트/스마트스토어, https://...)를 붙여넣어 주세요.');
-  const mode = $('runMode').value;
-  const visibility = $('runVisibility').value;
-  const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
-  if (!(await uiConfirm(`이 상품 링크로 소개 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}\n시작할까요?`))) return;
   const btn = $('productLinkBtn');
   btn.disabled = true;
   const st = $('productModeStatus');
   st.hidden = false;
   st.className = 'status';
-  st.textContent = '상품 정보를 확인하는 중...';
+  st.textContent = '상품을 살 때 생기는 고민을 찾고 있어요...';
+  clearProductHookChoices();
   try {
-    const data = await api('/api/run-product', { method: 'POST', body: { url, visibility, mode } });
-    st.textContent = '진행 중 — 아래 진행 상황에서 확인하세요.';
-    watchDraft(data.draftId);
+    const data = await api('/api/product-hooks', { method: 'POST', body: { url } });
+    productHookPlan = { ...data, url };
+    const box = $('productHookChoices');
+    box.hidden = false;
+    const heading = document.createElement('div');
+    heading.className = 'product-hook-heading';
+    heading.textContent = `${data.product?.name || '이 상품'}을 찾는 사람의 고민 3가지예요. 하나를 골라주세요.`;
+    box.appendChild(heading);
+    data.choices.forEach((choice, index) => {
+      const choiceBtn = document.createElement('button');
+      choiceBtn.type = 'button';
+      choiceBtn.className = 'product-hook-choice';
+      const number = document.createElement('span');
+      number.className = 'product-hook-number';
+      number.textContent = String(index + 1);
+      const content = document.createElement('span');
+      content.className = 'product-hook-content';
+      const title = document.createElement('strong');
+      title.textContent = choice.title;
+      const concern = document.createElement('span');
+      concern.textContent = `고민: ${choice.concern}`;
+      const situation = document.createElement('span');
+      situation.textContent = `선택 상황: ${choice.situation}`;
+      const purchaseReason = document.createElement('span');
+      purchaseReason.className = 'product-hook-reason';
+      purchaseReason.textContent = `구매 이유: ${choice.purchaseReason}`;
+      content.append(title, concern, situation, purchaseReason);
+      choiceBtn.append(number, content);
+      choiceBtn.onclick = () => runSelectedProductHook(index, choice);
+      box.appendChild(choiceBtn);
+    });
+    st.textContent = '글로 쓰고 싶은 고민 제목을 선택해주세요.';
   } catch (e) {
     st.className = 'status err';
     st.textContent = '실패: ' + e.message;
@@ -314,6 +355,39 @@ $('productLinkBtn').onclick = async () => {
     btn.disabled = false;
   }
 };
+
+async function runSelectedProductHook(selectedIndex, choice) {
+  if (!productHookPlan) return alert('상품 링크로 고민 제목을 다시 받아주세요.');
+  const mode = $('runMode').value;
+  const visibility = $('runVisibility').value;
+  const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
+  if (!(await uiConfirm(`이 제목으로 글을 쓰고 ${actLabel}까지 진행할까요?\n\n${choice.title}`))) return;
+
+  const st = $('productModeStatus');
+  const buttons = [...$('productHookChoices').querySelectorAll('button')];
+  buttons.forEach((button) => { button.disabled = true; });
+  st.hidden = false;
+  st.className = 'status';
+  st.textContent = '선택한 고민과 제목으로 글을 작성하는 중입니다...';
+  try {
+    const data = await api('/api/run-product', {
+      method: 'POST',
+      body: {
+        url: productHookPlan.url,
+        planId: productHookPlan.planId,
+        selectedIndex,
+        visibility,
+        mode,
+      },
+    });
+    st.textContent = '진행 중 — 아래 진행 상황에서 확인하세요.';
+    watchDraft(data.draftId);
+  } catch (e) {
+    st.className = 'status err';
+    st.textContent = '실패: ' + e.message;
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+}
 
 // ── 모든 글감 삭제 (#5) ───────────────────────
 $('clearTopicsBtn').onclick = async () => {
@@ -662,6 +736,7 @@ async function loadDrafts() {
         <span class="tag-status ${tag}">${tagText}</span>
         ${d.status === 'error' && d.title && !d.recovered ? `<button class="btn btn-primary btn-retry">${d.mode === 'publish' ? '발행' : '임시저장'} 재시도</button>` : ''}
         ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
+        ${d.imageZipAvailable ? `<a class="btn btn-ghost btn-sm" href="/api/drafts/${encodeURIComponent(d.id)}/product-images.zip" download>이미지 ZIP</a>` : ''}
         ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
         ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
       </div>`;
@@ -700,16 +775,25 @@ async function openPreview(id) {
     const { meta, article, judgments } = await api('/api/drafts/' + id);
     if (!article) return alert('아직 글이 작성되지 않았습니다.');
     const isProductPost = (meta.products || []).some((product) => product && product.link);
-    const productForbidden =
-      /\d[\d,]*\s*원|가격|판매가|정가|할인|쿠폰|적립|배송비|무료\s*배송|혜택|수수료|공정위|광고|제휴|협찬|경제적\s*이해관계|쇼핑커넥트\s*활동|판매\s*발생\s*시|출처|공식\s*스토어/i;
+    const shoppingConnectDisclosure =
+      '이 포스팅은 네이버 쇼핑 커넥트 활동의 일환으로, 판매 발생 시 수수료를 제공받습니다.';
+    const productForbidden = /출처|공식\s*스토어/i;
+    const productPriceBenefit =
+      /판매가|할인가|정가|가격|배송비|무료\s*배송|쿠폰|적립(?:금)?|할인율|할인\s*(?:금액|혜택)|사은품/i;
     const cleanProductText = (value) =>
       String(value || '')
         .split('\n')
         .map((line) => line.replace(/\s*\(출처\s*[:：][^)]+\)\s*/gi, '').trim())
-        .filter((line) => line && !productForbidden.test(line))
+        .filter(
+          (line) =>
+            line &&
+            (line === shoppingConnectDisclosure ||
+              (!productForbidden.test(line) && !productPriceBenefit.test(line)))
+        )
         .join('\n');
     const body = $('modalBody');
     body.innerHTML = '';
+    body.classList.toggle('preview-product', isProductPost);
     const h1 = document.createElement('h1');
     h1.textContent = isProductPost
       ? cleanProductText(article.title) || `${meta.products?.[0]?.name || '상품'} 구성과 사용 전 확인할 점`
@@ -725,7 +809,16 @@ async function openPreview(id) {
       if (alternatives.length) body.appendChild(alt);
     }
     const bySlot = new Map((judgments || []).map((j) => [j.slot, j]));
-    for (const b of article.blocks) {
+    const previewBlocks = isProductPost
+      ? [
+          { type: 'paragraph', text: shoppingConnectDisclosure, disclosure: true },
+          ...(article.blocks || []).filter(
+            (block) =>
+              !(block.type === 'paragraph' && /쇼핑\s*커넥트\s*활동|판매\s*발생\s*시\s*수수료/.test(block.text || ''))
+          ),
+        ]
+      : article.blocks || [];
+    for (const b of previewBlocks) {
       if (b.type === 'heading') {
         const blockText = isProductPost ? cleanProductText(b.text) : b.text;
         if (!blockText) continue;
@@ -733,7 +826,6 @@ async function openPreview(id) {
         el.textContent = blockText;
         body.appendChild(el);
       } else if (b.type === 'paragraph') {
-        if (/쇼핑커넥트 활동/.test(b.text || '')) continue; // 상품 글에서는 고지 문구를 표시하지 않음
         const blockText = isProductPost ? cleanProductText(b.text) : b.text;
         if (!blockText) continue;
         const el = document.createElement('p');
@@ -746,6 +838,9 @@ async function openPreview(id) {
         const blockText = isProductPost ? cleanProductText(b.text) : b.text;
         if (!blockText) continue;
         const el = document.createElement('blockquote');
+        if (isProductPost) {
+          el.className = blockText.includes('\n') ? 'product-summary' : 'product-point';
+        }
         el.innerHTML = escapeHtml(blockText).replace(/\n/g, '<br>');
         body.appendChild(el);
       } else if (b.type === 'divider') {

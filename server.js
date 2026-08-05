@@ -157,26 +157,58 @@ app.post('/api/run', async (req, res) => {
   res.json({ draftId: meta.id });
 });
 
-// ── 상품 소개 글 실행: 반응 좋은 상품 자동 선정(또는 지정 링크) → 소개 글 → 임시저장/발행 ──
-app.post('/api/run-product', async (req, res) => {
-  const visibility = req.body && req.body.visibility === 'private' ? 'private' : 'public';
-  const mode = req.body && req.body.mode === 'publish' ? 'publish' : 'draft';
-  const url = req.body && typeof req.body.url === 'string' ? req.body.url.trim() : '';
-  if (url && !/^https?:\/\//.test(url)) {
+// ── 상품 링크 분석: 구매 고민이 담긴 후킹 제목 3개를 먼저 제안 ──
+app.post('/api/product-hooks', async (req, res) => {
+  const url = String((req.body && req.body.url) || '').trim();
+  if (!/^https?:\/\/.+/.test(url)) {
     return res.status(400).json({ error: '올바른 상품 링크(https://...)를 입력하세요.' });
   }
-
-  const login = await auth.verify();
-  if (!login.loggedIn) {
-    return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
+  try {
+    const result = await pipeline.prepareProductChoices(url);
+    res.json(result);
+  } catch (e) {
+    const message = String(e.message || '상품의 구매 고민을 만드는 중 오류가 발생했습니다.').split('\n')[0];
+    console.error('[product-hooks] 실패:', message);
+    res.status(500).json({ error: message });
   }
+});
 
-  const meta = store.createDraft({ type: 'product', keyword: '쇼핑커넥트 상품', visibility, mode, sourceUrl: url || undefined });
-  pipeline.runProduct(meta.id, visibility, {
-    mode,
-    productUrl: url || undefined, // 지정 링크가 있으면 그 상품으로
-  });
-  res.json({ draftId: meta.id });
+// ── 상품 소개 글 실행: 반응 좋은 상품 자동 선정 또는 사용자가 고른 고민 제목으로 작성 ──
+app.post('/api/run-product', async (req, res) => {
+  try {
+    const visibility = req.body && req.body.visibility === 'private' ? 'private' : 'public';
+    const mode = req.body && req.body.mode === 'publish' ? 'publish' : 'draft';
+    const url = req.body && typeof req.body.url === 'string' ? req.body.url.trim() : '';
+    const planId = req.body && typeof req.body.planId === 'string' ? req.body.planId.trim() : '';
+    const selectedIndex = Number(req.body && req.body.selectedIndex);
+    if (url && !/^https?:\/\//.test(url)) {
+      return res.status(400).json({ error: '올바른 상품 링크(https://...)를 입력하세요.' });
+    }
+    if (url && !planId) {
+      return res.status(400).json({ error: '먼저 구매 고민 제목 3개를 받은 뒤 하나를 선택해주세요.' });
+    }
+
+    const login = await auth.verify();
+    if (!login.loggedIn) {
+      return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
+    }
+
+    const meta = store.createDraft({ type: 'product', keyword: '쇼핑커넥트 상품', visibility, mode, sourceUrl: url || undefined });
+    pipeline.runProduct(meta.id, visibility, {
+      mode,
+      productUrl: url || undefined, // 지정 링크가 있으면 그 상품으로
+      planId: planId || undefined,
+      selectedIndex,
+    }).catch((error) => {
+      console.error('[run-product] 백그라운드 실행 실패:', error.message);
+      store.updateDraft(meta.id, { status: 'error', step: '실패: ' + error.message, error: error.message });
+    });
+    res.json({ draftId: meta.id });
+  } catch (e) {
+    const message = String(e.message || '상품 링크 처리 중 오류가 발생했습니다.').split('\n')[0];
+    console.error('[run-product] 요청 처리 실패:', message);
+    if (!res.headersSent) res.status(500).json({ error: message });
+  }
 });
 
 // ── 뉴스 링크로 바로 글쓰기: URL의 기사를 참고자료로 글 작성 ──
@@ -188,12 +220,12 @@ app.post('/api/run-link', async (req, res) => {
     return res.status(400).json({ error: '올바른 뉴스 기사 URL을 입력하세요. (https://... )' });
   }
 
-  const login = await auth.verify();
-  if (!login.loggedIn) {
-    return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
-  }
-
   try {
+    const login = await auth.verify();
+    if (!login.loggedIn) {
+      return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
+    }
+
     // 기사 제목 확인 (본문 수집은 파이프라인에서 다시 수행)
     console.log(`[run-link] 기사 확인: ${url}`);
     const art = await collector.withBrowser((ctx) => collector.extractArticle(ctx, url));
@@ -217,11 +249,15 @@ app.post('/api/run-link', async (req, res) => {
     const meta = store.createDraft({ keyword: '링크 글쓰기', topic, visibility, mode, sourceUrl: url });
     pipeline.run(meta.id, { ...search, id: searchId }, topic, visibility, {
       mode,
+    }).catch((error) => {
+      console.error('[run-link] 백그라운드 실행 실패:', error.message);
+      store.updateDraft(meta.id, { status: 'error', step: '실패: ' + error.message, error: error.message });
     });
     res.json({ draftId: meta.id, title });
   } catch (e) {
-    console.error('[run-link] 실패:', e.message);
-    res.status(500).json({ error: e.message });
+    const message = String(e.message || '기사 링크 처리 중 오류가 발생했습니다.').split('\n')[0];
+    console.error('[run-link] 실패:', message);
+    if (!res.headersSent) res.status(500).json({ error: message });
   }
 });
 
@@ -343,7 +379,11 @@ app.post('/api/drafts/:id/retry', async (req, res) => {
 
   if (meta.type === 'product') {
     // 상품 글: 저장된 상품 링크(있으면)로, 없으면 자동 재선정
-    pipeline.runProduct(id, meta.visibility || 'public', { mode, productUrl: meta.sourceUrl || undefined });
+    pipeline.runProduct(id, meta.visibility || 'public', {
+      mode,
+      productUrl: meta.sourceUrl || undefined,
+      selectedHook: meta.selectedProductHook || undefined,
+    });
     return res.json({ ok: true, draftId: id });
   }
 
@@ -393,6 +433,16 @@ app.get('/api/drafts/:id/images/:file', (req, res) => {
   res.sendFile(path.join(store.imagesDir(req.params.id), 'raw', file), (err) => {
     if (err) res.status(404).end();
   });
+});
+
+// 자동 선정 상품 글의 최종 검수용 이미지 묶음 다운로드
+app.get('/api/drafts/:id/product-images.zip', (req, res) => {
+  const meta = store.getMeta(req.params.id);
+  if (!meta || !meta.imageZipAvailable) return res.status(404).json({ error: '준비된 상품 이미지 ZIP이 없습니다.' });
+  const zipPath = path.join(store.imagesDir(req.params.id), 'product-images.zip');
+  if (!fs.existsSync(zipPath)) return res.status(404).json({ error: '상품 이미지 ZIP 파일을 찾을 수 없습니다.' });
+  const name = `${String(meta.title || 'product-images').replace(/[\\/:*?"<>|]/g, '').slice(0, 40)}-images.zip`;
+  res.download(zipPath, name);
 });
 
 // ── 숏폼(세로 영상) ─────────────────────────────────────────
@@ -565,7 +615,7 @@ function cleanupOrphanDrafts() {
   cleanupOrphanDrafts();
   const chrome = await setup.ensureChromium();
   if (!chrome.ok) console.error('[setup]', chrome.error);
-  const cli = codex.checkCli();
+  const cli = setup.checkAll(true).codex;
   console.log(cli.ok ? `[setup] Codex CLI 확인: ${cli.version}` : `[setup] Codex CLI를 찾지 못했습니다: ${cli.error}`);
   if (cli.ok) {
     codex.checkAuth().then((a) => {

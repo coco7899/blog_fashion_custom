@@ -1,6 +1,7 @@
 // 네이버 로그인: headed 브라우저에서 사용자가 직접 로그인 → 세션(storageState) 로컬 저장
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 const { chromium } = require('playwright');
 const browserHelper = require('./browser');
 const store = require('./store');
@@ -11,6 +12,25 @@ const PROFILE_PATH = path.join(store.SESSION_DIR, 'profile.json');
 let loginInProgress = false;
 let lastLoginError = null;
 let lastVerify = null; // { at, result }
+
+function showLoginWindow() {
+  const powershell = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe'
+  );
+  const script = path.join(__dirname, 'show-login-window.ps1');
+  execFile(
+    powershell,
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
+    { windowsHide: true },
+    (error) => {
+      if (error) console.log('[login] 로그인 창 앞으로 가져오기 실패:', error.message.split('\n')[0]);
+    }
+  );
+}
 
 function hasState() {
   const state = store.readJson(STATE_PATH);
@@ -35,6 +55,7 @@ async function startLogin() {
     browser = await browserHelper.launch({ headless: false, args: ['--window-size=900,800'] });
     const context = await browser.newContext({ viewport: { width: 880, height: 760 } });
     const page = await context.newPage();
+    await page.bringToFront().catch(() => {});
     // 로딩이 느려도 창은 떠 있으므로 실패해도 계속 진행 (쿠키 폴링이 로그인을 감지)
     await page
       .goto('https://nid.naver.com/nidlogin.login?mode=form&url=https://www.naver.com', {
@@ -42,6 +63,7 @@ async function startLogin() {
         timeout: 60000,
       })
       .catch((e) => console.log('[login] 로그인 페이지 로딩 지연:', e.message.split('\n')[0]));
+    showLoginWindow();
 
     const deadline = Date.now() + 5 * 60 * 1000;
     while (Date.now() < deadline) {

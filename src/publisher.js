@@ -9,6 +9,8 @@ const SEL = {
   titleArea: '.se-section-documentTitle .se-text-paragraph',
   bodyArea: '.se-section-text .se-text-paragraph',
   popupCancel: '.se-popup-button-cancel', // "작성 중인 글" 이어쓰기 팝업 → 취소
+  uploadErrorTitle: ':text("파일 전송 오류")',
+  popupConfirm: '.se-popup-alert button:has-text("확인"), div[class*="container"] button:has-text("확인")',
   helpClose: '.se-help-panel-close-button',
   fontSizeBtn: '.se-font-size-code-toolbar-button',
   fontSizeOpt: (code) => `.se-toolbar-option-font-size-code-fs${code}-button`,
@@ -43,14 +45,22 @@ const SEL = {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PRODUCT_POST_FORBIDDEN_RE =
-  /\d[\d,]*\s*원|가격|판매가|정가|할인|쿠폰|적립|배송비|무료\s*배송|혜택|수수료|공정위|광고|제휴|협찬|경제적\s*이해관계|쇼핑커넥트\s*활동|판매\s*발생\s*시|출처|공식\s*스토어/i;
+const SHOPPING_CONNECT_DISCLOSURE =
+  '이 포스팅은 네이버 쇼핑 커넥트 활동의 일환으로, 판매 발생 시 수수료를 제공받습니다.';
+const PRODUCT_POST_FORBIDDEN_RE = /출처|공식\s*스토어/i;
+const PRODUCT_PRICE_BENEFIT_RE =
+  /판매가|할인가|정가|가격|배송비|무료\s*배송|쿠폰|적립(?:금)?|할인율|할인\s*(?:금액|혜택)|사은품/i;
 
 function cleanProductPostText(value) {
   return String(value || '')
     .split('\n')
     .map((line) => line.replace(/\s*\(출처\s*[:：][^)]+\)\s*/gi, '').trim())
-    .filter((line) => line && !PRODUCT_POST_FORBIDDEN_RE.test(line))
+    .filter(
+      (line) =>
+        line &&
+        (line === SHOPPING_CONNECT_DISCLOSURE ||
+          (!PRODUCT_POST_FORBIDDEN_RE.test(line) && !PRODUCT_PRICE_BENEFIT_RE.test(line)))
+    )
     .join('\n');
 }
 
@@ -64,7 +74,12 @@ function cleanProductPostArticle(article, products) {
       if (typeof cleaned.caption === 'string') cleaned.caption = cleanProductPostText(cleaned.caption);
       return cleaned;
     })
-    .filter((block) => block.type === 'image' || !('text' in block) || String(block.text).trim());
+    .filter((block) => block.type === 'image' || !('text' in block) || String(block.text).trim())
+    .filter(
+      (block) =>
+        !(block.type === 'paragraph' && /쇼핑\s*커넥트\s*활동|판매\s*발생\s*시\s*수수료/.test(block.text || ''))
+    );
+  blocks.unshift({ type: 'paragraph', text: SHOPPING_CONNECT_DISCLOSURE, disclosure: true });
   const tags = (article.tags || []).filter((tag) => !PRODUCT_POST_FORBIDDEN_RE.test(tag));
   return { ...article, title, blocks, tags };
 }
@@ -157,10 +172,14 @@ async function typeParagraph(page, text) {
 
 async function setFontSize(frame, page, code) {
   const opened = await clickIfVisible(frame, SEL.fontSizeBtn, 2000);
-  if (!opened) return false;
+  if (!opened) {
+    console.log(`[publisher:format] 글자 크기 버튼을 찾지 못함(fs${code})`);
+    return false;
+  }
   await sleep(300);
   const ok = await clickIfVisible(frame, SEL.fontSizeOpt(code), 2000);
   if (!ok) await page.keyboard.press('Escape');
+  console.log(`[publisher:format] 글자 크기 fs${code}: ${ok ? '적용' : '실패'}`);
   return ok;
 }
 
@@ -190,7 +209,7 @@ async function insertHeading(frame, page, text) {
   await sleep(150);
 }
 
-async function insertQuote(frame, page, text) {
+async function insertQuote(frame, page, text, { emphasize = false } = {}) {
   const lines = String(text).split('\n').map((s) => s.trim()).filter(Boolean);
   const opened = await clickIfVisible(frame, SEL.quoteBtn, 2500);
   if (opened) {
@@ -201,6 +220,25 @@ async function insertQuote(frame, page, text) {
     for (let i = 0; i < lines.length; i++) {
       if (i > 0) await page.keyboard.press('Shift+Enter');
       await page.keyboard.insertText(lines[i]);
+    }
+    if (emphasize) {
+      // 쇼핑 글의 핵심 구절은 본문보다 한 단계 크게 보이게 한다.
+      // 여러 줄 핵심 요약은 과하게 커지지 않도록 17, 짧은 구절은 19를 사용한다.
+      const quoteComponent = frame.locator('.se-component.se-quotation, .se-component.se-blockquote').last();
+      const selectQuoteContents = () =>
+        quoteComponent.evaluate((element) => {
+          const selection = element.ownerDocument.defaultView.getSelection();
+          const range = element.ownerDocument.createRange();
+          range.selectNodeContents(element);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        }).catch(() => false);
+      const selected = await selectQuoteContents();
+      if (selected) {
+        await setFontSize(frame, page, lines.length > 1 ? 17 : 19);
+        await page.keyboard.press('End');
+      }
     }
     // 인용구 탈출: End → ArrowDown×2(인용구 밖으로) → Enter(깨끗한 새 문단).
     // 실측으로 찾은 조합 — 인용구 안에 빈 줄(행간)을 남기지 않고, 본문이 인용구에 갇히지도 않으며,
@@ -250,6 +288,7 @@ async function readSaveCount(frame) {
 // 검증 실패 시 한 번 더 시도하고, 그래도 실패면 예외를 던진다(가짜 성공 방지).
 async function saveDraftVerified(frame, page) {
   for (let attempt = 1; attempt <= 2; attempt++) {
+    await dismissUploadError(frame, page);
     const before = await readSaveCount(frame);
     await dismissHelpPanel(frame);
     const clicked = await clickVisibleCandidate(frame, SEL.saveCandidates, { pick: 'first', timeout: 10000 });
@@ -280,21 +319,56 @@ async function saveDraftVerified(frame, page) {
   throw new Error('임시저장이 확인되지 않았습니다(저장 신호 없음).');
 }
 
-async function insertImage(frame, page, filePath, captionLine) {
+async function dismissUploadError(frame, page) {
+  const visible = await frame
+    .locator(SEL.uploadErrorTitle)
+    .first()
+    .isVisible()
+    .catch(() => false);
+  if (!visible) return false;
+
+  await clickIfVisible(frame, SEL.popupConfirm, 2000);
+  await page.keyboard.press('Escape').catch(() => {});
+  await sleep(300);
+  return true;
+}
+
+async function insertImage(frame, page, filePath, captionLine, { alignLeft = false } = {}) {
   const before = await frame.locator('.se-component.se-image').count().catch(() => 0);
-  const chooserPromise = page.waitForEvent('filechooser', { timeout: 15000 });
+  const chooserPromise = page.waitForEvent('filechooser', { timeout: 15000 }).catch(() => null);
   const clicked = await clickIfVisible(frame, SEL.imageBtn, 3000);
-  if (!clicked) throw new Error('이미지 버튼을 찾지 못했습니다.');
+  if (!clicked) {
+    await chooserPromise;
+    throw new Error('이미지 버튼을 찾지 못했습니다.');
+  }
   const chooser = await chooserPromise;
+  if (!chooser) throw new Error('이미지 파일 선택 창이 열리지 않았습니다.');
   await chooser.setFiles(filePath);
   // 업로드 완료 대기: 이미지 컴포넌트 수 증가 확인
   const deadline = Date.now() + 30000;
+  let uploaded = false;
   while (Date.now() < deadline) {
     const now = await frame.locator('.se-component.se-image').count().catch(() => 0);
-    if (now > before) break;
+    if (now > before) {
+      uploaded = true;
+      break;
+    }
+    if (await dismissUploadError(frame, page)) {
+      throw new Error('네이버가 지원하지 않는 이미지 파일이라 제외했습니다.');
+    }
     await sleep(700);
   }
+  if (!uploaded) {
+    await dismissUploadError(frame, page);
+    throw new Error('이미지 업로드가 완료되지 않아 제외했습니다.');
+  }
   await sleep(1500);
+  if (alignLeft) {
+    // 쇼핑 포스팅은 이미지 블록까지 왼쪽에 맞춘다.
+    const latestImage = frame.locator('.se-component.se-image').last();
+    await latestImage.click({ timeout: 2500 }).catch(() => {});
+    await setAlign(frame, page, 'left');
+  }
   // 이미지 선택 상태 해제 후 캡션 줄(출처 표기) 입력
   await page.keyboard.press('Escape');
   await sleep(300);
@@ -351,6 +425,8 @@ async function publish(article, judgments, opts) {
     // 제목
     onStep('제목 입력 중');
     await frame.locator(SEL.titleArea).first().click();
+    await setAlign(frame, page, 'left');
+    await frame.locator(SEL.titleArea).first().click();
     await page.keyboard.insertText(publishArticle.title);
 
     // 본문
@@ -363,8 +439,6 @@ async function publish(article, judgments, opts) {
     await sleep(200);
 
     for (const block of publishArticle.blocks) {
-      // AI가 광고·제휴 고지 문구를 넣었으면 상품 글에서 제외한다.
-      if (block.type === 'paragraph' && /쇼핑커넥트 활동/.test(block.text || '')) continue;
       if (block.type === 'heading') {
         await insertHeading(frame, page, block.text);
       } else if (block.type === 'paragraph') {
@@ -372,7 +446,7 @@ async function publish(article, judgments, opts) {
         await page.keyboard.press('Enter');
         await page.keyboard.press('Enter'); // 문단 사이 빈 줄 하나
       } else if (block.type === 'quote') {
-        await insertQuote(frame, page, block.text);
+        await insertQuote(frame, page, block.text, { emphasize: hasProducts });
       } else if (block.type === 'divider') {
         await insertDivider(frame, page);
       } else if (block.type === 'image') {
@@ -394,7 +468,9 @@ async function publish(article, judgments, opts) {
               : `(출처:${sourceLabel})`;
           }
           try {
-            await insertImage(frame, page, path.join(imagesDir, 'raw', j.file), captionLine);
+            await insertImage(frame, page, path.join(imagesDir, 'raw', j.file), captionLine, {
+              alignLeft: hasProducts,
+            });
           } catch (e) {
             console.log(`[publisher] 이미지 슬롯 ${block.slot} 업로드 실패: ${e.message}`);
           }

@@ -99,6 +99,34 @@ input[type="text"], select {
 .mode-box h3 { font-size: 15px; }
 .mode-box .hint { margin-bottom: 4px; }
 
+.product-hook-choices {
+  width: 100%; margin-top: 8px; padding-top: 12px; border-top: 1px solid #e5e8eb;
+}
+.product-hook-heading { font-size: 14px; font-weight: 700; color: #222; margin-bottom: 10px; }
+.product-hook-choice {
+  width: 100%; display: flex; align-items: flex-start; gap: 10px;
+  padding: 13px; margin-bottom: 8px; border: 1px solid #dce3e7; border-radius: 10px;
+  background: #fff; color: #222; text-align: left; cursor: pointer;
+}
+.product-hook-choice:hover { border-color: #03c75a; background: #f3fcf7; }
+.product-hook-choice:disabled { opacity: .55; cursor: default; }
+.product-hook-number {
+  flex: 0 0 26px; height: 26px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; background: #03c75a; color: #fff;
+  font-size: 13px; font-weight: 800;
+}
+.product-hook-content { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.product-hook-content strong { font-size: 14px; line-height: 1.45; }
+.product-hook-content span { font-size: 12px; line-height: 1.45; color: #667078; }
+.product-hook-content .product-hook-reason {
+  margin-top: 2px; color: #16733a; font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .product-hook-choice { padding: 12px 10px; }
+  .product-hook-content strong { font-size: 13px; }
+}
+
 /* 진행 상황 카드 — 그린 배경 */
 .progress-card { background: #eafaf0; border-color: #b7e4c7; }
 
@@ -149,23 +177,35 @@ input[type="text"], select {
 }
 
 .preview { text-align: left; }
+.preview > * { text-align: left; }
 .preview h1 { font-size: 24px; margin-bottom: 18px; text-align: left; }
 .preview h3 { font-size: 19px; margin: 22px 0 8px; text-align: left; }
 .preview p {
   margin-bottom: 16px;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.7;
   text-align: left;
   white-space: pre-line;
 }
 .preview blockquote {
   border-left: 4px solid #03c75a; padding: 8px 14px; margin: 14px 0;
-  color: #444; background: #f8faf9; font-weight: 600;
+  color: #444; background: #f8faf9; font-weight: 600; text-align: left;
 }
 .preview hr { border: none; border-top: 1px dashed #ccc; margin: 20px 0; }
-.preview img { max-width: 100%; border-radius: 8px; display: block; margin: 14px auto 4px; }
-.preview .caption { font-size: 12px; color: #999; text-align: center; margin-bottom: 14px; }
-.preview .tags { margin-top: 20px; font-size: 13px; color: #2563eb; }
+.preview img { max-width: 100%; border-radius: 8px; display: block; margin: 14px 0 4px; }
+.preview .caption { font-size: 12px; color: #999; text-align: left; margin-bottom: 14px; }
+.preview .tags { margin-top: 20px; font-size: 13px; color: #2563eb; text-align: left; }
+.preview.preview-product blockquote.product-point {
+  color: #333;
+  font-size: 19px;
+  line-height: 1.55;
+  font-weight: 750;
+}
+.preview.preview-product blockquote.product-summary {
+  color: #333;
+  font-size: 17px;
+  line-height: 1.65;
+}
 
 /* 자체 확인창 (native confirm 대체 — 모든 브라우저에서 동작) */
 .ui-confirm-overlay {

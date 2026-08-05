@@ -1,5 +1,7 @@
 // 수집 → AI 작성 → 이미지 판정(본문 곳곳 배치) → 임시저장/발행 파이프라인
 const path = require('path');
+const crypto = require('crypto');
+const fs = require('fs');
 const store = require('./store');
 const collector = require('./collector');
 const writer = require('./writer');
@@ -7,6 +9,39 @@ const images = require('./images');
 const publisher = require('./publisher');
 const brandconnect = require('./brandconnect');
 const aiimage = require('./aiimage');
+const imageZip = require('./imageZip');
+
+// 링크 분석 결과는 제목을 고르는 짧은 시간 동안만 메모리에 보관한다.
+// 네이버 계정 정보나 비밀번호는 저장하지 않는다.
+const productPlans = new Map();
+const PRODUCT_PLAN_TTL_MS = 30 * 60 * 1000;
+
+async function prepareProductChoices(productUrl) {
+  const now = Date.now();
+  for (const [id, plan] of productPlans) {
+    if (now - plan.createdAt > PRODUCT_PLAN_TTL_MS) productPlans.delete(id);
+  }
+
+  const resolved = await brandconnect.resolveProductByUrl(productUrl);
+  const product = resolved.product;
+  const detail = resolved.detail || {};
+  if (!product || !product.name) throw new Error('상품 정보를 확인하지 못했습니다. 링크를 확인해주세요.');
+  const choices = await writer.suggestProductHooks(product, detail);
+  const planId = crypto.randomUUID();
+  productPlans.set(planId, {
+    createdAt: now,
+    sourceUrl: productUrl,
+    product,
+    link: resolved.link || productUrl,
+    detail,
+    choices,
+  });
+  return {
+    planId,
+    product: { name: product.name, image: product.image || (detail.images || [])[0] || '' },
+    choices,
+  };
+}
 
 // 이미지 검색어 만들기 — 글에 실제 등장하는 구체적 키워드(고유명사 포함) 위주로.
 // 너무 일반적인 키워드("연예인 패션")만 쓰면 관련 없는 이미지가 나오므로,
@@ -91,7 +126,8 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     // 2. AI 글 작성
     setStep('writing', `AI가 글 작성 중 (참고자료 ${refs.length}건) — 수 분 걸릴 수 있어요`);
     const article = await writer.writeArticle(topic, refs);
-    store.saveArticle(draftId, article);
+    // 자동 선정 글은 이미지·ZIP 검수까지 모두 통과한 뒤에만 원고를 노출한다.
+    if (!automaticSelection) store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
       title: article.title,
       frameKey: article.frameKey,
@@ -157,9 +193,26 @@ async function run(draftId, search, topic, visibility, opts = {}) {
 async function runProduct(draftId, visibility, opts = {}) {
   const setStep = (status, step) => { checkStop(draftId); store.updateDraft(draftId, { status, step }); };
   try {
+    const automaticSelection = !opts.planId && !opts.productUrl;
     let product, link, detail;
+    let selectedHook = opts.selectedHook || null;
 
-    if (opts.productUrl) {
+    if (opts.planId) {
+      const plan = productPlans.get(opts.planId);
+      if (!plan || Date.now() - plan.createdAt > PRODUCT_PLAN_TTL_MS) {
+        throw new Error('제목 선택 시간이 지났습니다. 상품 링크로 고민 제목을 다시 받아주세요.');
+      }
+      const selectedIndex = Number(opts.selectedIndex);
+      if (!Number.isInteger(selectedIndex) || !plan.choices[selectedIndex]) {
+        throw new Error('작성할 고민 제목을 선택해주세요.');
+      }
+      productPlans.delete(opts.planId);
+      product = plan.product;
+      link = plan.link;
+      detail = plan.detail || {};
+      selectedHook = plan.choices[selectedIndex];
+      console.log(`[pipeline] 사용자가 고른 상품 제목: ${selectedHook.title.slice(0, 60)}`);
+    } else if (opts.productUrl) {
       // 1-b. 사용자가 지정한 상품 링크로
       setStep('collecting', '지정한 상품 정보·이미지 확인 중');
       const r = await brandconnect.resolveProductByUrl(opts.productUrl);
@@ -195,7 +248,12 @@ async function runProduct(draftId, visibility, opts = {}) {
       }
     }
 
-    store.updateDraft(draftId, { product, keyword: product.query || '쇼핑커넥트 상품', title: (product.name || '상품').slice(0, 40) });
+    store.updateDraft(draftId, {
+      product,
+      keyword: product.query || '쇼핑커넥트 상품',
+      title: selectedHook?.title || (product.name || '상품').slice(0, 40),
+      selectedProductHook: selectedHook || undefined,
+    });
     const products = [{ name: product.name, price: product.price, commission: product.commission, link }];
     store.updateDraft(draftId, { products });
 
@@ -206,8 +264,13 @@ async function runProduct(draftId, visibility, opts = {}) {
     console.log(`[pipeline] 상세 이미지 ${detail.images.length}장 확보`);
 
     // 3. AI 소개 글 작성
-    setStep('writing', 'AI가 상품 소개 글 작성 중 — 수 분 걸릴 수 있어요');
-    const article = await writer.writeProductArticle(product, detail);
+    setStep('writing', automaticSelection
+      ? 'AI 초안 작성 후 구매 설득력 자체 검수 중 — 수 분 걸릴 수 있어요'
+      : 'AI가 상품 소개 글 작성 중 — 수 분 걸릴 수 있어요');
+    const article = await writer.writeProductArticle(product, detail, selectedHook, {
+      minImages: automaticSelection ? 4 : 2,
+      selfReview: automaticSelection,
+    });
     store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
       title: article.title,
@@ -255,6 +318,35 @@ async function runProduct(draftId, visibility, opts = {}) {
     });
     store.saveJudgments(draftId, judgments);
 
+    if (automaticSelection) {
+      const usable = judgments.filter((judgment) => judgment.file && fs.existsSync(judgment.file));
+      if (usable.length < 4) {
+        throw new Error(`자동 상품 글 이미지 자체 검수 실패: 관련 이미지가 ${usable.length}장뿐입니다. 4장 이상 확보해야 저장합니다.`);
+      }
+      const zipPath = path.join(store.imagesDir(draftId), 'product-images.zip');
+      const zip = imageZip.createZip(usable, zipPath);
+      if (zip.count !== usable.length || !fs.existsSync(zipPath)) {
+        throw new Error('자동 상품 글 ZIP 자체 검수 실패: 이미지 누락 없이 압축하지 못했습니다.');
+      }
+      article.assetReview = {
+        passed: true,
+        imageCount: usable.length,
+        imagesDirectlyRelated: judgments.every((judgment) => Boolean(judgment.reason && judgment.file)),
+        zipComplete: true,
+      };
+      if (!article.assetReview.imagesDirectlyRelated) {
+        throw new Error('자동 상품 글 이미지 자체 검수 실패: 글과 직접 연결되지 않은 이미지가 있습니다.');
+      }
+      store.saveArticle(draftId, article);
+      store.updateDraft(draftId, {
+        qualityScore: article.qualityReview?.score || null,
+        qualityPassed: true,
+        imageCount: usable.length,
+        imageZipAvailable: true,
+      });
+      console.log(`[pipeline] 자동 상품 글 최종 검수 통과: ${article.qualityReview?.score || 0}점, 이미지 ${usable.length}장, ZIP ${zip.count}장`);
+    }
+
     // 5. 임시저장/발행 (products는 meta에서 읽힘, 뉴스 출처는 없음)
     const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.mode || 'draft');
     return { ok: true, postUrl };
@@ -266,4 +358,4 @@ async function runProduct(draftId, visibility, opts = {}) {
   }
 }
 
-module.exports = { run, runProduct, publishAndNotify };
+module.exports = { run, runProduct, prepareProductChoices, publishAndNotify };

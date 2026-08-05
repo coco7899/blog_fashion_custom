@@ -319,6 +319,11 @@ async function downloadImages(imageList, destDir, { maxCount = 8 } = {}) {
           continue;
         }
         if (!dim || dim.width < 300 || dim.height < 200) continue;
+        // URL이나 파일명이 .jpg여도 실제 내용이 AVIF인 뉴스 이미지가 있다.
+        // 네이버 스마트에디터는 이런 파일을 "알 수 없는 파일"로 거절하므로
+        // 업로드 가능한 실제 형식만 후보로 저장한다.
+        const uploadableTypes = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
+        if (!uploadableTypes.has(String(dim.type || '').toLowerCase())) continue;
         const ext = dim.type === 'png' ? 'png' : dim.type === 'webp' ? 'webp' : dim.type === 'gif' ? 'gif' : 'jpg';
         n += 1;
         const file = `raw-${n}.${ext}`;
