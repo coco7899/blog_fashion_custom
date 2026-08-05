@@ -106,7 +106,14 @@ function listDrafts() {
   if (!fs.existsSync(DRAFTS_DIR)) return [];
   return fs
     .readdirSync(DRAFTS_DIR)
-    .map((id) => getMeta(id))
+    .map((id) => {
+      const meta = getMeta(id);
+      if (!meta) return null;
+      return {
+        ...meta,
+        articleAvailable: fs.existsSync(path.join(draftDir(id), 'article.json')),
+      };
+    })
     .filter(Boolean)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }

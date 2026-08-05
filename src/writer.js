@@ -270,11 +270,13 @@ function inspectNewsArticle(article) {
   if (m.quotes > 1) issues.push(`인용구 ${m.quotes}개(최대 1개)`);
   if (boldCount < 2 || boldCount > 4) issues.push(`굵은 핵심 구절 ${boldCount}개(허용 2~4개)`);
   if (!Array.isArray(article.tags) || article.tags.length !== 6) issues.push(`해시태그 ${(article.tags || []).length}개(정확히 6개 필요)`);
+  // 소제목 바로 아래 핵심 인용구는 정상적인 건강 글 구성이다.
+  // 내용 없이 소제목만 두 번 연속 나오는 경우에만 재작성을 요청한다.
   if ((article.blocks || []).some((block, index, blocks) =>
     index > 0 &&
-    (block.type === 'quote' || block.type === 'heading') &&
-    (blocks[index - 1].type === 'quote' || blocks[index - 1].type === 'heading')
-  )) issues.push('강조 블록이 연속으로 배치됨');
+    block.type === 'heading' &&
+    blocks[index - 1].type === 'heading'
+  )) issues.push('소제목이 본문 없이 연속으로 배치됨');
   if (NEWS_TITLE_FORBIDDEN_RE.test(article.title || '')) issues.push('제목 금지 표현 포함');
   if (NEWS_TITLE_FORBIDDEN_RE.test(text)) issues.push('본문 금지 표현 포함');
   if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
@@ -314,7 +316,7 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-생활 건강 문제 하나에 집중하고 기사 문장을 복사하지 마세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개, quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4개, 해시태그 6개를 지키세요. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요.\n`;
+생활 건강 문제 하나에 집중하고 기사 문장을 복사하지 마세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개, quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4개, 해시태그 6개를 지키세요. 소제목끼리는 본문 없이 연속 배치하지 마세요. 소제목 바로 아래 핵심 quote를 두는 것은 허용합니다. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {

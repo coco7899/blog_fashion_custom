@@ -605,6 +605,7 @@ async function loadDrafts() {
     const tag = done ? 'tag-published' : d.status === 'error' ? 'tag-error' : 'tag-running';
     const tagText = d.status === 'saved' ? '임시저장됨' : d.status === 'published' ? '발행됨' : d.status === 'error' ? '실패' : '진행 중';
     const linkLabel = d.status === 'saved' ? '글쓰기 열기 →' : '글 보기 →';
+    const needsFullRetry = d.status === 'error' && (!d.articleAvailable || !d.imageCount);
     div.innerHTML = `
       <div>
         <div class="d-title"></div>
@@ -612,7 +613,7 @@ async function loadDrafts() {
       </div>
       <div class="d-actions">
         <span class="tag-status ${tag}">${tagText}</span>
-        ${d.status === 'error' && d.title && !d.recovered ? `<button class="btn btn-primary btn-retry">${d.mode === 'publish' ? '발행' : '임시저장'} 재시도</button>` : ''}
+        ${d.status === 'error' && d.topic && !d.recovered ? `<button class="btn btn-primary btn-retry">${needsFullRetry ? '처음부터 재시도' : `${d.mode === 'publish' ? '발행' : '임시저장'} 재시도`}</button>` : ''}
         ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
         ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
         ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
@@ -633,9 +634,13 @@ async function loadDrafts() {
     if (retryBtn) {
       retryBtn.onclick = async () => {
         const noun = d.mode === 'publish' ? '발행' : '임시저장';
-        if (!(await uiConfirm(`작성된 글 그대로 ${noun}만 다시 시도할까요?`))) return;
+        const message = needsFullRetry
+          ? `실패한 글감을 처음부터 다시 작성하고 이미지 생성 후 ${noun}할까요?`
+          : `작성된 글 그대로 ${noun}만 다시 시도할까요?`;
+        if (!(await uiConfirm(message))) return;
         try {
-          await api(`/api/drafts/${d.id}/retry-publish`, { method: 'POST', body: { mode: d.mode || 'draft' } });
+          const endpoint = needsFullRetry ? 'retry' : 'retry-publish';
+          await api(`/api/drafts/${d.id}/${endpoint}`, { method: 'POST', body: { mode: d.mode || 'draft' } });
           watchDraft(d.id);
         } catch (e) {
           alert(e.message);
