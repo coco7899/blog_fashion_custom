@@ -391,11 +391,10 @@ async function publish(article, judgments, opts) {
   const { mode = 'draft', visibility = 'public', imagesDir, errorShotPath, onStep = () => {}, sources = [], products = [] } = opts;
   const hasProducts = (products || []).some((product) => product && product.link);
   const publishArticle = hasProducts ? cleanProductPostArticle(article, products) : article;
-  const deferredCtaBlock = hasProducts
-    ? [...(publishArticle.blocks || [])].reverse().find(
-        (block) => block.type === 'paragraph' && !block.disclosure
-      )
-    : null;
+  // 마지막 행동 제안과 제휴 추천은 출처·해시태그 다음, 글의 실제 마지막에 둔다.
+  const deferredCtaBlock = [...(publishArticle.blocks || [])].reverse().find(
+    (block) => block.type === 'paragraph' && !block.disclosure
+  );
 
   const status = await auth.verify(true);
   if (!status.loggedIn || !status.blogId) {
