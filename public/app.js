@@ -47,7 +47,7 @@ function uiConfirm(message) {
 const STEPS = [
   { key: 'collecting', label: '자료 수집' },
   { key: 'writing', label: 'AI 글 작성' },
-  { key: 'images', label: '본문 이미지 생성' },
+  { key: 'images', label: '이미지 자리 준비' },
   { key: 'publishing', label: '임시저장' },
   { key: 'saved', label: '완료' },
 ];
@@ -635,7 +635,7 @@ async function loadDrafts() {
       retryBtn.onclick = async () => {
         const noun = d.mode === 'publish' ? '발행' : '임시저장';
         const message = needsFullRetry
-          ? `실패한 글감을 처음부터 다시 작성하고 이미지 생성 후 ${noun}할까요?`
+          ? `실패한 글감을 처음부터 다시 작성하고 이미지 자리를 준비한 후 ${noun}할까요?`
           : `작성된 글 그대로 ${noun}만 다시 시도할까요?`;
         if (!(await uiConfirm(message))) return;
         try {
@@ -751,6 +751,15 @@ async function openPreview(id) {
               : `(출처:${sourceLabel})`;
           }
           body.appendChild(cap);
+        } else if (!isProductPost) {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'image-placeholder';
+          const title = document.createElement('strong');
+          title.textContent = `🖼 이미지 ${b.slot} 넣을 자리`;
+          const desc = document.createElement('span');
+          desc.textContent = `추천 장면: ${j?.desc || b.desc || b.caption || '글 내용에 맞는 이미지'}`;
+          placeholder.append(title, desc);
+          body.appendChild(placeholder);
         }
       }
     }

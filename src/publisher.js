@@ -481,6 +481,13 @@ async function publish(article, judgments, opts) {
           } catch (e) {
             console.log(`[publisher] 이미지 슬롯 ${block.slot} 업로드 실패: ${e.message}`);
           }
+        } else if (!hasProducts) {
+          const placeholderDesc = String(j?.desc || block.desc || block.caption || '글 내용에 맞는 이미지').trim();
+          await typeRich(page, `🖼 이미지 ${block.slot} 넣을 자리`);
+          await page.keyboard.press('Shift+Enter');
+          await page.keyboard.insertText(`추천 장면: ${placeholderDesc}`);
+          await page.keyboard.press('Enter');
+          await page.keyboard.press('Enter');
         }
       }
       await sleep(250);

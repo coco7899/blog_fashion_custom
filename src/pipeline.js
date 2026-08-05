@@ -158,58 +158,39 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       frameLabel: article.frameLabel,
     });
 
-    // 4. 원고의 각 이미지 자리에 맞는 건강 생활 이미지를 직접 생성한다.
-    setStep('images', '본문에 넣을 건강 이미지 최소 4장을 생성하는 중');
-    const rawDir = path.join(store.imagesDir(draftId), 'raw');
+    // 4. 이미지를 생성하지 않고, 나중에 사용자가 채울 이미지 자리와 장면 설명만 준비한다.
+    setStep('images', '본문 이미지 자리와 추천 장면을 정리하는 중');
     const slots = article.blocks.filter((block) => block.type === 'image');
     if (slots.length < 4) throw new Error('건강 원고의 이미지 자리가 4개보다 적습니다.');
-    const descriptions = slots.map((slot, index) => {
-      const role = slot.desc || slot.caption || `건강한 생활 장면 ${index + 1}`;
-      return `${role}. 한국인의 자연스러운 건강 생활 장면, 사실적인 사진, 밝은 자연광, 텍스트·로고·워터마크·브랜드 상품 없음`;
-    });
-    const aiImages = await aiimage.generateMany(descriptions, rawDir, {
-      prefix: 'health',
-      category: healthTopic.field || healthTopic.title || '생활 건강정보',
-      onProgress: (current, total) =>
-        store.updateDraft(draftId, { step: `본문 이미지 생성 중 (${current}/${total})` }),
-    });
-    const generatedByIndex = new Map(aiImages.map((image) => [image.index, image]));
-    const judgments = slots.map((slot, index) => {
-      const generated = generatedByIndex.get(index);
-      const label = generated?.fallback ? '생성 이미지' : 'AI 연출 이미지';
-      return {
-        slot: slot.slot,
-        file: generated?.file || null,
-        caption: generated ? `${slot.caption || ''} (${label})`.trim() : slot.caption || '',
-        sourceName: generated?.provider || label,
-        sourceUrl: '',
-        ai: Boolean(generated && !generated.fallback),
-        generated: Boolean(generated),
-        reason: generated ? '본문의 해당 건강 정보와 직접 연결된 생성 이미지' : '',
-      };
-    });
+    const judgments = slots.map((slot) => ({
+      slot: slot.slot,
+      file: null,
+      caption: slot.caption || '',
+      desc: slot.desc || slot.caption || `건강 글 이미지 ${slot.slot}`,
+      sourceName: '',
+      sourceUrl: '',
+      ai: false,
+      generated: false,
+      placeholder: true,
+      reason: '이미지를 나중에 넣을 수 있도록 본문 위치와 추천 장면을 표시',
+    }));
     store.saveJudgments(draftId, judgments);
-
-    const usable = judgments.filter((judgment) => judgment.file && fs.existsSync(judgment.file));
-    if (usable.length < 4) {
-      throw new Error(`건강 이미지가 ${usable.length}장만 준비되었습니다. 최소 4장 이상이어야 저장합니다.`);
-    }
 
     article.assetReview = {
       passed: true,
-      imageCount: usable.length,
-      imagesDirectlyRelated: usable.every((judgment) => Boolean(judgment.reason && judgment.file)),
+      imageCount: 0,
+      imageSlotCount: slots.length,
+      imagesPending: true,
     };
-    if (!article.assetReview.imagesDirectlyRelated) {
-      throw new Error('건강 포스팅과 직접 연결되지 않은 이미지가 있습니다.');
-    }
     store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
-      imageCount: usable.length,
+      imageCount: 0,
+      imageSlotCount: slots.length,
+      imagesPending: true,
       imageZipAvailable: false,
     });
 
-    // 5. 생성 이미지를 본문의 각 위치에 올리고 기사 출처와 함께 임시저장/발행한다.
+    // 5. 이미지 자리 안내를 본문 위치에 넣고 기사 출처와 함께 임시저장/발행한다.
     const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.mode || 'draft');
     return { ok: true, postUrl };
   } catch (e) {
