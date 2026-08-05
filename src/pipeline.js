@@ -126,8 +126,9 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     // 2. AI 글 작성
     setStep('writing', `AI가 글 작성 중 (참고자료 ${refs.length}건) — 수 분 걸릴 수 있어요`);
     const article = await writer.writeArticle(topic, refs);
-    // 자동 선정 글은 이미지·ZIP 검수까지 모두 통과한 뒤에만 원고를 노출한다.
-    if (!automaticSelection) store.saveArticle(draftId, article);
+    // 연예·생활 뉴스 글은 작성이 끝나면 원고를 바로 저장한다.
+    // automaticSelection은 상품 글 전용 변수이므로 이 흐름에서 참조하지 않는다.
+    store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
       title: article.title,
       frameKey: article.frameKey,
