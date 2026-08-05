@@ -768,9 +768,10 @@ async function openPreview(id) {
         }
       }
     }
-    // 건강 기사 출처는 해시태그·CTA·상품 링크보다 먼저 표시한다.
+    // 상품 글은 기사 출처를 본문 다음에 표시한다. 건강 글 출처는 실제 저장 순서처럼 맨 아래에 둔다.
     const newsRefs = (meta.refs || []).filter((r) => r && r.url && r.kind === 'news');
-    if (newsRefs.length) {
+    const appendNewsRefs = () => {
+      if (!newsRefs.length) return;
       body.appendChild(document.createElement('hr'));
       const st = document.createElement('h3');
       st.textContent = isProductPost ? '📌 참고한 건강 기사' : '📌 출처';
@@ -789,7 +790,8 @@ async function openPreview(id) {
         ul.appendChild(line);
       });
       body.appendChild(ul);
-    }
+    };
+    if (isProductPost) appendNewsRefs();
     if (article.tags?.length) {
       const tags = document.createElement('div');
       tags.className = 'tags';
@@ -819,6 +821,7 @@ async function openPreview(id) {
         body.appendChild(line);
       });
     }
+    if (!isProductPost) appendNewsRefs();
     $('modal').hidden = false;
   } catch (e) {
     alert(e.message);
