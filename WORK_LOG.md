@@ -1,5 +1,32 @@
 # WORK LOG
 
+## 2026-08-06 (검색 질문형 건강 글쓰기 기준 반영)
+
+### 완료한 작업
+
+- 건강 글의 기본 제목을 홈판형이 아닌 `핵심 키워드 + 질문 + 답변 범위` 구조로 바꿨습니다.
+- 도입부 첫 2~4문장 안에 직접 답을 제시하고, 질문형 소제목에서 답 → 근거 → 예외 → 실천 순서로 쓰도록 반영했습니다.
+- 작성 결과도 질문형 제목과 질문형 소제목 3개 이상을 검사하도록 보완했습니다.
+- `03-health-affiliate-blog` 스킬, 제목·CTA 가이드, 원고 템플릿을 같은 기준으로 업데이트했습니다.
+
+### 수정한 파일
+
+- `src/writer.js`
+- `skills/03-health-affiliate-blog/SKILL.md`
+- `skills/03-health-affiliate-blog/references/headline-guide.md`
+- `skills/03-health-affiliate-blog/references/cta-guide.md`
+- `skills/03-health-affiliate-blog/templates/blog-output-template.md`
+- `WORK_LOG.md`
+
+### 다음 작업
+
+- 새 글 작성 시 검색 질문형 구조가 자동 적용되는지 실제 임시저장 원고로 확인합니다.
+
+### 주의사항
+
+- 이 구조는 네이버 AI 브리핑 인용 가능성을 높이기 위한 기준이며, 노출 자체를 보장하지는 않습니다.
+- 기존 01/02 스킬과 원본 `main`은 변경하지 않았습니다.
+
 ## 2026-08-06 (제휴 후보 추천 자동 보완)
 
 ### 완료한 작업

@@ -28,6 +28,14 @@ ${skill}
 - 출처 링크는 시스템이 글 끝에 자동으로 정리합니다. 본문에 출처 목록을 넣지 마세요.
 - image desc/caption은 기사 속 건강 주제, 식재료, 생활 실천 장면과 직접 관련되게 쓰세요.
 
+【검색 질문 중심 구조 — 최우선】
+1. 글을 쓰기 전에 글감에서 검색자가 가장 궁금해할 핵심 질문을 딱 1개 정하세요. 서로 다른 건강 질문을 한 글에 나열하지 마세요.
+2. 제목은 기본적으로 '핵심 키워드 + 자연스러운 질문 + 답변 범위' 구조로 쓰세요. 예: '질염이 의심될 때 질 세정제를 써도 될까요? 피해야 할 관리법'. 감성적·자극적인 홈판형 제목은 대표 이미지 문구나 도입 후킹으로만 쓰고, 기본 제목으로 쓰지 마세요.
+3. 첫 일반 문단의 첫 2~4문장 안에 핵심 질문의 직접적인 답을 먼저 쓰세요. 그 다음에 공감할 상황과 이 글에서 확인할 기준을 연결하세요. 결론을 본문 끝까지 숨기지 마세요.
+4. 소제목 5~7개 중 적어도 3개는 검색자가 실제로 할 법한 질문형으로 쓰세요. 각 질문형 소제목 바로 아래 첫 문장은 '반드시 그렇지는 않습니다', '먼저 확인해야 합니다'처럼 직접 답하고, 뒤이어 이유·근거·예외·실천 방법을 설명하세요.
+5. 건강 수치·효능·권장량·질병 정보는 참고자료 중 공공기관·전문학회·의료기관·원 연구자료로 확인된 내용만 단정적으로 쓰세요. 신문이나 블로그 자료는 생활 사례를 보완하는 용도로만 쓰고, 출처에 없는 내용은 추측하지 마세요. 자료의 발표 기관·날짜와 수치의 기준 단위(1회 제공량, 100g 등)를 함께 밝히세요.
+6. 대상과 예외를 구분하고, 질병 예방·치료 효과를 단정하지 마세요. 글 후반에는 핵심 답을 2~3문장으로 다시 정리하고 오늘 바로 할 수 있는 행동을 제시하세요.
+
 【글 작성 방식 — 생활 건강 정보】
 1. 첫 3문단 안에 독자가 겪는 구체적인 건강 생활 문제 하나를 보여주세요.
 2. 참고자료의 핵심은 2~4문단으로 새롭게 풀고 발표 기관과 날짜를 본문에 명시하세요.
@@ -52,23 +60,23 @@ ${refText}
 ${retryNote || ''}
 다음 JSON 형식으로만 출력:
 {
-  "title": "독자의 생활 문제와 실천 방향이 함께 보이는 건강정보형 제목",
+  "title": "핵심 키워드가 들어간 질문형 제목? 확인할 기준을 보여 주는 설명형 부제",
   "tags": ["건강태그1", "건강태그2", "생활태그1", "생활태그2", "식재료태그1", "식재료태그2"],
   "blocks": [
     {"type": "image", "slot": 1, "caption": "건강 주제 대표 이미지", "desc": "기사의 핵심 건강 주제를 보여주는 대표 장면"},
-    {"type": "paragraph", "text": "독자가 일상에서 겪는 구체적인 문제를 자연스럽게 보여줍니다."},
-    {"type": "heading", "text": "문제가 반복되는 현실적인 이유"},
-    {"type": "paragraph", "text": "공식 자료와 기사 핵심을 쉬운 말로 설명하고 **과장 없는 핵심 정보**를 강조합니다."},
+    {"type": "paragraph", "text": "먼저 답하면, 핵심 질문에는 개인차가 있어도 무조건 같은 방법을 권하기는 어렵습니다. 독자가 일상에서 겪는 구체적인 문제를 짚고, 이 글에서 확인할 기준을 안내합니다."},
+    {"type": "heading", "text": "왜 이런 불편이 반복될까요?"},
+    {"type": "paragraph", "text": "먼저 확인해야 할 점은 생활 습관과 증상의 양상이 사람마다 다르다는 것입니다. 공식 자료와 기사 핵심을 쉬운 말로 설명하고 **과장 없는 핵심 정보**를 강조합니다."},
     {"type": "image", "slot": 2, "caption": "생활 속 문제 상황", "desc": "독자의 현실적인 건강 생활 문제"},
-    {"type": "heading", "text": "공식 자료에서 확인된 핵심"},
+    {"type": "heading", "text": "어떤 기준을 먼저 확인해야 할까요?"},
     {"type": "quote", "text": "오늘 바꿀 수 있는 한 가지"},
     {"type": "image", "slot": 3, "caption": "식재료 또는 건강식품", "desc": "글에서 설명한 식재료나 건강식품"},
-    {"type": "heading", "text": "비용 없이 먼저 해볼 일"},
+    {"type": "heading", "text": "돈을 쓰기 전에 무엇을 해볼 수 있을까요?"},
     {"type": "paragraph", "text": "비용 없이 먼저 실천할 방법을 구체적으로 안내합니다."},
-    {"type": "heading", "text": "식재료와 건강식품을 고르는 기준"},
+    {"type": "heading", "text": "제품이나 식재료는 어떻게 골라야 할까요?"},
     {"type": "paragraph", "text": "광고가 아니라 성분과 표시사항을 확인하는 기준을 안내합니다."},
     {"type": "image", "slot": 4, "caption": "건강한 활용 장면", "desc": "실생활에서 적용하는 구체적인 장면"},
-    {"type": "heading", "text": "특히 주의해서 볼 사람"},
+    {"type": "heading", "text": "누가 더 주의해서 확인해야 할까요?"},
     {"type": "paragraph", "text": "알레르기, 복용 약, 식사 제한 등 주의가 필요한 사람과 한계를 설명합니다."},
     {"type": "paragraph", "text": "오늘 바로 점검할 한 가지와 생활에 맞게 준비하거나 고를 기준을 연결합니다. 이 글에 제휴하면 좋은 제품 후보: **글 주제와 직접 연결되는 비처방 제품 1개**. 이는 사용자가 제휴 여부를 직접 판단할 참고 후보이며, 제품이 생활 실천에 쓰이는 이유와 필요한 안전 안내를 덧붙여 마무리합니다."}
   ]
@@ -262,6 +270,8 @@ const NEWS_PREDICTION_RE =
 const NEWS_CTA_ACTION_RE = /확인|점검|기록|준비|골라|고르|덜어|바꿔|바꾸|챙겨|시작|비교|살펴/;
 const NEWS_AFFILIATE_RE = /이\s*글에\s*제휴하면\s*좋은\s*제품(?:\s*후보)?\s*[:：]/;
 const NEWS_MEDICINE_RE = /처방약|전문의약품|일반의약품|혈압약|진통제|항생제|수면제|약을\s*(?:사|구매|복용)/;
+const NEWS_QUESTION_TITLE_RE = /\?|까요|어떻게|무엇|언제|어떤|괜찮|가능|해야\s*할까|할\s*수\s*있/;
+const NEWS_QUESTION_HEADING_RE = /\?|까요|어떻게|무엇|언제|어떤|왜|누가|어디|얼마나|해야\s*할까|할\s*수\s*있/;
 
 // 추천은 사용자 판단을 위한 후보만 제시한다. 실제 제휴 링크나 구매 처리는 하지 않는다.
 function getSafeProductCandidate(topic = {}) {
@@ -323,10 +333,15 @@ function inspectNewsArticle(article) {
     blocks[index - 1].type === 'heading'
   )) issues.push('소제목이 본문 없이 연속으로 배치됨');
   if (NEWS_TITLE_FORBIDDEN_RE.test(article.title || '')) issues.push('제목 금지 표현 포함');
+  if (!NEWS_QUESTION_TITLE_RE.test(article.title || '')) issues.push('검색 질문형 제목 없음');
   if (NEWS_TITLE_FORBIDDEN_RE.test(text)) issues.push('본문 금지 표현 포함');
   if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
   if (!(article.blocks || []).some((block) => block.type === 'paragraph')) issues.push('본문 문단 없음');
   const paragraphs = (article.blocks || []).filter((block) => block.type === 'paragraph');
+  const questionHeadings = (article.blocks || []).filter(
+    (block) => block.type === 'heading' && NEWS_QUESTION_HEADING_RE.test(block.text || '')
+  ).length;
+  if (questionHeadings < 3) issues.push(`질문형 소제목 ${questionHeadings}개(최소 3개 필요)`);
   const lastParagraph = paragraphs.at(-1)?.text || '';
   if (!NEWS_CTA_ACTION_RE.test(lastParagraph)) issues.push('마지막 생활형 CTA에 구체적인 행동 제안 없음');
   if (!NEWS_AFFILIATE_RE.test(lastParagraph)) issues.push('마지막 제휴 추천 제품 문구 없음');
@@ -369,7 +384,7 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-생활 건강 문제 하나에 집중하고 기사 문장을 복사하지 마세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개, quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4~6개, 해시태그 6개를 지키세요. 소제목끼리는 본문 없이 연속 배치하지 마세요. 소제목 바로 아래 핵심 quote를 두는 것은 허용합니다. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요. 마지막 일반 문단은 반복 습관을 짚은 뒤 오늘 점검·준비·선택할 한 가지를 제안하고, "이 글에 제휴하면 좋은 제품:" 뒤에 글과 직접 관련된 비처방 제품 1개를 추천하세요. 의약품·약 복용·치료 효과를 추천하거나 유도하지 마세요.\n`;
+생활 건강 문제 하나와 검색 질문 하나에 집중하고 기사 문장을 복사하지 마세요. 제목은 '핵심 키워드 + 질문 + 답변 범위'의 검색 질문형으로 쓰고, 첫 문단 첫 2~4문장 안에 질문의 직접 답을 제시하세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개 중 질문형을 최소 3개 쓰고, 각 질문형 소제목 아래 첫 문장은 직접 답으로 시작하세요. quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4~6개, 해시태그 6개를 지키세요. 소제목끼리는 본문 없이 연속 배치하지 마세요. 소제목 바로 아래 핵심 quote를 두는 것은 허용합니다. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요. 마지막 일반 문단은 반복 습관을 짚은 뒤 오늘 점검·준비·선택할 한 가지를 제안하고, "이 글에 제휴하면 좋은 제품 후보:" 뒤에 글과 직접 관련된 비처방 제품 1개를 추천하세요. 의약품·약 복용·치료 효과를 추천하거나 유도하지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
