@@ -750,10 +750,8 @@ async function openPreview(id) {
           } else if (isProductPost) {
             cap.textContent = cleanProductText(j.caption);
           } else {
-            const sourceLabel = j.sourceName || '관련 기사';
-            cap.textContent = j.caption
-              ? `${j.caption}(출처:${sourceLabel})`
-              : `(출처:${sourceLabel})`;
+            // 건강 글 미리보기에도 조사 출처를 노출하지 않는다.
+            cap.textContent = j.caption || '';
           }
           body.appendChild(cap);
         } else if (!isProductPost) {
@@ -768,7 +766,7 @@ async function openPreview(id) {
         }
       }
     }
-    // 상품 글은 기사 출처를 본문 다음에 표시한다. 건강 글 출처는 실제 저장 순서처럼 맨 아래에 둔다.
+    // 상품 글에만 기사 출처를 표시한다. 건강 글의 조사 출처는 내부 기록으로만 보관한다.
     const newsRefs = (meta.refs || []).filter((r) => r && r.url && r.kind === 'news');
     const appendNewsRefs = () => {
       if (!newsRefs.length) return;
@@ -792,19 +790,19 @@ async function openPreview(id) {
       body.appendChild(ul);
     };
     if (isProductPost) appendNewsRefs();
+    if (deferredPreviewCta?.text) {
+      const cta = document.createElement('p');
+      cta.style.cssText = 'text-align:left;margin-top:48px';
+      cta.innerHTML = escapeHtml(cleanProductText(deferredPreviewCta.text))
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/\n/g, '<br>');
+      body.appendChild(cta);
+    }
     if (article.tags?.length) {
       const tags = document.createElement('div');
       tags.className = 'tags';
       tags.textContent = article.tags.map((t) => '#' + t).join(' ');
       body.appendChild(tags);
-    }
-    if (deferredPreviewCta?.text) {
-      const cta = document.createElement('p');
-      cta.style.textAlign = 'left';
-      cta.innerHTML = escapeHtml(cleanProductText(deferredPreviewCta.text))
-        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-        .replace(/\n/g, '<br>');
-      body.appendChild(cta);
     }
     // 주력 상품 링크는 미리보기에서도 항상 마지막에 둔다.
     const prods = (meta.products || []).filter((p) => p && p.link);

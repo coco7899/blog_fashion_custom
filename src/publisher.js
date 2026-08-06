@@ -391,7 +391,7 @@ async function publish(article, judgments, opts) {
   const { mode = 'draft', visibility = 'public', imagesDir, errorShotPath, onStep = () => {}, sources = [], products = [] } = opts;
   const hasProducts = (products || []).some((product) => product && product.link);
   const publishArticle = hasProducts ? cleanProductPostArticle(article, products) : article;
-  // 마지막 행동 제안과 제휴 추천은 출처·해시태그 다음, 글의 실제 마지막에 둔다.
+  // 마지막 행동 제안과 제휴 후보는 본문과 분리하고, 해시태그는 글 전체의 맨 아래에 둔다.
   const publishBlocks = publishArticle.blocks || [];
   const deferredCtaIndex = publishBlocks.reduce(
     (lastIndex, block, index) =>
@@ -472,10 +472,8 @@ async function publish(article, judgments, opts) {
             // 쇼핑커넥트 포스팅은 자연스러운 사진 설명만 쓰고 출처 문구는 붙이지 않는다.
             captionLine = cleanCap;
           } else {
-            const sourceLabel = j.sourceName || '관련 기사';
-            captionLine = cleanCap
-              ? `${cleanCap}(출처:${sourceLabel})`
-              : `(출처:${sourceLabel})`;
+            // 건강 글은 조사 출처를 본문·이미지 캡션에 노출하지 않는다.
+            captionLine = cleanCap;
           }
           try {
             await insertImage(frame, page, path.join(imagesDir, 'raw', j.file), captionLine, {
@@ -496,7 +494,7 @@ async function publish(article, judgments, opts) {
       await sleep(250);
     }
 
-    // 건강 제휴 글은 기사 출처를 해시태그·CTA·상품 링크보다 먼저 정리한다.
+    // 상품 제휴 글에만 건강 기사 링크를 표시한다. 건강 정보 글의 출처는 내부 기록으로만 보관한다.
     const linkSources = (sources || []).filter((source) => source && source.url).slice(0, 8);
     if (hasProducts && linkSources.length) {
       onStep('건강 기사 출처 정리 중');
@@ -513,7 +511,16 @@ async function publish(article, judgments, opts) {
       }
     }
 
-    // ── 해시태그 (본문 다음) ─────────────────────────
+    // 건강 글의 제휴 후보는 마지막 본문과 빈 줄 두 줄로 분리한다.
+    if (deferredCtaBlock?.text) {
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Enter');
+      await typeParagraph(page, deferredCtaBlock.text);
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Enter');
+    }
+
+    // ── 해시태그 (글 전체 맨 아래) ────────────────────
     const tagLine = (publishArticle.tags || [])
       .map((t) => '#' + String(t).replace(/^#+/, '').replace(/\s+/g, ''))
       .filter((t) => t.length > 1)
@@ -523,31 +530,6 @@ async function publish(article, judgments, opts) {
       await typeRich(page, tagLine);
       await page.keyboard.press('Enter');
       await page.keyboard.press('Enter');
-    }
-
-    // 건강 글의 마지막 행동 제안은 해시태그 다음에 둔다.
-    if (deferredCtaBlock?.text) {
-      await typeParagraph(page, deferredCtaBlock.text);
-      await page.keyboard.press('Enter');
-      await page.keyboard.press('Enter');
-    }
-
-    // ── 출처 링크 (건강 글의 실제 맨 아래) ────────────
-    // 뉴스 기사 URL을 그대로 입력하면 스마트에디터가 클릭 가능한 링크로 자동 변환한다.
-    if (!hasProducts && linkSources.length) {
-      onStep('출처 링크 정리 중');
-      await insertDivider(frame, page);
-      await insertHeading(frame, page, '📌 출처');
-      for (const s of linkSources) {
-        if (s.title) {
-          await typeRich(page, `· ${String(s.title).replace(/\s+/g, ' ').trim()}`);
-          await page.keyboard.press('Shift+Enter');
-        }
-        await page.keyboard.insertText(s.url);
-        await page.keyboard.press('Enter'); // URL 뒤 Enter → 자동 링크화
-        await page.keyboard.press('Enter'); // 항목 간 한 줄 띄우기
-        await sleep(300);
-      }
     }
 
     // ── 주력 상품 제휴 링크 (항상 글의 맨 끝) ──────────────

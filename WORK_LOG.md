@@ -1,5 +1,33 @@
 # WORK LOG
 
+## 2026-08-06 (건강 글 마지막 배치 순서 변경)
+
+### 완료한 작업
+
+- 건강 글의 출처 제목·URL·출처 목록을 본문과 이미지 캡션, 미리보기에서 제거했습니다.
+- 마지막 CTA와 제휴 제품 후보는 본문과 빈 줄 두 줄로 분리되게 했습니다.
+- 해시태그 6개를 CTA 다음, 글 전체의 맨 아래에 배치하도록 네이버 임시저장과 미리보기 순서를 맞췄습니다.
+- 같은 기준을 `03-health-affiliate-blog` 스킬과 CTA 가이드·원고 템플릿에 반영했습니다.
+
+### 수정한 파일
+
+- `src/writer.js`
+- `src/publisher.js`
+- `public/app.js`
+- `skills/03-health-affiliate-blog/SKILL.md`
+- `skills/03-health-affiliate-blog/references/cta-guide.md`
+- `skills/03-health-affiliate-blog/templates/blog-output-template.md`
+- `WORK_LOG.md`
+
+### 다음 작업
+
+- 새 임시글에서 본문·CTA·해시태그의 실제 표시 순서를 확인합니다.
+
+### 주의사항
+
+- 출처는 글 본문에 표시되지 않지만, 안전한 원고 작성을 위한 내부 조사 기록에는 계속 남습니다.
+- 기존 01/02 스킬과 원본 `main`은 변경하지 않았습니다.
+
 ## 2026-08-06 (검색 질문형 건강 글쓰기 기준 반영)
 
 ### 완료한 작업
