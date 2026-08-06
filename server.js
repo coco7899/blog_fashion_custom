@@ -619,8 +619,15 @@ function cleanupOrphanDrafts() {
   const removedSportsTopics = store.filterSearchTopics((topic) => !topics.isSportsTopic(topic));
   if (removedSportsTopics) console.log(`[setup] 저장된 스포츠 글감 ${removedSportsTopics}건 제외`);
   cleanupOrphanDrafts();
-  const chrome = await setup.ensureChromium();
-  if (!chrome.ok) console.error('[setup]', chrome.error);
+  // 브라우저 설치가 오래 걸리더라도 대시보드는 먼저 열어 둔다.
+  // 설치가 끝나기 전에는 네이버 임시저장만 사용할 수 없고 글감·원고 작업은 계속 가능하다.
+  const chromiumReady = setup.chromiumInstalled();
+  if (!chromiumReady) {
+    console.warn('[setup] Playwright Chromium 준비 중 — 완료 전에는 네이버 임시저장을 실행할 수 없습니다.');
+    setup.ensureChromium().then((chrome) => {
+      if (!chrome.ok) console.error('[setup]', chrome.error);
+    });
+  }
   const cli = setup.checkAll(true).codex;
   console.log(cli.ok ? `[setup] Codex CLI 확인: ${cli.version}` : `[setup] Codex CLI를 찾지 못했습니다: ${cli.error}`);
   if (cli.ok) {

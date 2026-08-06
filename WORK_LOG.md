@@ -8,10 +8,12 @@
 - 도입부 첫 2~4문장 안에 직접 답을 제시하고, 질문형 소제목에서 답 → 근거 → 예외 → 실천 순서로 쓰도록 반영했습니다.
 - 작성 결과도 질문형 제목과 질문형 소제목 3개 이상을 검사하도록 보완했습니다.
 - `03-health-affiliate-blog` 스킬, 제목·CTA 가이드, 원고 템플릿을 같은 기준으로 업데이트했습니다.
+- 브라우저 구성요소 준비가 지연돼도 대시보드가 먼저 열리도록 서버 시작 순서를 안정화했습니다.
 
 ### 수정한 파일
 
 - `src/writer.js`
+- `server.js`
 - `skills/03-health-affiliate-blog/SKILL.md`
 - `skills/03-health-affiliate-blog/references/headline-guide.md`
 - `skills/03-health-affiliate-blog/references/cta-guide.md`
