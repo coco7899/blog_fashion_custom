@@ -8,6 +8,66 @@ const RECENT_PRIORITY_DAYS = 2;
 const MAX_SOURCE_AGE_DAYS = 7;
 const SPORTS_RE = /스포츠|야구|축구|농구|배구|골프|테니스|KBO|MLB|K리그|프리미어리그|올림픽|월드컵|선수|감독|트레이드|이적시장|경기\s*(결과|일정|분석)/i;
 
+function normalizeHeadline(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/&(?:quot|apos|amp);/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function isCopiedSourceTitle(title, sources) {
+  const normalized = normalizeHeadline(title);
+  if (!normalized) return false;
+  return (sources || []).some((source) => normalizeHeadline(source && source.title) === normalized);
+}
+
+async function rewriteCopiedTopicTitles(topics, sources, signal) {
+  const copiedIndexes = topics
+    .map((topic, index) => (isCopiedSourceTitle(topic && topic.title, sources) ? index : -1))
+    .filter((index) => index >= 0);
+  if (!copiedIndexes.length) return topics;
+
+  console.log(`[topics] 기사 제목과 같은 글감 ${copiedIndexes.length}건 재작성`);
+  const copiedTopics = copiedIndexes.map((index) => ({
+    index,
+    title: String(topics[index].title || ''),
+    fact: String(topics[index].fact || ''),
+    angle: String(topics[index].angle || ''),
+  }));
+  const sourceTitles = (sources || []).map((source) => String(source && source.title || '')).filter(Boolean);
+  const rewritten = await codex.invokeJson(`아래 글감 제목은 뉴스 또는 블로그 원문 제목과 같습니다.
+확인된 사실과 글의 관점은 유지하면서 네이버 홈판용 제목으로 다시 작성하세요.
+
+규칙:
+- 원문 제목을 그대로 복사하지 마세요.
+- 공백, 따옴표, 쉼표, 특수기호만 바꾼 제목도 같은 제목으로 봅니다.
+- 사실에 없는 장면·감정·분위기를 새로 만들지 마세요.
+- 더 문학적이거나 모호하게 쓰지 말고, 무슨 소식인지 직접 이해되게 쓰세요.
+- 각 항목의 index는 그대로 유지하세요.
+
+다시 쓸 글감:
+${JSON.stringify(copiedTopics, null, 2)}
+
+피해야 할 원문 제목:
+${sourceTitles.map((title) => `- ${title}`).join('\n')}
+
+JSON 배열 형식으로만 출력:
+[{"index":0,"title":"원문과 다른 홈판형 제목"}]`, { timeoutMs: 120000, signal });
+
+  if (!Array.isArray(rewritten)) throw new Error('기사 제목과 겹친 글감 제목을 다시 만들지 못했습니다.');
+  const next = topics.map((topic) => ({ ...topic }));
+  for (const item of rewritten) {
+    const index = Number(item && item.index);
+    const title = String(item && item.title || '').trim();
+    if (!copiedIndexes.includes(index) || !title || isCopiedSourceTitle(title, sources)) continue;
+    next[index].title = title;
+  }
+  const remaining = next.filter((topic) => isCopiedSourceTitle(topic && topic.title, sources));
+  if (remaining.length) throw new Error('기사 제목과 다른 글감 제목을 만들지 못했습니다. 다시 찾아주세요.');
+  return next;
+}
+
 function isSportsTopic(topic) {
   const text = [
     topic && topic.field,
@@ -113,6 +173,7 @@ ${avoid}
   · 제목만으로 무슨 소식인지 이해되고, 무엇이 새롭거나 달라졌는지 보여야 합니다.
   · 인물 이름을 반드시 맨 앞에 둘 필요는 없습니다.
   · 기사 제목이나 검색어를 나열하지 말고, 독자가 읽을 이유를 한 가지 보여주세요.
+  · 위 뉴스·블로그 목록의 제목과 완전히 같은 문장을 쓰지 마세요. 공백·따옴표·쉼표·특수기호만 바꾸는 것도 복사로 봅니다.
   · 확인되지 않은 내용·과장·거짓 낚시는 금지하고, 기사에서 확인되는 사실만 담으세요.
   · "충격", "정체", "결국", "소름", "전부 공개"는 쓰지 마세요.
 - 같은 인물·같은 소재가 후보에서 과도하게 반복되지 않게 구성하세요.
@@ -131,10 +192,11 @@ ${avoid}
   }
 ]`;
 
-  const arr = await codex.invokeJson(prompt, { timeoutMs: 180000, signal });
+  let arr = await codex.invokeJson(prompt, { timeoutMs: 180000, signal });
   if (!Array.isArray(arr) || arr.length === 0) {
     throw new Error('글감 생성 결과가 비어 있습니다.');
   }
+  arr = await rewriteCopiedTopicTitles(arr, kept.map(({ source }) => source), signal);
   const out = arr
     .filter((t) => t && t.title)
     .slice(0, 5)
@@ -208,4 +270,4 @@ ${avoid}
   return result;
 }
 
-module.exports = { suggestTopics, isSportsTopic };
+module.exports = { suggestTopics, isSportsTopic, isCopiedSourceTitle };

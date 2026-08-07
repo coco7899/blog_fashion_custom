@@ -136,6 +136,7 @@ app.post('/api/run', async (req, res) => {
   if (!search) return res.status(400).json({ error: '검색 세션을 찾을 수 없습니다. 글감을 다시 찾아주세요.' });
   const topic = search.topics && search.topics[topicIndex];
   if (!topic) return res.status(400).json({ error: '글감을 찾을 수 없습니다.' });
+  const selectedTopic = { ...topic, lockTitle: true };
 
   const login = await auth.verify();
   if (!login.loggedIn) {
@@ -144,14 +145,14 @@ app.post('/api/run', async (req, res) => {
 
   const meta = store.createDraft({
     keyword: search.keyword,
-    topic,
+    topic: selectedTopic,
     searchId,
     topicIndex,
     visibility: visibility === 'private' ? 'private' : 'public',
     mode,
   });
   // 백그라운드 실행
-  pipeline.run(meta.id, search, topic, meta.visibility, {
+  pipeline.run(meta.id, search, selectedTopic, meta.visibility, {
     mode,
   });
   res.json({ draftId: meta.id });

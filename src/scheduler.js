@@ -148,7 +148,7 @@ async function autoPublishOnce() {
   if (!sources.length) throw new Error(`"${keyword}" 검색 결과가 없습니다.`);
 
   const list = await topics.suggestTopics(keyword, sources, { avoidTitles: recentTitles() });
-  const topic = list[0]; // AI가 1순위로 추천한 글감
+  const topic = { ...list[0], lockTitle: true }; // AI가 1순위로 추천한 글감 제목을 최종 제목으로 유지
   console.log(`[scheduler] 선정된 글감: ${topic.title}`);
 
   const meta = store.createDraft({ keyword, topic, visibility: settings.visibility, mode: settings.mode, auto: true });

@@ -56,7 +56,14 @@ ${skill}
 9. 이미지는 **최소 1장, 기본 2장 이상, 최대 4장** 사용합니다. 첫 번째 image 블록은 어떤 글보다도 앞에 두어 본문 상단 대표 이미지로 사용하세요. 두 번째부터는 해당 사진과 직접 관련된 내용이 시작되거나 마무리되는 단락 사이에 배치하세요. 서로 다른 장면이나 인물을 보여 주는 관련 기사 사진이 더 있으면 3~4장까지 늘릴 수 있습니다. 같은 사진의 단순 크기·자르기 변형이나 내용과 무관한 사진으로 수를 채우지 말고, 실제로 관련된 적절한 후보가 1장뿐일 때만 최종 게시 사진을 1장으로 줄이세요.
 10. 본문은 공백 포함 **최소 800자 이상** 쓰세요. 확인된 내용이 충분하면 더 길게 쓰되 분량을 채우려고 사실·표현을 반복하지 마세요.
 11. 제목은 무슨 소식인지, 무엇이 새롭거나 달라졌는지 바로 보이게 쓰세요. 인물 이름을 무조건 맨 앞에 두지 말고 기사 제목이나 검색어를 나열하지 마세요.
+   - 사용자가 글감 목록에서 고른 제목은 이미 홈판용으로 구성된 최종 제목입니다. 더 감성적이거나 문학적인 문장으로 다시 만들지 말고 그대로 사용하세요.
+   - 핵심 사실이 분명하고 자연스럽다면 뉴스형 문장 구조라는 이유만으로 억지로 바꾸지 마세요.
+   - "촛불 앞", "전한 근황", "시선이 머문", "여운을 남긴"처럼 참고자료에 없는 장면·감정을 덧붙이지 마세요.
 12. 제목과 본문 어디에도 **"충격", "정체", "결국", "소름", "전부 공개"**를 쓰지 마세요. 과장·낚시·추측·루머도 금지합니다.
+
+${topic.lockTitle && topic.title ? `【사용자가 고른 제목 — 글자 그대로 유지】
+${topic.title}
+위 제목을 최종 JSON의 title에 글자 하나까지 그대로 사용하세요.` : ''}
 
 ${frames.renderFrameInstruction(frame, 'celeb')}
 ※ 위 구성 프레임은 이번 글에만 적용됩니다. 상투적 도입("오늘은 ~에 대해 알아볼게요") 대신 뉴스 소개 흐름에 맞게 새로 지으세요.
@@ -291,6 +298,13 @@ function inspectNewsArticle(article) {
   return issues;
 }
 
+function preserveSelectedNewsTitle(article, topic) {
+  if (topic && topic.lockTitle && String(topic.title || '').trim()) {
+    article.title = String(topic.title).trim();
+  }
+  return article;
+}
+
 /**
  * @param {object} topic {title, angle, keywords}
  * @param {Array} refs collectReferences 결과 [{title, url, source, text}]
@@ -311,7 +325,10 @@ async function writeArticle(topic, refs) {
   if (!article || !article.title || !Array.isArray(article.blocks)) {
     throw new Error('글 작성 결과 형식이 올바르지 않습니다.');
   }
-  article = formatNewsParagraphs(simplifyNewsStructure(normalize(article)));
+  article = preserveSelectedNewsTitle(
+    formatNewsParagraphs(simplifyNewsStructure(normalize(article))),
+    topic
+  );
 
   const m = measure(article);
   const frameIssue = frame.check ? frame.check(article) : null;
@@ -326,7 +343,10 @@ async function writeArticle(topic, refs) {
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
-        retry = formatNewsParagraphs(simplifyNewsStructure(normalize(retry)));
+        retry = preserveSelectedNewsTitle(
+          formatNewsParagraphs(simplifyNewsStructure(normalize(retry))),
+          topic
+        );
         const rm = measure(retry);
         const retryIssues = inspectNewsArticle(retry);
         const retryFrameIssue = frame.check ? frame.check(retry) : null;
