@@ -78,16 +78,10 @@ async function refreshStatus() {
   try {
     const s = await api('/api/status');
     const badge = $('loginBadge');
-    if (!s.codex.ok) {
-      $('envBadge').hidden = true;
-      $('envBadge').textContent = '';
-    } else if (s.codexAuth && !s.codexAuth.ok) {
-      $('envBadge').hidden = false;
-      $('envBadge').className = 'badge badge-warn';
-      $('envBadge').textContent = '⚠ AI 사용 불가: ' + s.codexAuth.error;
-    } else {
-      $('envBadge').hidden = true;
-    }
+    // Codex 연결 오류의 긴 기술 메시지는 상단에 표시하지 않는다.
+    // 실제 오류 상태는 서버 로그와 글쓰기 작업 결과에서 계속 확인할 수 있다.
+    $('envBadge').hidden = true;
+    $('envBadge').textContent = '';
     if (s.session) {
       checkLoginValidity(); // 실제 유효성(만료 여부) 확인
       if (loginValidity.expired) {
