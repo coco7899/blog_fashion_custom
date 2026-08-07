@@ -19,6 +19,29 @@ async function withBrowser(fn) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 컴퓨터를 막 켠 직후처럼 네트워크·브라우저 준비가 늦을 수 있으므로,
+// 네이버 검색 연결 오류는 잠시 기다린 뒤 다시 시도한다.
+async function retryNaverSearch(keyword, runSearch) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await runSearch();
+    } catch (error) {
+      lastError = error;
+      const retryable = /ERR_NETWORK_ACCESS_DENIED|ERR_CONNECTION|ERR_INTERNET|ETIMEDOUT|ECONNRESET/i.test(error.message || '');
+      if (!retryable || attempt === 3) break;
+      const waitMs = attempt * 3000;
+      console.warn(`[collector] 네이버 검색 연결 재시도 ${attempt}/3 (${keyword}) - ${Math.round(waitMs / 1000)}초 후 다시 시도`);
+      await sleep(waitMs);
+    }
+  }
+
+  if (/ERR_NETWORK_ACCESS_DENIED/i.test(lastError?.message || '')) {
+    throw new Error('네이버 검색 연결이 차단되었습니다. 컴퓨터를 다시 켠 뒤에는 start-health-blog.cmd로 서버를 실행한 후 다시 시도해주세요.');
+  }
+  throw lastError;
+}
+
 // 네이버 블로그 이미지 호스트 — 타인 블로그 이미지는 절대 사용하지 않는다
 const BLOG_IMG_HOSTS = /(postfiles\.pstatic\.net|blogfiles\.naver\.net|mblogthumb-phinf\.pstatic\.net|blogpfthumb|blogthumb)/i;
 function isBlogImage(url) {
@@ -27,7 +50,7 @@ function isBlogImage(url) {
 
 /** 네이버 통합검색 뉴스 탭 + 블로그 탭에서 상위 결과 수집. recentNews=true면 최신순 */
 async function searchNaver(keyword, { recentNews = false } = {}) {
-  return withBrowser(async (context) => {
+  return retryNaverSearch(keyword, () => withBrowser(async (context) => {
     const page = await context.newPage();
     const enc = encodeURIComponent(keyword);
     const sort = recentNews ? '&sort=1' : '';
@@ -131,7 +154,7 @@ async function searchNaver(keyword, { recentNews = false } = {}) {
 
     await page.close().catch(() => {});
     return { news, blogs };
-  });
+  }));
 }
 
 /** 개별 기사/블로그 글에서 본문 텍스트와 이미지 URL 추출 */
