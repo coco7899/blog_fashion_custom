@@ -597,7 +597,8 @@ async function loadDrafts() {
     const done = ['published', 'saved'].includes(d.status);
     const running = !done && d.status !== 'error';
     const tag = done ? 'tag-published' : d.status === 'error' ? 'tag-error' : 'tag-running';
-    const tagText = d.status === 'saved' ? '임시저장됨' : d.status === 'published' ? '발행됨' : d.status === 'error' ? '실패' : '진행 중';
+    const awaitingImageWork = d.status === 'saved' && d.imagesPending;
+    const tagText = awaitingImageWork ? '1차 임시저장됨 · 이미지 작업 대기' : d.status === 'saved' ? '임시저장됨' : d.status === 'published' ? '발행됨' : d.status === 'error' ? '실패' : '진행 중';
     const linkLabel = d.status === 'saved' ? '글쓰기 열기 →' : '글 보기 →';
     const needsFullRetry = d.status === 'error' && (!d.articleAvailable || !d.imageCount);
     div.innerHTML = `
