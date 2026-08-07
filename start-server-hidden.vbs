@@ -1,11 +1,12 @@
 Option Explicit
 
-Dim shell, projectPath, scriptPath, command
+Dim shell, fso, projectPath, scriptPath, command
 Set shell = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
 
-' Build the user path at runtime so Windows Script Host does not need to
-' decode Korean characters embedded in this source file.
-projectPath = shell.ExpandEnvironmentStrings("%USERPROFILE%") & "\Downloads\codex\blog_fashion_custom"
+' Always start the server from the folder that contains this file.
+' This keeps the startup shortcut correct even when the project is moved.
+projectPath = fso.GetParentFolderName(WScript.ScriptFullName)
 scriptPath = projectPath & "\hide-server-window.ps1"
 
 command = """C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe""" & _
@@ -16,3 +17,4 @@ command = """C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe""" & _
 shell.Run command, 0, True
 
 Set shell = Nothing
+Set fso = Nothing

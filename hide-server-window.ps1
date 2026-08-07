@@ -7,7 +7,7 @@ $nodePath = 'C:\Program Files\nodejs\node.exe'
 $runningServer = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
         $_.Name -eq 'node.exe' -and
-        $_.CommandLine -like '*server-custom.js*'
+        $_.CommandLine -like "*$projectRoot*server-custom.js*"
     } |
     Select-Object -First 1
 
