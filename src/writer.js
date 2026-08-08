@@ -33,6 +33,7 @@ ${skill}
 1. 글을 쓰기 전에 글감에서 검색자가 가장 궁금해할 핵심 질문을 딱 1개 정하세요. 서로 다른 건강 질문을 한 글에 나열하지 마세요.
 2. 제목은 기본적으로 '핵심 키워드 + 자연스러운 질문 + 답변 범위' 구조로 쓰세요. 예: '질염이 의심될 때 질 세정제를 써도 될까요? 피해야 할 관리법'. 감성적·자극적인 홈판형 제목은 대표 이미지 문구나 도입 후킹으로만 쓰고, 기본 제목으로 쓰지 마세요.
 3. 첫 일반 문단의 첫 2~4문장 안에 핵심 질문의 직접적인 답을 먼저 쓰세요. 그 다음에 공감할 상황과 이 글에서 확인할 기준을 연결하세요. 결론을 본문 끝까지 숨기지 마세요.
+3-1. 서론 바로 다음에는 굵은 제목 **이 글에서 확인할 핵심 N가지**와 번호 1~N의 짧은 요약을 넣으세요. 제목에서 약속한 숫자가 있으면 반드시 같은 숫자와 같은 판단 기준을 사용하세요. 이 요약은 목차처럼 독자가 전체 흐름을 한눈에 보고 AI 검색 요약도 핵심을 구분할 수 있게 3~5줄로 쓰세요.
 4. 소제목 5~7개 중 적어도 3개는 검색자가 실제로 할 법한 질문형으로 쓰세요. 각 질문형 소제목 바로 아래 첫 문장은 '반드시 그렇지는 않습니다', '먼저 확인해야 합니다'처럼 직접 답하고, 뒤이어 이유·근거·예외·실천 방법을 설명하세요.
 5. 건강 수치·효능·권장량·질병 정보는 참고자료 중 공공기관·전문학회·의료기관·원 연구자료로 확인된 내용만 단정적으로 쓰세요. 신문이나 블로그 자료는 생활 사례를 보완하는 용도로만 쓰고, 출처에 없는 내용은 추측하지 마세요. 자료의 발표 기관·날짜와 수치의 기준 단위(1회 제공량, 100g 등)를 함께 밝히세요.
 6. 대상과 예외를 구분하고, 질병 예방·치료 효과를 단정하지 마세요. 글 후반에는 핵심 답을 2~3문장으로 다시 정리하고 오늘 바로 할 수 있는 행동을 제시하세요.
@@ -289,6 +290,22 @@ function getSafeProductCandidate(topic = {}) {
   return '밀폐 소분 보관용기 세트';
 }
 
+// 서론을 읽은 뒤 글 전체의 판단 흐름을 바로 파악하도록 짧은 핵심 요약을 보장한다.
+function ensureKeySummary(article) {
+  const blocks = article.blocks || [];
+  if (blocks.some((block) => block.type === 'paragraph' && /이 글에서 확인할 핵심\s*\d*가지/.test(block.text || ''))) {
+    return article;
+  }
+  const firstParagraph = blocks.findIndex((block) => block.type === 'paragraph');
+  if (firstParagraph < 0) return article;
+  blocks.splice(firstParagraph + 1, 0, {
+    type: 'paragraph',
+    text: '**이 글에서 확인할 핵심 3가지**\n1. 지금 나타나는 증상이나 생활 상태를 먼저 확인합니다.\n2. 음식·생활습관·가벼운 활동에서 바꿔볼 점을 찾습니다.\n3. 혼자 조정하지 말고 상담해야 할 신호를 구분합니다.',
+  });
+  article.blocks = blocks;
+  return article;
+}
+
 function makeRecommendationParagraph(topic) {
   const product = getSafeProductCandidate(topic);
   return `오늘은 이 글에서 확인한 생활 기준을 한 가지부터 적용해 보세요. 제품은 불편을 해결한다고 약속하는 수단이 아니라, 이미 정한 생활 습관을 더 편하게 이어 가는 보조 도구로 고르는 것이 좋습니다. 이 글에 제휴하면 좋은 제품 후보: **${product}**. 이는 사용자가 제휴 여부를 직접 판단할 참고 후보이며, 진단·치료나 의료진의 안내를 대신하지는 않습니다.`;
@@ -377,7 +394,7 @@ async function writeArticle(topic, refs) {
     throw new Error('글 작성 결과 형식이 올바르지 않습니다.');
   }
   article = ensureHealthRecommendation(
-    formatNewsParagraphs(simplifyNewsStructure(normalize(article))),
+    ensureKeySummary(formatNewsParagraphs(simplifyNewsStructure(normalize(article)))),
     topic
   );
 
