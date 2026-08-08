@@ -290,6 +290,17 @@ function getSafeProductCandidate(topic = {}) {
   return '밀폐 소분 보관용기 세트';
 }
 
+// 제목에 약속한 숫자를 서론 뒤 핵심 요약에도 같은 수로 유지한다.
+function getTitleSummaryCount(title = '') {
+  const value = String(title || '');
+  const digit = value.match(/(\d+)\s*가지/);
+  if (digit) return Math.min(Math.max(Number(digit[1]), 2), 6);
+
+  const korean = value.match(/(한|두|세|네|다섯|여섯)\s*가지/);
+  const counts = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6 };
+  return korean ? counts[korean[1]] : 3;
+}
+
 // 서론을 읽은 뒤 글 전체의 판단 흐름을 바로 파악하도록 짧은 핵심 요약을 보장한다.
 function ensureKeySummary(article) {
   const blocks = article.blocks || [];
@@ -298,9 +309,18 @@ function ensureKeySummary(article) {
   }
   const firstParagraph = blocks.findIndex((block) => block.type === 'paragraph');
   if (firstParagraph < 0) return article;
+  const count = getTitleSummaryCount(article.title);
+  const summaryItems = [
+    '지금 나타나는 증상이나 생활 상태를 먼저 확인합니다.',
+    '음식·식사 구성에서 바꿔볼 점을 찾습니다.',
+    '생활습관과 가벼운 활동에서 조정할 부분을 살펴봅니다.',
+    '혼자 조정하지 말고 상담해야 할 신호를 구분합니다.',
+    '오늘 바로 시작할 수 있는 한 가지 행동을 정합니다.',
+    '생활에 보탬이 되는 제품은 보조 도구로만 판단합니다.',
+  ].slice(0, count);
   blocks.splice(firstParagraph + 1, 0, {
     type: 'paragraph',
-    text: '**이 글에서 확인할 핵심 3가지**\n1. 지금 나타나는 증상이나 생활 상태를 먼저 확인합니다.\n2. 음식·생활습관·가벼운 활동에서 바꿔볼 점을 찾습니다.\n3. 혼자 조정하지 말고 상담해야 할 신호를 구분합니다.',
+    text: `**이 글에서 확인할 핵심 ${count}가지**\n${summaryItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}`,
   });
   article.blocks = blocks;
   return article;
@@ -308,7 +328,7 @@ function ensureKeySummary(article) {
 
 function makeRecommendationParagraph(topic) {
   const product = getSafeProductCandidate(topic);
-  return `오늘은 이 글에서 확인한 생활 기준을 한 가지부터 적용해 보세요. 제품은 불편을 해결한다고 약속하는 수단이 아니라, 이미 정한 생활 습관을 더 편하게 이어 가는 보조 도구로 고르는 것이 좋습니다. 이 글에 제휴하면 좋은 제품 후보: **${product}**. 이는 사용자가 제휴 여부를 직접 판단할 참고 후보이며, 진단·치료나 의료진의 안내를 대신하지는 않습니다.`;
+  return `오늘은 이 글에서 확인한 생활 기준을 한 가지부터 적용해 보세요. 제품은 불편을 해결한다고 약속하는 수단이 아니라, 이미 정한 생활 습관을 더 편하게 이어 가는 보조 도구로 고르는 것이 좋습니다.\n\n\n이 글에 제휴하면 좋은 제품 후보: **${product}**. 이는 사용자가 제휴 여부를 직접 판단할 참고 후보이며, 진단·치료나 의료진의 안내를 대신하지는 않습니다.`;
 }
 
 // AI가 후보 문구를 빠뜨려도 임시저장 전체가 실패하지 않도록 마지막 문단을 보완한다.
@@ -361,6 +381,16 @@ function inspectNewsArticle(article) {
   if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
   if (!(article.blocks || []).some((block) => block.type === 'paragraph')) issues.push('본문 문단 없음');
   const paragraphs = (article.blocks || []).filter((block) => block.type === 'paragraph');
+  const summaryBlock = paragraphs.find((block) => /이 글에서 확인할 핵심\s*\d*가지/.test(block.text || ''));
+  if (!summaryBlock) {
+    issues.push('서론 뒤 핵심 요약 없음');
+  } else {
+    const expectedCount = getTitleSummaryCount(article.title);
+    const actualCount = Number((String(summaryBlock.text || '').match(/핵심\s*(\d+)가지/) || [])[1]);
+    if (actualCount !== expectedCount) {
+      issues.push(`제목 숫자(${expectedCount})와 핵심 요약 숫자(${actualCount || '없음'}) 불일치`);
+    }
+  }
   const questionHeadings = (article.blocks || []).filter(
     (block) => block.type === 'heading' && NEWS_QUESTION_HEADING_RE.test(block.text || '')
   ).length;
@@ -412,7 +442,7 @@ async function writeArticle(topic, refs) {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
         retry = ensureHealthRecommendation(
-          formatNewsParagraphs(simplifyNewsStructure(normalize(retry))),
+          ensureKeySummary(formatNewsParagraphs(simplifyNewsStructure(normalize(retry)))),
           topic
         );
         const rm = measure(retry);
@@ -1073,6 +1103,8 @@ module.exports = {
   suggestProductHooks,
   measure,
   inspectNewsArticle,
+  ensureKeySummary,
+  getTitleSummaryCount,
   ensureHealthRecommendation,
   getSafeProductCandidate,
   wrapNewsLine,
