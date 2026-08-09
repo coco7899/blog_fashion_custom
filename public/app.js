@@ -56,6 +56,7 @@ let currentSearch = null;
 let watchingDraft = null;
 let loginPolling = false;
 let runningTopicIndex = null;        // 현재 실행 중인 글감 인덱스 (오렌지)
+let runningTopicSearchId = null;     // 실행을 시작한 검색 목록 ID (새 목록의 같은 번호와 혼동 방지)
 const completedTopics = new Set();   // 이미 실행 완료한 글감 인덱스 (연회색)
 let runQueue = [];                   // 대기 중인 글감 인덱스 (순서대로 자동 처리)
 let productHookPlan = null;          // 상품 링크 분석 후 사용자가 고를 고민 제목 3개
@@ -394,7 +395,10 @@ $('clearTopicsBtn').onclick = async () => {
   if (!(await uiConfirm('찾아둔 글감 목록을 모두 삭제할까요?'))) return;
   currentSearch = null;
   runQueue = [];
-  runningTopicIndex = null;
+  if (!watchingDraft) {
+    runningTopicIndex = null;
+    runningTopicSearchId = null;
+  }
   completedTopics.clear();
   $('topicsList').innerHTML = '';
   $('topicsCard').hidden = true;
@@ -418,8 +422,8 @@ $('clearDraftsBtn').onclick = async () => {
 // ── 글감 목록 렌더 ────────────────────────────
 function renderTopics(data, visOverride, { scroll = true } = {}) {
   $('topicsCard').hidden = false;
-  // 새 글감 목록 → 실행 상태 초기화 (모두 대기=초록)
-  runningTopicIndex = null;
+  // 새 글감 목록 → 이 목록의 완료·대기 상태만 초기화한다.
+  // 다른 검색 목록에서 이미 실행 중인 작업은 계속 추적해 동시 실행을 막는다.
   completedTopics.clear();
   runQueue = [];
   const list = $('topicsList');
@@ -482,7 +486,11 @@ async function restoreLatestTopics() {
 //  안전하게 순서대로 처리한다. 사용자는 여러 개를 눌러두고 자리를 비워도 된다.)
 async function startRun(topicIndex, visOverride) {
   if (!currentSearch) return;
-  if (completedTopics.has(topicIndex) || runningTopicIndex === topicIndex) return;
+  const currentSearchId = currentSearch.searchId || currentSearch.id;
+  if (
+    completedTopics.has(topicIndex) ||
+    (runningTopicIndex === topicIndex && runningTopicSearchId === currentSearchId)
+  ) return;
   // 대기 중인 글감을 다시 누르면 대기 취소
   if (runQueue.includes(topicIndex)) {
     runQueue = runQueue.filter((x) => x !== topicIndex);
@@ -507,20 +515,25 @@ async function processQueue(visOverride) {
   if (runningTopicIndex !== null) return; // 이미 하나 실행 중이면 대기
   if (!runQueue.length) return;
   const topicIndex = runQueue.shift();
+  const runSearch = currentSearch;
+  const runSearchId = runSearch && (runSearch.searchId || runSearch.id);
+  if (!runSearch || !runSearchId) return;
   runningTopicIndex = topicIndex;
+  runningTopicSearchId = runSearchId;
   refreshTopicButtons();
   const visibility = visOverride || $('runVisibility').value;
   const mode = $('runMode').value;
   try {
     const { draftId } = await api('/api/run', {
       method: 'POST',
-      body: { searchId: currentSearch.searchId, topicIndex, visibility, mode },
+      body: { searchId: runSearchId, topicIndex, visibility, mode },
     });
-    watchDraft(draftId, topicIndex);
+    watchDraft(draftId, topicIndex, runSearchId);
   } catch (e) {
     // 네이버 로그인 만료(401)면 대기열을 멈추고 재로그인을 안내한다 (계속하면 전부 실패)
     if (/로그인/.test(e.message)) {
       runningTopicIndex = null;
+      runningTopicSearchId = null;
       runQueue = [];
       refreshTopicButtons();
       loginValidity = { at: 0, expired: true, checking: false };
@@ -530,6 +543,7 @@ async function processQueue(visOverride) {
     }
     alert(e.message);
     runningTopicIndex = null;
+    runningTopicSearchId = null;
     refreshTopicButtons();
     processQueue(visOverride); // 그 외 오류는 다음 글감으로 진행
   }
@@ -540,7 +554,11 @@ async function runAllTopics() {
   if (!currentSearch) return;
   const pending = currentSearch.topics
     .map((_, i) => i)
-    .filter((i) => !completedTopics.has(i) && i !== runningTopicIndex && !runQueue.includes(i));
+    .filter((i) => {
+      const currentSearchId = currentSearch.searchId || currentSearch.id;
+      const runningHere = i === runningTopicIndex && runningTopicSearchId === currentSearchId;
+      return !completedTopics.has(i) && !runningHere && !runQueue.includes(i);
+    });
   if (!pending.length) return alert('대기열에 추가할 글감이 없습니다.');
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
@@ -561,7 +579,11 @@ function refreshTopicButtons() {
       b.disabled = true;
       b.classList.add('btn-done');
       b.innerHTML = '실행완료';
-    } else if (i === runningTopicIndex) {
+    } else if (
+      i === runningTopicIndex &&
+      currentSearch &&
+      runningTopicSearchId === (currentSearch.searchId || currentSearch.id)
+    ) {
       b.disabled = true;
       b.classList.add('btn-running');
       b.innerHTML = '이 글감으로<br>실행 중…';
@@ -616,6 +638,7 @@ function renderSteps(status, mode) {
 // 실행 중 상태를 해제하고 버튼 색을 다시 그린다 (완료=연회색은 보존, 나머지=초록)
 function resetTopicButtons() {
   runningTopicIndex = null;
+  runningTopicSearchId = null;
   refreshTopicButtons();
 }
 
@@ -668,7 +691,7 @@ $('stopBtn').onclick = async () => {
   loadDrafts();
 };
 
-function watchDraft(draftId, topicIndex = null) {
+function watchDraft(draftId, topicIndex = null, topicSearchId = null) {
   watchingDraft = draftId;
   $('progressCard').hidden = false;
   $('progressResult').hidden = true;
@@ -690,7 +713,10 @@ function watchDraft(draftId, topicIndex = null) {
         clearInterval(poll);
         $('stopBtn').hidden = true;
         // 이 글감을 '실행완료(연회색)'로 고정, 나머지는 초록 복귀
-        if (topicIndex !== null) completedTopics.add(topicIndex);
+        const visibleSearchId = currentSearch && (currentSearch.searchId || currentSearch.id);
+        if (topicIndex !== null && topicSearchId && topicSearchId === visibleSearchId) {
+          completedTopics.add(topicIndex);
+        }
         resetTopicButtons();
         // 완료 단계는 위 진행 표시로 충분하므로 중복 완료 문구와 후속 버튼은 숨긴다.
         $('progressMsg').textContent = '';
