@@ -273,6 +273,9 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     // 3. 수집한 건강 자료를 바탕으로 생활 건강정보 글을 작성한다.
     setStep('writing', `건강정보 원고 작성 중 (참고자료 ${refs.length}건)`);
     const article = await writer.writeArticle(healthTopic, refs);
+    // 글감에서 사용자가 선택한 제목이 최종 제목이다. 본문 AI가 다른 제목을
+    // 반환해도 네이버 임시저장·대표이미지·다운로드 폴더까지 같은 제목을 쓴다.
+    article.title = String(healthTopic.title || '').trim();
     store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
       title: article.title,

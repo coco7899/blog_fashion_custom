@@ -673,7 +673,7 @@ async function publish(article, judgments, opts) {
     // 별도 제품 후보 블록을 추가로 내리지 않고 그 위치에 바로 입력한다.
     // 상품 글의 마지막 CTA는 기존처럼 앞에 Enter 두 번을 둔다.
     if (deferredCtaBlock?.text) {
-      const isHealthAffiliateCandidate = !hasProducts && /이\s*글에\s*제휴하면\s*좋은\s*제품/.test(deferredCtaBlock.text);
+      const isHealthAffiliateCandidate = !hasProducts && /(?:이\s*글에\s*제휴하면\s*좋은\s*제품|제품\s*후보\s*[:：])/.test(deferredCtaBlock.text);
       if (!isHealthAffiliateCandidate) {
         await page.keyboard.press('Enter');
         await page.keyboard.press('Enter');

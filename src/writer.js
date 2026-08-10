@@ -14,27 +14,41 @@ const MIN_IMAGES = 4;           // 문제 상황·식재료·실천 장면을 �
 const MAX_IMAGES = 6;           // 글 흐름상 필요한 경우 이미지 자리를 더 만들 수 있다.
 
 function buildPrompt(topic, refText, frame) {
-  const skill = skills.loadSkill('03-health-affiliate-blog');
-  return `아래 건강 전문 스킬을 핵심 지침으로 삼아 사실 기반 생활 건강 정보 글을 작성하세요.
+  const automationSkill = skills.loadSkill('03-health-affiliate-blog');
+  const writingSkill = skills.loadSkill('11-health-shopping-connect-blog');
+  if (!automationSkill || !writingSkill) {
+    throw new Error('건강 자동화 스킬 또는 건강 쇼핑커넥트 글쓰기 스킬을 찾을 수 없습니다.');
+  }
+  const selectedTitle = String(topic?.title || '').trim();
+  if (!selectedTitle) throw new Error('선택한 글감 제목이 없습니다.');
+  return `아래 두 스킬을 함께 적용해 사실 기반 생활 건강 정보 글을 작성하세요. 건강 안전·이미지·임시저장 규칙은 03을 따르고, 글의 설득 구조와 제품 연결은 11을 따르세요.
 
-═══════════ 건강 전문 스킬 시작 ═══════════
-${skill}
-═══════════ 건강 전문 스킬 끝 ═══════════
+═══════════ 03 건강 자동화 스킬 시작 ═══════════
+${automationSkill}
+═══════════ 03 건강 자동화 스킬 끝 ═══════════
+
+═══════════ 11 건강 쇼핑커넥트 글쓰기 스킬 시작 ═══════════
+${writingSkill}
+═══════════ 11 건강 쇼핑커넥트 글쓰기 스킬 끝 ═══════════
 
 【이 자동화 환경에 맞춘 조정 — 최우선】
 - 글감 선택은 이미 끝났습니다. 후보 제안 없이 곧바로 선택 주제 글쓰기를 실행하세요.
+- 최종 포스팅 제목은 “${selectedTitle}”입니다. 이 제목은 뉴스 기사 제목을 그대로 복사하지 않고 글감 단계에서 새로 만든 제목입니다. 단어·띄어쓰기·문장부호·어미를 바꾸거나 검색 키워드를 덧붙이지 말고 글자 하나까지 그대로 반환하세요.
 - 이 뉴스 글 모드에는 제휴 상품 링크와 쇼핑커넥트 고지는 넣지 마세요. 마지막에는 독자가 글 내용에 맞는 행동을 바로 고를 수 있도록 생활형 CTA를 쓰세요. 추천은 사용자가 제휴 여부와 링크 삽입을 직접 판단하기 위한 후보 안내일 뿐입니다. 처방약·일반의약품·치료 목적 제품은 추천하지 말고 식재료나 생활용품 같은 비처방 제품만 1개 추천하세요. "무조건 사야 한다"처럼 밀어붙이거나 치료 효과를 약속하지는 마세요.
+- 11 스킬의 입력 모드 중 “실제 상품과 링크가 없는 건강정보 글”로 작성하세요. 제품 상세정보가 없으므로 특정 제품의 기능·소재·효과를 만들지 말고 제품 카테고리의 일반적인 비교 기준만 쓰세요.
 - 기록·메모·수첩·며칠 적어 보기는 증상의 시간·횟수·변화가 판단이나 진료 상담에 실제로 필요한 주제에서만 제안하세요. 단순 식사, 음료 온도, 운동, 옷차림, 휴식처럼 바로 행동할 수 있는 주제에는 기록을 습관적으로 넣지 말고 해당 행동을 직접 안내하세요. 기록 장면 이미지도 같은 기준일 때만 사용하세요.
 - 제품을 글의 해결책처럼 앞세우지 마세요. 먼저 오늘 먹어 볼 음식·식사 구성·생활습관·가벼운 운동 중 주제에 맞는 행동 2~3개를 제안하고, 제품이 있다면 어떤 번거로움을 덜어 주는지 앞 문장에서 주제에 맞게 자연스럽게 설명하세요. "이런 실천을 더 편하게 이어 가는 제품도 있습니다"라는 고정 문장을 반복하지 마세요.
+- 첫 일반 문단은 독자가 실제로 겪는 구체적인 시간·장소·행동과 불편 1~2문장으로 시작하세요. 예: 아침 첫걸음은 괜찮아졌지만 저녁에 다시 아픈 상황, 몸살처럼 느껴져도 체온을 재지 않고 지나치는 상황. 이어지는 문단에서 검색 질문에 자연스럽게 답하세요. 직접 사용한 경험처럼 꾸미는 "저도 써봤는데" 문장은 쓰지 마세요.
+- 제품이 글의 행동과 자연스럽게 연결되는 경우에만 질문형 소제목 하나를 제품 선택 기준에 사용하세요. 제품이 왜 필요한지 생활 속 번거로움으로 설명한 뒤, 확인할 점 4~6개를 짧은 목록으로 제시하고 마지막에 비교해 보라는 문장으로 마무리하세요. 응급 신호나 진료 안내보다 제품 설명을 앞에 두지 마세요.
 - 이미지는 생성하지 않고 image 블록 위치와 장면 설명만 임시글에 표시합니다. 이미지 다운로드·생성 과정·ZIP·목록·표는 글에 쓰지 마세요.
 - 출처 제목·URL·출처 목록은 본문, 이미지 캡션, 해시태그에 넣지 마세요. 조사에 사용한 자료는 내부 기록으로만 남기며 독자가 읽는 글에는 표시하지 않습니다.
 - image desc/caption은 기사 속 건강 주제, 식재료, 생활 실천 장면과 직접 관련되게 쓰세요.
 
 【검색 질문 중심 구조 — 최우선】
 1. 글을 쓰기 전에 글감에서 검색자가 가장 궁금해할 핵심 질문을 딱 1개 정하세요. 서로 다른 건강 질문을 한 글에 나열하지 마세요.
-2. 제목은 기본적으로 '핵심 키워드 + 자연스러운 질문 + 답변 범위' 구조로 쓰세요. 예: '질염이 의심될 때 질 세정제를 써도 될까요? 피해야 할 관리법'. 감성적·자극적인 홈판형 제목은 대표 이미지 문구나 도입 후킹으로만 쓰고, 기본 제목으로 쓰지 마세요.
-3. 첫 일반 문단의 첫 2~4문장 안에 핵심 질문의 직접적인 답을 먼저 쓰세요. 그 다음에 공감할 상황과 이 글에서 확인할 기준을 연결하세요. 결론을 본문 끝까지 숨기지 마세요.
-3-1. 서론 바로 다음에는 굵은 제목 **이 글에서 확인할 핵심 N가지**와 번호 1~N의 짧은 요약을 넣으세요. 제목에서 약속한 숫자가 있으면 반드시 같은 숫자와 같은 판단 기준을 사용하세요. 이 요약은 목차처럼 독자가 전체 흐름을 한눈에 보고 AI 검색 요약도 핵심을 구분할 수 있게 3~5줄로 쓰세요.
+2. 제목을 새로 만들지 마세요. 글감 단계에서 확정된 “${selectedTitle}”을 글자 하나까지 그대로 사용하세요. 제목의 검색 키워드·어미·숫자·문장부호를 최적화한다는 이유로 바꾸지 마세요.
+3. 서론은 2~4개의 짧은 문단으로 쓰세요. 첫 1~2개 문단에는 검색자가 실제로 겪는 생활 장면을 보여 주고, 이어지는 문단에서 핵심 질문에 직접 답하세요. 답을 본문 끝까지 숨기지 말되 “먼저 답하면”, “결론부터 말하면”, “정리부터 하면”으로 시작하지 마세요. 답변 다음에는 왜 그런지와 이 글에서 확인할 기준을 연결하세요.
+3-1. 서론 바로 다음에는 기본적으로 굵은 제목 **이 글에서 확인할 핵심 3가지**와 번호 1~3의 짧은 요약을 넣으세요. 제목에서 다른 숫자를 약속했거나 응급 안전상 기준이 더 필요할 때만 4~5가지로 조정하고, 제목의 숫자와 본문 판단 기준을 정확히 맞추세요.
 4. 소제목 5~7개 중 적어도 3개는 검색자가 실제로 할 법한 질문형으로 쓰세요. 각 질문형 소제목 바로 아래 첫 문장은 '반드시 그렇지는 않습니다', '먼저 확인해야 합니다'처럼 직접 답하고, 뒤이어 이유·근거·예외·실천 방법을 설명하세요.
 5. 건강 수치·효능·권장량·질병 정보는 참고자료 중 공공기관·전문학회·의료기관·원 연구자료로 내부 확인된 내용만 사용하세요. 신문이나 블로그 자료는 생활 사례를 보완하는 용도로만 쓰고, 출처에 없는 내용은 추측하지 마세요. 기관명·발표일·검토일·자료명을 본문에 인위적으로 넣지 말고, 수치가 꼭 필요할 때만 독자가 이해할 기준 단위(1회 제공량, 100g 등)를 자연스럽게 설명하세요.
 6. 대상과 예외를 구분하고, 질병 예방·치료 효과를 단정하지 마세요. 글 후반에는 핵심 답을 2~3문장으로 다시 정리하고 오늘 바로 할 수 있는 행동을 제시하세요.
@@ -51,7 +65,8 @@ ${skill}
 9. 해시태그는 건강 키워드·생활 문제·식재료를 섞어 정확히 6개 작성하세요.
 10. "충격", "정체", "결국", "소름", "전부 공개"와 공포·과장 표현을 쓰지 마세요.
 11. 마지막 행동 문단은 요약으로 끝내지 말고, **반복되는 생활 문제 → 오늘 바로 해볼 행동 → 필요하면 실천을 편하게 해 주는 도구의 쓰임** 순서의 2~3문장 CTA로 마무리하세요. 예: 음료를 충분히 식혀 천천히 마시기, 다음 식사 재료를 미리 준비하기처럼 주제에 바로 맞는 행동을 제안하세요. 기록은 증상 변화 비교가 핵심인 주제에서만 사용하세요.
-12. 행동 설명을 마친 뒤 별도의 마지막 paragraph 블록을 만들고, 정확히 "이 글에 제휴하면 좋은 제품 후보: **제품명**" 한 줄만 넣으세요. 바로 앞 행동 문단과는 빈 줄 두 줄로 분리합니다. 제품 설명이나 진단·치료 면책 문구를 이 제품 후보 줄 뒤에 붙이지 마세요. 의료 수치나 법적 판단에 쓰이는 측정 도구라면 필요한 주의 문구를 제품 후보 줄이 아니라 앞 행동 문단에 자연스럽게 설명하세요. 음료·조리 온도계 같은 생활용 온도 확인 도구에는 불필요한 진단 면책 문구를 붙이지 마세요. 해시태그 6개는 제품 후보 다음, 글 전체의 맨 마지막에만 배치합니다.
+12. 행동 설명을 마친 뒤 별도의 마지막 paragraph 블록을 만들고, 정확히 "제품 후보: **제품명**" 한 줄만 넣으세요. 바로 앞 행동 문단과는 빈 줄 두 줄로 분리합니다. 제품 설명이나 진단·치료 면책 문구를 이 제품 후보 줄 뒤에 붙이지 마세요. 의료 수치나 법적 판단에 쓰이는 측정 도구라면 필요한 주의 문구를 제품 후보 줄이 아니라 앞 행동 문단에 자연스럽게 설명하세요. 음료·조리 온도계 같은 생활용 온도 확인 도구에는 불필요한 진단 면책 문구를 붙이지 마세요. 해시태그 6개는 제품 후보 다음, 글 전체의 맨 마지막에만 배치합니다.
+13. JSON을 출력하기 전에 같은 증상 설명·실천법·진료 권고·제품 필요성·결론이 두 번 이상 반복되는지 스스로 확인하고 한 번으로 합치세요. 이 검수는 별도의 두 번째 글 생성 없이 첫 결과 안에서 끝내세요.
 
 【글감】
 제목: ${topic.title}
@@ -62,11 +77,12 @@ ${skill}
 ${refText}
 다음 JSON 형식으로만 출력:
 {
-  "title": "핵심 키워드가 들어간 질문형 제목? 확인할 기준을 보여 주는 설명형 부제",
+  "title": ${JSON.stringify(selectedTitle)},
   "tags": ["건강태그1", "건강태그2", "생활태그1", "생활태그2", "식재료태그1", "식재료태그2"],
   "blocks": [
     {"type": "image", "slot": 1, "caption": "건강 주제 대표 이미지", "desc": "기사의 핵심 건강 주제를 보여주는 대표 장면"},
-    {"type": "paragraph", "text": "먼저 답하면, 핵심 질문에는 개인차가 있어도 무조건 같은 방법을 권하기는 어렵습니다. 독자가 일상에서 겪는 구체적인 문제를 짚고, 이 글에서 확인할 기준을 안내합니다."},
+    {"type": "paragraph", "text": "아침·출근 준비·식사 뒤처럼 주제와 직접 맞는 시간과 장소에서 독자가 겪는 불편을 1~2문장으로 보여줍니다."},
+    {"type": "paragraph", "text": "그렇다고 한 가지 증상만으로 특정 질환이라고 단정할 수는 없습니다. 왜 그런지 짧게 설명하고 언제 심한지, 무엇이 함께 나타나는지, 평소와 무엇이 다른지부터 살펴보도록 안내합니다."},
     {"type": "heading", "text": "왜 이런 불편이 반복될까요?"},
     {"type": "paragraph", "text": "먼저 확인해야 할 점은 생활 습관과 증상의 양상이 사람마다 다르다는 것입니다. 공식 자료와 기사 핵심을 쉬운 말로 설명하고 **과장 없는 핵심 정보**를 강조합니다."},
     {"type": "image", "slot": 2, "caption": "생활 속 문제 상황", "desc": "독자의 현실적인 건강 생활 문제"},
@@ -75,13 +91,13 @@ ${refText}
     {"type": "image", "slot": 3, "caption": "식재료 또는 건강식품", "desc": "글에서 설명한 식재료나 건강식품"},
     {"type": "heading", "text": "돈을 쓰기 전에 무엇을 해볼 수 있을까요?"},
     {"type": "paragraph", "text": "비용 없이 먼저 실천할 방법을 구체적으로 안내합니다."},
-    {"type": "heading", "text": "제품이나 식재료는 어떻게 골라야 할까요?"},
-    {"type": "paragraph", "text": "광고가 아니라 성분과 표시사항을 확인하는 기준을 안내합니다."},
+    {"type": "heading", "text": "생활용품은 무엇을 확인해 골라야 할까요?"},
+    {"type": "paragraph", "text": "생활 속에서 반복되는 어떤 번거로움을 덜어 주는지 먼저 설명합니다. 제품이 주제와 자연스럽게 맞을 때만 크기·사용 편의·관리 방법처럼 실제 비교할 기준 4~6개를 짧은 목록으로 안내합니다."},
     {"type": "image", "slot": 4, "caption": "건강한 활용 장면", "desc": "실생활에서 적용하는 구체적인 장면"},
     {"type": "heading", "text": "누가 더 주의해서 확인해야 할까요?"},
     {"type": "paragraph", "text": "알레르기, 복용 약, 식사 제한 등 주의가 필요한 사람과 한계를 설명합니다."},
     {"type": "paragraph", "text": "오늘 바로 할 행동 2~3개를 안내하고, 도구가 필요하다면 어떤 번거로움을 덜어 주는지 자연스럽게 설명합니다."},
-    {"type": "paragraph", "text": "이 글에 제휴하면 좋은 제품 후보: **글 주제와 직접 연결되는 비처방 제품 1개**"}
+    {"type": "paragraph", "text": "제품 후보: **글 주제와 직접 연결되는 비처방 제품 1개**"}
   ]
 }
 각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. 위 예시는 image 4개이지만 글 흐름상 서로 다른 장면이 더 필요하면 slot 5와 slot 6까지 추가할 수 있습니다. 첫 image는 blocks 배열 맨 앞에 두고 나머지는 관련 단락 사이에 놓으세요. tags는 정확히 6개이며 모두 왼쪽 정렬입니다.`;
@@ -271,7 +287,7 @@ const NEWS_TITLE_FORBIDDEN_RE = /충격|정체|결국|소름|전부\s*공개/;
 const NEWS_PREDICTION_RE =
   /시청률.{0,12}(?:오르|나오|기록|예상)|흥행.{0,12}(?:하|성공|예상)|관계.{0,12}(?:변하|달라질|발전)|향후\s*전개|앞으로.{0,16}(?:전개|관계)|될\s*것으로\s*보|기대해도\s*좋/;
 const NEWS_CTA_ACTION_RE = /확인|점검|기록|준비|골라|고르|덜어|바꿔|바꾸|챙겨|시작|비교|살펴/;
-const NEWS_AFFILIATE_RE = /이\s*글에\s*제휴하면\s*좋은\s*제품(?:\s*후보)?\s*[:：]/;
+const NEWS_AFFILIATE_RE = /(?:이\s*글에\s*제휴하면\s*좋은\s*제품(?:\s*후보)?|제품\s*후보)\s*[:：]/;
 const NEWS_MEDICINE_RE = /처방약|전문의약품|일반의약품|혈압약|진통제|항생제|수면제|약을\s*(?:사|구매|복용)/;
 const NEWS_QUESTION_TITLE_RE = /\?|까요|어떻게|무엇|언제|어떤|괜찮|가능|해야\s*할까|할\s*수\s*있/;
 const NEWS_QUESTION_HEADING_RE = /\?|까요|어떻게|무엇|언제|어떤|왜|누가|어디|얼마나|해야\s*할까|할\s*수\s*있/;
@@ -279,6 +295,7 @@ const NEWS_QUESTION_HEADING_RE = /\?|까요|어떻게|무엇|언제|어떤|왜|�
 // 추천은 사용자 판단을 위한 후보만 제시한다. 실제 제휴 링크나 구매 처리는 하지 않는다.
 function getSafeProductCandidate(topic = {}) {
   const subject = `${topic.title || ''} ${topic.angle || ''} ${(topic.keywords || []).join(' ')}`;
+  if (/알레르기|두드러기|이유식|오이/.test(subject)) return '방수 식품 알레르기 표시 스티커';
   if (/음주|술|숙취|운전/.test(subject)) return '휴대용 알코올 측정기';
   if (/요로|결석|수분|물|폭염|더위/.test(subject)) return '대용량 보온보냉 물병';
   if (/눈|시야|황반|안구|결명자/.test(subject)) return '온열 눈 찜질팩';
@@ -292,15 +309,25 @@ function getSafeProductCandidate(topic = {}) {
   return '밀폐 소분 보관용기 세트';
 }
 
+// 글감 목록에서 사용자가 선택한 제목은 이미 뉴스 제목과 다르게 만들어진 최종 제목이다.
+// 본문 AI가 제목을 다시 제안해도 네이버 저장·이미지·폴더 이름에는 선택 제목만 사용한다.
+function lockSelectedTopicTitle(article, topic) {
+  const selectedTitle = String(topic?.title || '').trim();
+  if (!selectedTitle) throw new Error('선택한 글감 제목이 없습니다.');
+  article.title = selectedTitle;
+  article.titleAlternatives = [];
+  return article;
+}
+
 // 제목에 약속한 숫자를 서론 뒤 핵심 요약에도 같은 수로 유지한다.
-function getTitleSummaryCount(title = '') {
+function getTitleSummaryCount(title = '', fallback = 3) {
   const value = String(title || '');
   const digit = value.match(/(\d+)\s*가지/);
   if (digit) return Math.min(Math.max(Number(digit[1]), 2), 6);
 
   const korean = value.match(/(한|두|세|네|다섯|여섯)\s*가지/);
   const counts = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6 };
-  return korean ? counts[korean[1]] : 3;
+  return korean ? counts[korean[1]] : fallback;
 }
 
 // 서론을 읽은 뒤 글 전체의 판단 흐름을 바로 파악하도록 짧은 핵심 요약을 보장한다.
@@ -328,6 +355,47 @@ function ensureKeySummary(article) {
   return article;
 }
 
+const CANNED_HEALTH_INTRO_RE = /^(?:먼저\s*답하면|결론부터\s*말하면|먼저\s*말하면|정리부터\s*하면)\s*[,，:]?\s*/;
+const HEALTH_LIFE_SCENE_RE = /아침|낮|오후|저녁|밤|집|침대|출근|외출|식사|화장실|소파|주방|운동|걷|앉|먹|마시|잠|속옷|평소|이번|하루|며칠|막상|처음/;
+
+// 11 스킬의 서론 순서를 코드에서도 보장한다. 생성 결과가 예전 고정 문구로
+// 시작하면 문구를 제거하고, 바로 다음 생활 장면을 앞에 두어 자연스럽게 연다.
+function normalizeHealthIntroduction(article) {
+  const blocks = article.blocks || [];
+  const introParagraphs = [];
+
+  for (let index = 0; index < blocks.length && introParagraphs.length < 3; index += 1) {
+    const block = blocks[index];
+    if (block.type === 'heading') break;
+    if (block.type !== 'paragraph') continue;
+    if (/이 글에서 확인할 핵심\s*\d*가지/.test(block.text || '')) break;
+    introParagraphs.push(index);
+  }
+
+  if (!introParagraphs.length) return article;
+
+  const firstIndex = introParagraphs[0];
+  const originalFirst = String(blocks[firstIndex].text || '');
+  const hadCannedOpening = CANNED_HEALTH_INTRO_RE.test(originalFirst);
+  blocks[firstIndex] = {
+    ...blocks[firstIndex],
+    text: originalFirst.replace(CANNED_HEALTH_INTRO_RE, '').trimStart(),
+  };
+
+  const secondIndex = introParagraphs[1];
+  if (hadCannedOpening && secondIndex !== undefined) {
+    const secondText = String(blocks[secondIndex].text || '');
+    if (HEALTH_LIFE_SCENE_RE.test(secondText) && !CANNED_HEALTH_INTRO_RE.test(secondText)) {
+      const directAnswer = blocks[firstIndex];
+      blocks[firstIndex] = blocks[secondIndex];
+      blocks[secondIndex] = directAnswer;
+    }
+  }
+
+  article.blocks = blocks;
+  return article;
+}
+
 function makeRecommendationBlocks(topic) {
   const product = getSafeProductCandidate(topic);
   return [
@@ -335,12 +403,12 @@ function makeRecommendationBlocks(topic) {
       type: 'paragraph',
       text: '오늘은 이 글에서 내 생활에 바로 맞는 행동 한 가지부터 적용해 보세요. 준비나 조절 과정에서 반복되는 번거로움이 있다면, 그 부분을 단순하게 도와주는 생활용품을 고르면 실천을 이어 가기 편합니다.',
     },
-    { type: 'paragraph', text: `이 글에 제휴하면 좋은 제품 후보: **${product}**` },
+    { type: 'paragraph', text: `제품 후보: **${product}**` },
   ];
 }
 
 function productCandidateFrom(text, topic) {
-  const match = String(text || '').match(/이\s*글에\s*제휴하면\s*좋은\s*제품(?:\s*후보)?\s*[:：]\s*\*\*([^*]+)\*\*/);
+  const match = String(text || '').match(/(?:이\s*글에\s*제휴하면\s*좋은\s*제품(?:\s*후보)?|제품\s*후보)\s*[:：]\s*\*\*([^*]+)\*\*/);
   return String(match?.[1] || getSafeProductCandidate(topic)).trim();
 }
 
@@ -364,7 +432,7 @@ function ensureHealthRecommendation(article, topic) {
 
   const originalText = String(blocks[candidateIndex].text || '');
   const product = productCandidateFrom(originalText, topic);
-  if (NEWS_MEDICINE_RE.test(`이 글에 제휴하면 좋은 제품 후보: ${product}`)) {
+  if (NEWS_MEDICINE_RE.test(`제품 후보: ${product}`)) {
     blocks.splice(candidateIndex, 1, ...makeRecommendationBlocks(topic));
     article.blocks = blocks;
     return article;
@@ -382,7 +450,7 @@ function ensureHealthRecommendation(article, topic) {
 
   const replacement = [];
   if (actionText) replacement.push({ ...blocks[candidateIndex], text: actionText });
-  replacement.push({ type: 'paragraph', text: `이 글에 제휴하면 좋은 제품 후보: **${product}**` });
+  replacement.push({ type: 'paragraph', text: `제품 후보: **${product}**` });
   blocks.splice(candidateIndex, 1, ...replacement);
 
   article.blocks = blocks;
@@ -420,9 +488,9 @@ function inspectNewsArticle(article) {
   if (!summaryBlock) {
     issues.push('서론 뒤 핵심 요약 없음');
   } else {
-    const expectedCount = getTitleSummaryCount(article.title);
+    const expectedCount = getTitleSummaryCount(article.title, null);
     const actualCount = Number((String(summaryBlock.text || '').match(/핵심\s*(\d+)가지/) || [])[1]);
-    if (actualCount !== expectedCount) {
+    if (expectedCount !== null && actualCount !== expectedCount) {
       issues.push(`제목 숫자(${expectedCount})와 핵심 요약 숫자(${actualCount || '없음'}) 불일치`);
     }
   }
@@ -481,11 +549,12 @@ async function writeArticle(topic, refs) {
   const frame = { key: 'health-information', label: '생활 건강정보형', check: null };
 
   let article = await codex.invokeJson(buildPrompt(topic, refText, frame), { timeoutMs: WRITE_TIMEOUT_MS });
-  if (!article || !article.title || !Array.isArray(article.blocks)) {
+  if (!article || !Array.isArray(article.blocks)) {
     throw new Error('글 작성 결과 형식이 올바르지 않습니다.');
   }
+  article = lockSelectedTopicTitle(article, topic);
   article = ensureHealthRecommendation(
-    ensureKeySummary(formatNewsParagraphs(simplifyNewsStructure(normalize(article)))),
+    ensureKeySummary(formatNewsParagraphs(normalizeHealthIntroduction(simplifyNewsStructure(normalize(article))))),
     topic
   );
 
@@ -827,14 +896,16 @@ async function selfReviewAutomaticProductArticle(article, product, detail, imgCo
 }
 
 /**
- * 쇼핑커넥트 상품 소개 글 작성 — skills/02-naver-shopping-connect-blog 스킬 지침 구동.
+ * 건강 쇼핑커넥트 상품 소개 글 작성 — skills/11-health-shopping-connect-blog 스킬 지침 구동.
  * @param {object} product {name, price, commission, reviews, rating, query}
  * @param {object} detail {description, images}
  * @returns {object} {title, titleAlternatives, tags, blocks}
  */
 function buildProductPrompt(product, detail, frame, imgCount, retryNote, selectedHook, healthContext = null) {
-  const skill = skills.loadSkill('03-health-affiliate-blog');
-  if (!skill) throw new Error('건강 블로그 스킬(skills/03-health-affiliate-blog/SKILL.md)을 찾을 수 없습니다.');
+  const skill = skills.loadSkill('11-health-shopping-connect-blog');
+  const healthSkill = skills.loadSkill('03-health-affiliate-blog');
+  if (!skill) throw new Error('건강 쇼핑커넥트 스킬(skills/11-health-shopping-connect-blog/SKILL.md)을 찾을 수 없습니다.');
+  if (healthContext && !healthSkill) throw new Error('건강 안전 스킬(skills/03-health-affiliate-blog/SKILL.md)을 찾을 수 없습니다.');
 
   const healthReferences = (healthContext?.refs || [])
     .map((ref, index) => `--- 건강 참고자료 ${index + 1} (${ref.source || ref.title || '자료'}) ---\n제목: ${ref.title || ''}\n${String(ref.text || '').slice(0, 2500)}`)
@@ -846,10 +917,12 @@ function buildProductPrompt(product, detail, frame, imgCount, retryNote, selecte
 - 독자의 생활 문제: ${healthTopic.problem || ''}
 - 주력 상품: ${healthTopic.primaryProduct || product.name || ''}
 - 상품이 필요한 현실적인 이유: ${healthTopic.productReason || ''}
-- 첫 3개 일반 문단 안에 생활 문제 하나만 구체적으로 보여주세요.
-- 기사·공식자료 핵심은 2~4문단 이내로 새 문장으로 설명하고 발표 기관과 날짜를 명확히 쓰세요.
+- 첫 3개 일반 문단 안에서 검색 질문에 바로 답하고 독자의 생활 문제 하나를 구체적으로 보여주세요.
+- 서론 다음에는 기본적으로 "이 글에서 확인할 핵심 3가지"를 번호 목록으로 정리하세요. 제목이 다른 숫자를 약속했거나 응급 안전상 꼭 필요한 경우에만 제목과 같은 4~5가지로 조정하세요.
+- 기사·공식자료 핵심은 2~4문단 이내의 정보성 문장으로 자연스럽게 설명하되 기관명·날짜·자료명·URL은 독자가 읽는 본문에 노출하지 마세요.
 - 상품을 소개하기 전에 돈을 쓰지 않고 먼저 실천할 방법을 3~5개 제시하세요.
 - 상품의 효능보다 준비·손질·보관·활용의 현실적인 편의를 설명하고, 사용 장면을 3~6개 제시하세요.
+- 제품 선택 구간에는 실제 상품 자료에서 확인되는 비교 기준 4~6개를 제시하고, 기능 이름만 나열하지 말고 생활 속 쓰임과 연결하세요.
 - 잘 맞을 수 있는 사람과 알레르기·식사 제한·이미 충분히 섭취하는 사람 등 주의할 사람을 함께 안내하세요.
 - 일반 식재료 또는 건강기능식품에 맞는 원산지·내용량·손질 여부·기능성 원료·섭취량·알레르기·보관법 중 확인된 선택 기준만 쓰세요.
 - 질병 치료·예방·수치 개선을 단정하지 말고 직접 먹어본 후기처럼 쓰지 마세요.
@@ -862,11 +935,15 @@ ${healthReferences}
 `
     : '';
 
-  return `아래는 "네이버 쇼핑커넥트 블로그" 스킬 지침입니다. 이 지침을 반드시 따라 상품 소개 글을 작성하세요.
+  return `아래는 "건강 쇼핑커넥트 블로그" 스킬 지침입니다. 이 지침을 반드시 따라 상품 소개 글을 작성하세요.
 
 ═══════════ 스킬 지침 시작 ═══════════
 ${skill}
 ═══════════ 스킬 지침 끝 ═══════════
+
+${healthContext ? `═══════════ 건강 안전 스킬 시작 ═══════════
+${healthSkill}
+═══════════ 건강 안전 스킬 끝 ═══════════` : ''}
 
 【이 자동화 환경에 맞춘 조정 — 지침보다 우선】
 - 이미지: 상세페이지 원본 이미지는 시스템이 이미 수집해 image 블록 순서대로 배치합니다. image 블록을 ${imgCount}개 넣고, desc는 "대표", "핵심 특징", "사용 장면/디테일" 등 역할만 쓰세요. **AI 연출 이미지는 이 환경에서 생성 불가하므로 만들지 마세요.**
@@ -896,9 +973,7 @@ ${healthInstruction}
    - 형태·소재·크기/용량·색상·사이즈·사용 방식·선택 옵션·핵심 기능·추천 환경·구매 전 확인사항 중 실제 구매 판단에 필요한 항목 4~7개만 고르세요.
    - 확인되지 않은 항목은 만들지 말고 "사이즈 옵션은 판매 페이지에서 확인"처럼 표시하세요.
    - 가격·배송비·쿠폰·적립·기본 구성 수량·세트별 개수·수량별 구매 옵션은 상단 스펙에 넣지 마세요. 기본 구성이나 수량이 핵심이라면 본문 중간에서 한 번만 자연스럽게 설명하세요.
-4. **소제목(heading) 블록을 쓰지 마세요.** 구간 전환은 **quote 블록(8~20자 짧은 구절)**로 합니다.
-   예: "섬유항균제는 세탁세제와 역할이 달라요", "공간에 따라 다르게 쓸 수 있는 2in1 구조"
-   핵심 요약을 포함해 quote는 전체 3~4개만 사용하세요.
+4. 글의 큰 구간은 heading 블록 5~7개로 나누고, 각 소제목에는 새로운 메시지 하나만 담으세요. 핵심 상품 스펙은 quote 블록 1개로만 정리해 본문과 중복하지 마세요.
 5. 문단은 **1~3문장**으로 자연스럽게 이어 쓰세요. 짧은 문장을 기계적으로 잘라 나열하지 말고, 전체 paragraph 블록은 10~15개 정도면 충분합니다.
 6. 상품 특징을 말할 때마다 "그래서 어떤 사람에게 편한지", "어떤 생활 상황에서 선택 이유가 되는지"를 함께 설명하세요.
    - 본문 흐름은 고객의 문제 → 기존 방법의 한계 → 상품만의 차이 → 실제 활용 장면 → 구매 전 확인사항 → 잘 맞는 사람과 다른 방식이 더 맞을 수 있는 사람 순서를 기본으로 합니다.
@@ -918,8 +993,7 @@ ${healthInstruction}
    - "정리하면 세 가지만 기억하세요"처럼 글 전체를 보고서식으로 요약하며 끝내지 마세요. 마지막에는 이 상품이 필요한 사람을 한 번 더 떠올려주고 자연스럽게 링크로 이어주세요.
    - 글 마지막에 "마지막 체크", "구매 전 체크", "체크리스트" 같은 인용구나 글머리표 요약을 만들지 마세요. 이미 본문에서 설명한 모델명·구성·사용법·주의점을 다시 나열하지 말고, 마지막 1~2문단은 이 상품이 필요한 생활 장면과 독자의 마음을 자연스럽게 이어 마무리하세요.
    - 핵심 구성, 꼭 확인할 조건, 독자가 기억해야 할 선택 기준 가운데 1~3곳은 반드시 **굵게** 표시하세요.
-   - 문장 전체를 계속 굵게 만들지 말고 짧은 핵심 구절만 강조하세요. 핵심 요약과 내용 전환은 quote 3~4개로 구분하고, 같은 내용을 굵게와 quote로 중복 강조하지 마세요.
-   - 짧은 quote는 편집기에서 본문보다 큰 글자로 표시되므로, 독자가 기억할 핵심을 8~20자의 자연스러운 구절로 쓰세요. 여러 줄 핵심 요약에는 긴 문장을 넣지 마세요.
+   - 문장 전체를 계속 굵게 만들지 말고 짧은 핵심 구절만 강조하세요. 같은 내용을 굵은 글씨·소제목·상품 스펙 quote에서 중복 강조하지 마세요.
    - 마지막 CTA는 반복되는 불편 → 기존 방식과 다른 선택 → 상품 페이지에서 바로 확인할 옵션이나 조건 순서로 1~2문단만 쓰세요. "한번 살펴보세요"처럼 모호하게 끝내지 마세요.
 10. 본문 글자 수에는 최소·목표·최대 제한이 없습니다. 상품 정보가 단순하면 간결하게 쓰고, 사이즈·색상·옵션·구성·기능·사용법이 많으면 구매 판단에 필요한 정보가 충분히 전달될 때까지 유연하게 쓰세요. 숫자 목표에 맞추려고 내용을 늘리거나 줄이지 말고 같은 설명을 반복하지 마세요. 제목·이미지·인용구·본문·캡션·해시태그·상품 링크를 포함한 포스팅 전체를 왼쪽 정렬합니다.
    - 문장 내용은 줄이지 말고 약 25~40자의 자연스러운 의미 단위로 줄바꿈하세요. 띄어쓰기·쉼표·접속 표현처럼 호흡이 쉬는 곳에서 나누고, 단어·조사·**굵은 구절** 중간은 자르지 마세요.
@@ -963,8 +1037,8 @@ ${String(detail.description || '').slice(0, 6000)}
     {"type":"paragraph","text":"독자가 실제 생활에서 겪는 건강 문제 하나를 구체적으로 보여주는 도입입니다."},
     {"type":"heading","text":"이 문제가 반복되는 현실적인 이유"},
     {"type":"paragraph","text":"독자를 탓하지 않고 준비 시간과 생활 환경을 설명합니다."},
-    {"type":"heading","text":"최근 건강 기사에서 확인할 핵심"},
-    {"type":"paragraph","text":"발표 기관과 날짜를 밝히고 기사 핵심을 2~4문단 안에서 쉽게 설명합니다."},
+    {"type":"heading","text":"왜 이런 불편이 반복될까요?"},
+    {"type":"paragraph","text":"공식자료로 내부 확인한 건강정보를 기관명·날짜·출처 표시 없이 2~4문단 안에서 쉽게 설명합니다."},
     {"type":"heading","text":"돈을 쓰기 전에 먼저 실천할 방법"},
     {"type":"paragraph","text":"비용 없이 할 수 있는 방법 3~5개를 제시합니다."},
     {"type":"image","slot":2,"caption":"주력 상품 또는 식재료","desc":"주력 상품 또는 식재료 중심 이미지"},
@@ -986,7 +1060,7 @@ ${retryNote || ''}`;
 }
 
 /**
- * 쇼핑커넥트 상품 소개 글 작성 — skills/02-naver-shopping-connect-blog 스킬 지침 구동.
+ * 건강 쇼핑커넥트 상품 소개 글 작성 — skills/11-health-shopping-connect-blog 스킬 지침 구동.
  * @param {object} product {name, price, commission, reviews, rating, query}
  * @param {object} detail {description, images}
  * @returns {object} {title, titleAlternatives, tags, blocks}
@@ -1140,6 +1214,8 @@ module.exports = {
   inspectNewsArticle,
   inspectHealthMinimum,
   ensureKeySummary,
+  normalizeHealthIntroduction,
+  lockSelectedTopicTitle,
   getTitleSummaryCount,
   ensureHealthRecommendation,
   getSafeProductCandidate,

@@ -22,6 +22,30 @@ function isSportsTopic(topic) {
   return SPORTS_RE.test(text);
 }
 
+function normalizeTitleKey(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase('ko-KR')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+// 뉴스 원문과 같은 제목이 생성되면 독립적인 생활 건강 질문형 제목으로 바꾼다.
+// 이후 사용자가 이 글감을 선택하면 이 제목을 최종 포스팅 제목으로 고정한다.
+function makeDistinctTopicTitle(topic, fallbackKeyword, sourceTitleKeys = new Set()) {
+  const keyword = String(
+    (Array.isArray(topic?.keywords) && topic.keywords.find(Boolean)) ||
+      topic?.field ||
+      String(fallbackKeyword || '').split(',')[0] ||
+      '생활 건강'
+  ).trim();
+  const candidates = [
+    `${keyword}, 일상에서 무엇을 먼저 확인해야 할까요?`,
+    `${keyword}, 평소와 다를 때 살펴볼 생활 기준`,
+    `${keyword}, 반복될 때 확인할 생활 변화`,
+  ];
+  return candidates.find((title) => !sourceTitleKeys.has(normalizeTitleKey(title))) || `${keyword}, 생활 속 확인 기준`;
+}
+
 /** 'YYYY.MM.DD' → 오늘 기준 경과 일수. 파싱 불가면 null */
 function ageInDays(dateStr) {
   const m = String(dateStr || '').match(/(\d{4})\.(\d{1,2})\.(\d{1,2})/);
@@ -120,6 +144,7 @@ ${avoid}
 - 연구 결과를 모든 사람에게 적용되는 사실처럼 확대하지 마세요.
 - **제목은 네이버 홈판용으로 새로 구성**하세요:
   · 제목만으로 무슨 소식인지 이해되고, 무엇이 새롭거나 달라졌는지 보여야 합니다.
+  · 위에 제시된 뉴스·블로그 원문 제목을 그대로 복사하거나 어미·문장부호만 바꿔 사용하지 마세요. 사실은 활용하되 제목 문장과 구조는 독립적으로 새로 쓰세요.
   · 기사 제목이나 검색어를 나열하지 말고, 독자가 읽을 이유를 한 가지 보여주세요.
   · 확인되지 않은 내용·과장·거짓 낚시는 금지하고, 기사에서 확인되는 사실만 담으세요.
   · "충격", "정체", "결국", "소름", "전부 공개"는 쓰지 마세요.
@@ -147,6 +172,7 @@ ${avoid}
   if (!Array.isArray(arr) || arr.length === 0) {
     throw new Error('글감 생성 결과가 비어 있습니다.');
   }
+  const sourceTitleKeys = new Set(kept.map(({ source }) => normalizeTitleKey(source?.title)).filter(Boolean));
   const out = arr
     .filter((t) => t && t.title)
     .slice(0, 5)
@@ -155,8 +181,15 @@ ${avoid}
       const keptIdx = (Array.isArray(t.refs) ? t.refs : [])
         .map(Number)
         .filter((i) => Number.isInteger(i) && i >= 0 && i < kept.length);
+      const proposedTitle = String(t.title).trim();
+      const title = sourceTitleKeys.has(normalizeTitleKey(proposedTitle))
+        ? makeDistinctTopicTitle(t, keyword, sourceTitleKeys)
+        : proposedTitle;
+      if (title !== proposedTitle) {
+        console.log(`[topics] 뉴스 원문과 같은 글감 제목 교체: ${proposedTitle.slice(0, 40)} → ${title.slice(0, 40)}`);
+      }
       return {
-        title: String(t.title),
+        title,
         field: String(t.field || ''),
         fact: String(t.fact || ''),
         angle: String(t.angle || ''),
@@ -224,4 +257,4 @@ ${avoid}
   return result;
 }
 
-module.exports = { suggestTopics, isSportsTopic };
+module.exports = { suggestTopics, isSportsTopic, normalizeTitleKey, makeDistinctTopicTitle };

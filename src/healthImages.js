@@ -59,6 +59,30 @@ function localDateStamp(value) {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+// 같은 날 같은 제목을 다시 작성해도 이전 글의 사진을 재사용하거나 덮어쓰지 않는다.
+// 현재 초안이 이미 쓰던 폴더는 재시도 때 그대로 사용하고, 다른 초안이 쓰는 폴더라면
+// "재작성-2", "재작성-3" 순서로 새 폴더를 만든다.
+function resolveDownloadDir(draftId, meta, title) {
+  if (meta?.imageDownloadDir) return path.resolve(meta.imageDownloadDir);
+
+  const baseDir = path.join(DOWNLOAD_ROOT, `${localDateStamp(meta?.createdAt)}-${title}`);
+  const usedByAnotherDraft = (candidate) => {
+    const resolved = path.resolve(candidate);
+    return store.listDrafts().some((draft) =>
+      draft.id !== draftId &&
+      draft.imageDownloadDir &&
+      path.resolve(draft.imageDownloadDir) === resolved
+    );
+  };
+
+  if (!fs.existsSync(baseDir) && !usedByAnotherDraft(baseDir)) return baseDir;
+  for (let number = 2; number < 100; number += 1) {
+    const candidate = `${baseDir}-재작성-${number}`;
+    if (!fs.existsSync(candidate) && !usedByAnotherDraft(candidate)) return candidate;
+  }
+  throw new Error('같은 제목의 새 이미지 폴더 이름을 만들지 못했습니다.');
+}
+
 function chooseCoreKeyword(meta, article) {
   const candidates = [
     ...(Array.isArray(meta?.topic?.keywords) ? meta.topic.keywords : []),
@@ -204,7 +228,7 @@ async function runComplete(draftId) {
   const keyword = chooseCoreKeyword(meta, article);
   const phrase = chooseCoverPhrase(article, keyword);
   const title = safeSegment(article.title || meta.title || meta.keyword, 72);
-  const targetDir = path.join(DOWNLOAD_ROOT, `${localDateStamp(meta.createdAt)}-${title}`);
+  const targetDir = resolveDownloadDir(draftId, meta, title);
   fs.mkdirSync(targetDir, { recursive: true });
   const placementRequired = meta.imagePlacementRequired === true && meta.savedAsDraft !== false;
   const finalStatus = meta.savedAsDraft === false || meta.status === 'published' ? 'published' : 'saved';
@@ -370,5 +394,6 @@ module.exports = {
   chooseCoreKeyword,
   chooseCoverPhrase,
   safeSegment,
+  resolveDownloadDir,
   isSquareCover,
 };
