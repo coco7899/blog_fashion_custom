@@ -576,7 +576,8 @@ function watchDraft(draftId, topicIndex = null) {
         $('stopBtn').hidden = true;
         resetTopicButtons();
         loadDrafts();
-        processQueue(); // 실패해도 다음 글감으로 진행
+        // 한 글의 이미지 생성·배치·2차 임시저장이 끝나기 전에는 다음 글로 넘어가지 않는다.
+        // 아래 이력에서 실패 단계만 재시도하면 완료 후 대기열이 다시 이어진다.
       }
     } catch {}
   }, 3000);
@@ -594,13 +595,36 @@ async function loadDrafts() {
   drafts.forEach((d) => {
     const div = document.createElement('div');
     div.className = 'draft';
-    const done = ['published', 'saved'].includes(d.status);
+    const done =
+      ['published', 'saved'].includes(d.status) &&
+      !d.imagesPending &&
+      !d.imagePlacementPending;
     const running = !done && d.status !== 'error';
     const tag = done ? 'tag-published' : d.status === 'error' ? 'tag-error' : 'tag-running';
-    const awaitingImageWork = d.status === 'saved' && d.imagesPending;
-    const tagText = awaitingImageWork ? '임시저장됨' : d.status === 'saved' ? '임시저장됨' : d.status === 'published' ? '발행됨' : d.status === 'error' ? '실패' : '진행 중';
-    const linkLabel = d.status === 'saved' ? '글쓰기 열기 →' : '글 보기 →';
-    const needsFullRetry = d.status === 'error' && (!d.articleAvailable || !d.imageCount);
+    const awaitingImageWork = Boolean(d.imagesPending);
+    const awaitingPlacement = Boolean(d.imagePlacementPending);
+    const tagText = d.imagePlacementOnlyError
+      ? '이미지 배치 재시도 필요'
+      : d.imageOnlyError
+      ? '이미지 재시도 필요'
+      : d.status === 'images'
+        ? awaitingPlacement && !awaitingImageWork
+          ? '네이버 이미지 배치 대기'
+          : '이미지 생성 중'
+        : awaitingImageWork
+          ? '이미지 생성 대기'
+          : d.status === 'saved'
+            ? '완료'
+            : d.status === 'published'
+              ? '발행됨'
+              : d.status === 'error'
+                ? '실패'
+                : '진행 중';
+    const linkLabel = d.savedAsDraft ? '글쓰기 열기 →' : '글 보기 →';
+    const placementRetry = d.status === 'error' && d.imagePlacementOnlyError;
+    const imageRetry = d.status === 'error' && d.imageOnlyError;
+    const needsFullRetry =
+      d.status === 'error' && !placementRetry && !imageRetry && (!d.articleAvailable || !d.imageCount);
     div.innerHTML = `
       <div>
         <div class="d-title"></div>
@@ -608,7 +632,7 @@ async function loadDrafts() {
       </div>
       <div class="d-actions">
         <span class="tag-status ${tag}">${tagText}</span>
-        ${d.status === 'error' && d.topic && !d.recovered ? `<button class="btn btn-primary btn-retry">${needsFullRetry ? '처음부터 재시도' : `${d.mode === 'publish' ? '발행' : '임시저장'} 재시도`}</button>` : ''}
+        ${d.status === 'error' && d.topic && !d.recovered ? `<button class="btn btn-primary btn-retry">${placementRetry ? '이미지 배치 재시도' : imageRetry ? '이미지부터 재시도' : needsFullRetry ? '처음부터 재시도' : `${d.mode === 'publish' ? '발행' : '임시저장'} 재시도`}</button>` : ''}
         ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
         ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
         ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
@@ -629,12 +653,22 @@ async function loadDrafts() {
     if (retryBtn) {
       retryBtn.onclick = async () => {
         const noun = d.mode === 'publish' ? '발행' : '임시저장';
-        const message = needsFullRetry
+        const message = placementRetry
+          ? '저장된 이미지는 그대로 두고 같은 네이버 임시글에 이미지 배치만 다시 시도할까요?'
+          : imageRetry
+          ? '네이버 1차 임시글은 그대로 두고 이미지를 다시 만든 뒤 자동 배치까지 이어서 진행할까요?'
+          : needsFullRetry
           ? `실패한 글감을 처음부터 다시 작성하고 이미지 자리를 준비한 후 ${noun}할까요?`
           : `작성된 글 그대로 ${noun}만 다시 시도할까요?`;
         if (!(await uiConfirm(message))) return;
         try {
-          const endpoint = needsFullRetry ? 'retry' : 'retry-publish';
+          const endpoint = placementRetry
+            ? 'retry-image-placement'
+            : imageRetry
+              ? 'retry-images'
+              : needsFullRetry
+                ? 'retry'
+                : 'retry-publish';
           await api(`/api/drafts/${d.id}/${endpoint}`, { method: 'POST', body: { mode: d.mode || 'draft' } });
           watchDraft(d.id);
         } catch (e) {

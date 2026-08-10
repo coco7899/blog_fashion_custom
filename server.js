@@ -10,6 +10,7 @@ const auth = require('./src/naverAuth');
 const collector = require('./src/collector');
 const topics = require('./src/topics');
 const pipeline = require('./src/pipeline');
+const healthImages = require('./src/healthImages');
 const scheduler = require('./src/scheduler');
 const shortform = require('./src/shortform');
 const tts = require('./src/tts');
@@ -361,6 +362,39 @@ app.post('/api/drafts/:id/retry-publish', async (req, res) => {
   res.json({ ok: true, draftId: id });
 });
 
+// 네이버 임시글은 그대로 두고 실패하거나 누락된 이미지 작업만 다시 실행한다.
+app.post('/api/drafts/:id/retry-images', (req, res) => {
+  const id = req.params.id;
+  const meta = store.getMeta(id);
+  const article = store.getArticle(id);
+  if (!meta) return res.status(404).json({ error: '초안을 찾을 수 없습니다.' });
+  if (!article) return res.status(400).json({ error: '작성된 글이 없습니다.' });
+  if (!meta.postUrl) return res.status(400).json({ error: '네이버 임시저장을 먼저 완료해야 합니다.' });
+  const work = meta.imagePlacementRequired
+    ? pipeline.completeHealthImagesAndPlacement(id, meta.visibility || 'public')
+    : healthImages.complete(id);
+  work.catch((error) => {
+    console.error(`[retry-images] ${id} 실패: ${error.message}`);
+  });
+  res.json({ ok: true, draftId: id });
+});
+
+// 로컬 이미지는 준비됐지만 네이버 배치만 실패한 경우, 같은 임시글을 다시 열어 배치 단계만 재시도한다.
+app.post('/api/drafts/:id/retry-image-placement', (req, res) => {
+  const id = req.params.id;
+  const meta = store.getMeta(id);
+  const article = store.getArticle(id);
+  if (!meta) return res.status(404).json({ error: '초안을 찾을 수 없습니다.' });
+  if (!article) return res.status(400).json({ error: '작성된 글이 없습니다.' });
+  if (!meta.postUrl || !meta.imageCount) {
+    return res.status(400).json({ error: '1차 임시저장과 이미지 생성을 먼저 완료해야 합니다.' });
+  }
+  pipeline.placeHealthImagesAndSave(id, meta.visibility || 'public').catch((error) => {
+    console.error(`[retry-image-placement] ${id} 실패: ${error.message}`);
+  });
+  res.json({ ok: true, draftId: id });
+});
+
 // 실패/중단된 초안을 처음부터 다시 실행 (저장된 글감·참고자료 재사용)
 app.post('/api/drafts/:id/retry', async (req, res) => {
   const id = req.params.id;
@@ -606,6 +640,20 @@ function cleanupOrphanDrafts() {
   const terminal = ['saved', 'published', 'error'];
   let n = 0;
   for (const d of store.listDrafts()) {
+    if (
+      d.autoImageWorkflow &&
+      d.articleAvailable &&
+      d.postUrl &&
+      (d.imagesPending || (d.imagePlacementRequired && d.imagePlacementPending))
+    ) {
+      store.updateDraft(d.id, {
+        status: d.savedAsDraft === false ? 'published' : 'images',
+        step: d.imagesPending ? '중단된 이미지 생성 자동 재개 대기' : '중단된 이미지 배치 자동 재개 대기',
+        imageOnlyError: false,
+        error: null,
+      });
+      continue;
+    }
     if (!terminal.includes(d.status)) {
       store.updateDraft(d.id, { status: 'error', step: '중단됨 (서버 재시작)', error: '작업이 중단되었습니다. 재시도하세요.' });
       n++;
@@ -638,5 +686,16 @@ function cleanupOrphanDrafts() {
   scheduler.start();
   app.listen(PORT, () => {
     console.log(`\n건강블로그자동화: http://localhost:${PORT}\n`);
+    // 컴퓨터나 서버가 이미지 생성·배치 도중 꺼져도 새 실행에서 자동으로 이어 간다.
+    setTimeout(() => {
+      Promise.all([pipeline.resumePendingHealthDrafts(), healthImages.resumePending()]).then(
+        ([placementCount, legacyCount]) => {
+          if (placementCount) {
+            console.log(`[setup] 미완료 건강 이미지 생성·배치 작업 ${placementCount}건 자동 재개 요청`);
+          }
+          if (legacyCount) console.log(`[setup] 기존 방식 이미지 생성 작업 ${legacyCount}건 자동 재개 요청`);
+        }
+      );
+    }, 1500);
   });
 })();

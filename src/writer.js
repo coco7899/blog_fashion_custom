@@ -13,7 +13,7 @@ const MIN_CHARS = 1500;         // 건강 전문 글의 권장 분량 하한
 const MIN_IMAGES = 4;           // 문제 상황·식재료·실천 장면을 포함한 이미지 슬롯
 const MAX_IMAGES = 6;           // 글 흐름상 필요한 경우 이미지 자리를 더 만들 수 있다.
 
-function buildPrompt(topic, refText, frame, retryNote) {
+function buildPrompt(topic, refText, frame) {
   const skill = skills.loadSkill('03-health-affiliate-blog');
   return `아래 건강 전문 스킬을 핵심 지침으로 삼아 사실 기반 생활 건강 정보 글을 작성하세요.
 
@@ -23,8 +23,9 @@ ${skill}
 
 【이 자동화 환경에 맞춘 조정 — 최우선】
 - 글감 선택은 이미 끝났습니다. 후보 제안 없이 곧바로 선택 주제 글쓰기를 실행하세요.
-- 이 뉴스 글 모드에는 제휴 상품 링크와 쇼핑커넥트 고지는 넣지 마세요. 마지막에는 독자가 자신의 반복 습관을 점검하고, 글 내용에 맞는 제품 후보를 기준에 따라 직접 고를 마음이 들도록 생활형 CTA를 쓰세요. 추천은 사용자가 제휴 여부와 링크 삽입을 직접 판단하기 위한 후보 안내일 뿐입니다. 처방약·일반의약품·치료 목적 제품은 추천하지 말고, 식재료·생활용품·기록 도구처럼 비처방 제품만 1개 추천하세요. "무조건 사야 한다"처럼 밀어붙이거나 치료 효과를 약속하지는 마세요.
-- 제품을 글의 해결책처럼 앞세우지 마세요. 먼저 오늘 먹어 볼 음식·식사 구성·생활습관·가벼운 운동 중 주제에 맞는 행동 2~3개를 제안하고, 마지막에 그 실천을 편하게 이어 가는 "이런 제품도 있다"는 보조 연결로 비처방 제품 후보 1개를 덧붙이세요. 기록 노트·물병을 반복하지 말고, 글의 생활 장면에서 실제로 쓰는 상품군으로 고르세요.
+- 이 뉴스 글 모드에는 제휴 상품 링크와 쇼핑커넥트 고지는 넣지 마세요. 마지막에는 독자가 글 내용에 맞는 행동을 바로 고를 수 있도록 생활형 CTA를 쓰세요. 추천은 사용자가 제휴 여부와 링크 삽입을 직접 판단하기 위한 후보 안내일 뿐입니다. 처방약·일반의약품·치료 목적 제품은 추천하지 말고 식재료나 생활용품 같은 비처방 제품만 1개 추천하세요. "무조건 사야 한다"처럼 밀어붙이거나 치료 효과를 약속하지는 마세요.
+- 기록·메모·수첩·며칠 적어 보기는 증상의 시간·횟수·변화가 판단이나 진료 상담에 실제로 필요한 주제에서만 제안하세요. 단순 식사, 음료 온도, 운동, 옷차림, 휴식처럼 바로 행동할 수 있는 주제에는 기록을 습관적으로 넣지 말고 해당 행동을 직접 안내하세요. 기록 장면 이미지도 같은 기준일 때만 사용하세요.
+- 제품을 글의 해결책처럼 앞세우지 마세요. 먼저 오늘 먹어 볼 음식·식사 구성·생활습관·가벼운 운동 중 주제에 맞는 행동 2~3개를 제안하고, 제품이 있다면 어떤 번거로움을 덜어 주는지 앞 문장에서 주제에 맞게 자연스럽게 설명하세요. "이런 실천을 더 편하게 이어 가는 제품도 있습니다"라는 고정 문장을 반복하지 마세요.
 - 이미지는 생성하지 않고 image 블록 위치와 장면 설명만 임시글에 표시합니다. 이미지 다운로드·생성 과정·ZIP·목록·표는 글에 쓰지 마세요.
 - 출처 제목·URL·출처 목록은 본문, 이미지 캡션, 해시태그에 넣지 마세요. 조사에 사용한 자료는 내부 기록으로만 남기며 독자가 읽는 글에는 표시하지 않습니다.
 - image desc/caption은 기사 속 건강 주제, 식재료, 생활 실천 장면과 직접 관련되게 쓰세요.
@@ -35,12 +36,12 @@ ${skill}
 3. 첫 일반 문단의 첫 2~4문장 안에 핵심 질문의 직접적인 답을 먼저 쓰세요. 그 다음에 공감할 상황과 이 글에서 확인할 기준을 연결하세요. 결론을 본문 끝까지 숨기지 마세요.
 3-1. 서론 바로 다음에는 굵은 제목 **이 글에서 확인할 핵심 N가지**와 번호 1~N의 짧은 요약을 넣으세요. 제목에서 약속한 숫자가 있으면 반드시 같은 숫자와 같은 판단 기준을 사용하세요. 이 요약은 목차처럼 독자가 전체 흐름을 한눈에 보고 AI 검색 요약도 핵심을 구분할 수 있게 3~5줄로 쓰세요.
 4. 소제목 5~7개 중 적어도 3개는 검색자가 실제로 할 법한 질문형으로 쓰세요. 각 질문형 소제목 바로 아래 첫 문장은 '반드시 그렇지는 않습니다', '먼저 확인해야 합니다'처럼 직접 답하고, 뒤이어 이유·근거·예외·실천 방법을 설명하세요.
-5. 건강 수치·효능·권장량·질병 정보는 참고자료 중 공공기관·전문학회·의료기관·원 연구자료로 확인된 내용만 단정적으로 쓰세요. 신문이나 블로그 자료는 생활 사례를 보완하는 용도로만 쓰고, 출처에 없는 내용은 추측하지 마세요. 자료의 발표 기관·날짜와 수치의 기준 단위(1회 제공량, 100g 등)를 함께 밝히세요.
+5. 건강 수치·효능·권장량·질병 정보는 참고자료 중 공공기관·전문학회·의료기관·원 연구자료로 내부 확인된 내용만 사용하세요. 신문이나 블로그 자료는 생활 사례를 보완하는 용도로만 쓰고, 출처에 없는 내용은 추측하지 마세요. 기관명·발표일·검토일·자료명을 본문에 인위적으로 넣지 말고, 수치가 꼭 필요할 때만 독자가 이해할 기준 단위(1회 제공량, 100g 등)를 자연스럽게 설명하세요.
 6. 대상과 예외를 구분하고, 질병 예방·치료 효과를 단정하지 마세요. 글 후반에는 핵심 답을 2~3문장으로 다시 정리하고 오늘 바로 할 수 있는 행동을 제시하세요.
 
 【글 작성 방식 — 생활 건강 정보】
 1. 첫 3문단 안에 독자가 겪는 구체적인 건강 생활 문제 하나를 보여주세요.
-2. 참고자료의 핵심은 2~4문단으로 새롭게 풀고 발표 기관과 날짜를 본문에 명시하세요.
+2. 공식 참고자료로 내부 확인한 핵심은 2~4문단의 자연스러운 정보성 설명으로 새롭게 풀고, 기관명·날짜·출처 표시는 본문에 넣지 마세요.
 3. 연구 결과를 모든 사람에게 적용되는 사실처럼 단정하지 말고, 질병 치료·예방 효과를 약속하지 마세요.
 4. 비용 없이 먼저 할 수 있는 실천 방법과 식재료·건강식품을 고를 때 확인할 기준을 함께 안내하세요.
 5. 잘 맞을 수 있는 사람과 알레르기·식사 제한 등 주의가 필요한 사람을 균형 있게 설명하세요.
@@ -49,8 +50,8 @@ ${skill}
 8. 나중에 이미지를 넣을 image 블록은 4~6개 사용하고 대표 이미지, 문제 상황, 식재료·건강식품, 실천 장면의 역할이 겹치지 않게 하세요. desc는 그대로 이미지 생성 프롬프트로 쓸 수 있을 만큼 구체적으로 작성하세요.
 9. 해시태그는 건강 키워드·생활 문제·식재료를 섞어 정확히 6개 작성하세요.
 10. "충격", "정체", "결국", "소름", "전부 공개"와 공포·과장 표현을 쓰지 마세요.
-11. 마지막 일반 문단은 요약으로 끝내지 말고, **반복되는 생활 문제 → 오늘 바로 해볼 점검 또는 준비 → 나에게 필요한 선택** 순서의 2~3문장 CTA로 마무리하세요. 예: 포장지의 1회 제공량 확인, 식사 기록 시작, 필요한 식재료를 미리 준비하기처럼 구체적인 행동을 제안하세요.
-12. 본문의 마지막 문단에는 먼저 음식·생활습관·가벼운 운동 중 오늘 할 행동을 2~3개 제안한 뒤, "이런 실천을 더 편하게 이어 가는 제품도 있습니다"처럼 자연스럽게 연결해 "이 글에 제휴하면 좋은 제품 후보: **제품명**"을 한 번 넣으세요. 제품은 주된 해결책이 아니라 보조 수단입니다. 바로 앞 본문과는 빈 줄 두 줄을 두어 분리되게 쓰세요. 이는 사용자가 실제 제휴 여부를 판단할 참고 후보이며, 자동 링크가 아닙니다. 링크·가격·할인·구매 후기·치료 효과는 쓰지 마세요. 측정 도구를 추천할 때는 진단·처방을 대신하지 않는다는 점을 함께 밝히세요. 해시태그 6개는 이 문단 다음, 글 전체의 맨 마지막에만 배치합니다.
+11. 마지막 행동 문단은 요약으로 끝내지 말고, **반복되는 생활 문제 → 오늘 바로 해볼 행동 → 필요하면 실천을 편하게 해 주는 도구의 쓰임** 순서의 2~3문장 CTA로 마무리하세요. 예: 음료를 충분히 식혀 천천히 마시기, 다음 식사 재료를 미리 준비하기처럼 주제에 바로 맞는 행동을 제안하세요. 기록은 증상 변화 비교가 핵심인 주제에서만 사용하세요.
+12. 행동 설명을 마친 뒤 별도의 마지막 paragraph 블록을 만들고, 정확히 "이 글에 제휴하면 좋은 제품 후보: **제품명**" 한 줄만 넣으세요. 바로 앞 행동 문단과는 빈 줄 두 줄로 분리합니다. 제품 설명이나 진단·치료 면책 문구를 이 제품 후보 줄 뒤에 붙이지 마세요. 의료 수치나 법적 판단에 쓰이는 측정 도구라면 필요한 주의 문구를 제품 후보 줄이 아니라 앞 행동 문단에 자연스럽게 설명하세요. 음료·조리 온도계 같은 생활용 온도 확인 도구에는 불필요한 진단 면책 문구를 붙이지 마세요. 해시태그 6개는 제품 후보 다음, 글 전체의 맨 마지막에만 배치합니다.
 
 【글감】
 제목: ${topic.title}
@@ -59,7 +60,6 @@ ${skill}
 
 【참고자료(뉴스·공식정보)】
 ${refText}
-${retryNote || ''}
 다음 JSON 형식으로만 출력:
 {
   "title": "핵심 키워드가 들어간 질문형 제목? 확인할 기준을 보여 주는 설명형 부제",
@@ -80,7 +80,8 @@ ${retryNote || ''}
     {"type": "image", "slot": 4, "caption": "건강한 활용 장면", "desc": "실생활에서 적용하는 구체적인 장면"},
     {"type": "heading", "text": "누가 더 주의해서 확인해야 할까요?"},
     {"type": "paragraph", "text": "알레르기, 복용 약, 식사 제한 등 주의가 필요한 사람과 한계를 설명합니다."},
-    {"type": "paragraph", "text": "오늘 바로 점검할 한 가지와 생활에 맞게 준비하거나 고를 기준을 연결합니다. 이 글에 제휴하면 좋은 제품 후보: **글 주제와 직접 연결되는 비처방 제품 1개**. 이는 사용자가 제휴 여부를 직접 판단할 참고 후보이며, 제품이 생활 실천에 쓰이는 이유와 필요한 안전 안내를 덧붙여 마무리합니다."}
+    {"type": "paragraph", "text": "오늘 바로 할 행동 2~3개를 안내하고, 도구가 필요하다면 어떤 번거로움을 덜어 주는지 자연스럽게 설명합니다."},
+    {"type": "paragraph", "text": "이 글에 제휴하면 좋은 제품 후보: **글 주제와 직접 연결되는 비처방 제품 1개**"}
   ]
 }
 각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. 위 예시는 image 4개이지만 글 흐름상 서로 다른 장면이 더 필요하면 slot 5와 slot 6까지 추가할 수 있습니다. 첫 image는 blocks 배열 맨 앞에 두고 나머지는 관련 단락 사이에 놓으세요. tags는 정확히 6개이며 모두 왼쪽 정렬입니다.`;
@@ -283,6 +284,7 @@ function getSafeProductCandidate(topic = {}) {
   if (/눈|시야|황반|안구|결명자/.test(subject)) return '온열 눈 찜질팩';
   if (/수면|불면|코골이/.test(subject)) return '차광 수면안대';
   if (/혈압|심장|맥박/.test(subject)) return '상완형 자동 혈압계';
+  if (/커피|카페인|뜨거운\s*음료|안면홍조|얼굴\s*열감/.test(subject)) return '디지털 음료 온도계';
   if (/변비|배변|장\s*건강|프로바이오틱스|유산균|복부팽만|방귀/.test(subject)) return '무가당 플레인 요거트 세트';
   if (/달걀|계란|식단|단백질|영양|다이어트|공복/.test(subject)) return '전자 주방저울';
   if (/질염|질\s*건강|분비물|비뇨/.test(subject)) return '순면 통풍 이너웨어';
@@ -326,29 +328,62 @@ function ensureKeySummary(article) {
   return article;
 }
 
-function makeRecommendationParagraph(topic) {
+function makeRecommendationBlocks(topic) {
   const product = getSafeProductCandidate(topic);
-  return `오늘은 이 글에서 확인한 생활 기준을 한 가지부터 적용해 보세요. 제품은 불편을 해결한다고 약속하는 수단이 아니라, 이미 정한 생활 습관을 더 편하게 이어 가는 보조 도구로 고르는 것이 좋습니다.\n\n\n이 글에 제휴하면 좋은 제품 후보: **${product}**. 이는 사용자가 제휴 여부를 직접 판단할 참고 후보이며, 진단·치료나 의료진의 안내를 대신하지는 않습니다.`;
+  return [
+    {
+      type: 'paragraph',
+      text: '오늘은 이 글에서 내 생활에 바로 맞는 행동 한 가지부터 적용해 보세요. 준비나 조절 과정에서 반복되는 번거로움이 있다면, 그 부분을 단순하게 도와주는 생활용품을 고르면 실천을 이어 가기 편합니다.',
+    },
+    { type: 'paragraph', text: `이 글에 제휴하면 좋은 제품 후보: **${product}**` },
+  ];
 }
 
-// AI가 후보 문구를 빠뜨려도 임시저장 전체가 실패하지 않도록 마지막 문단을 보완한다.
+function productCandidateFrom(text, topic) {
+  const match = String(text || '').match(/이\s*글에\s*제휴하면\s*좋은\s*제품(?:\s*후보)?\s*[:：]\s*\*\*([^*]+)\*\*/);
+  return String(match?.[1] || getSafeProductCandidate(topic)).trim();
+}
+
+function needsMeasurementCaution(product) {
+  return /혈압계|혈당계|산소포화도계|알코올\s*측정기/.test(String(product || ''));
+}
+
+// AI가 후보 문구를 빠뜨려도 임시저장 전체가 실패하지 않도록 보완하고,
+// 행동 설명과 제품 후보를 서로 다른 paragraph 블록으로 분리한다.
 function ensureHealthRecommendation(article, topic) {
   const blocks = article.blocks || [];
-  let lastParagraphIndex = -1;
-  blocks.forEach((block, index) => {
-    if (block.type === 'paragraph') lastParagraphIndex = index;
-  });
+  const candidateIndex = blocks.findIndex(
+    (block) => block.type === 'paragraph' && NEWS_AFFILIATE_RE.test(block.text || '')
+  );
 
-  if (lastParagraphIndex < 0) {
-    blocks.push({ type: 'paragraph', text: makeRecommendationParagraph(topic) });
-  } else {
-    const lastText = String(blocks[lastParagraphIndex].text || '');
-    if (NEWS_MEDICINE_RE.test(lastText)) {
-      blocks[lastParagraphIndex] = { ...blocks[lastParagraphIndex], text: makeRecommendationParagraph(topic) };
-    } else if (!NEWS_AFFILIATE_RE.test(lastText)) {
-      blocks.push({ type: 'paragraph', text: makeRecommendationParagraph(topic) });
-    }
+  if (candidateIndex < 0) {
+    blocks.push(...makeRecommendationBlocks(topic));
+    article.blocks = blocks;
+    return article;
   }
+
+  const originalText = String(blocks[candidateIndex].text || '');
+  const product = productCandidateFrom(originalText, topic);
+  if (NEWS_MEDICINE_RE.test(`이 글에 제휴하면 좋은 제품 후보: ${product}`)) {
+    blocks.splice(candidateIndex, 1, ...makeRecommendationBlocks(topic));
+    article.blocks = blocks;
+    return article;
+  }
+
+  const markerIndex = originalText.search(NEWS_AFFILIATE_RE);
+  let actionText = markerIndex >= 0 ? originalText.slice(0, markerIndex).trim() : '';
+  actionText = actionText
+    .replace(/이런\s*실천을\s*더\s*편하게\s*이어\s*가는\s*제품도\s*있습니다\.?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (needsMeasurementCaution(product) && !/진단|의료진|법적\s*판단/.test(actionText)) {
+    actionText = `${actionText}${actionText ? ' ' : ''}측정값만으로 진단이나 법적 안전 여부를 판단하지 말고 필요한 경우 의료진 또는 관련 기준을 우선하세요.`;
+  }
+
+  const replacement = [];
+  if (actionText) replacement.push({ ...blocks[candidateIndex], text: actionText });
+  replacement.push({ type: 'paragraph', text: `이 글에 제휴하면 좋은 제품 후보: **${product}**` });
+  blocks.splice(candidateIndex, 1, ...replacement);
 
   article.blocks = blocks;
   return article;
@@ -395,10 +430,36 @@ function inspectNewsArticle(article) {
     (block) => block.type === 'heading' && NEWS_QUESTION_HEADING_RE.test(block.text || '')
   ).length;
   if (questionHeadings < 3) issues.push(`질문형 소제목 ${questionHeadings}개(최소 3개 필요)`);
+  const affiliateIndex = paragraphs.findIndex((block) => NEWS_AFFILIATE_RE.test(block.text || ''));
+  const affiliateParagraph = affiliateIndex >= 0 ? paragraphs[affiliateIndex]?.text || '' : '';
+  const actionParagraph = affiliateIndex > 0 ? paragraphs[affiliateIndex - 1]?.text || '' : paragraphs.at(-1)?.text || '';
+  if (!NEWS_CTA_ACTION_RE.test(actionParagraph)) issues.push('마지막 생활형 CTA에 구체적인 행동 제안 없음');
+  if (!affiliateParagraph) issues.push('마지막 제휴 추천 제품 문구 없음');
+  if (NEWS_MEDICINE_RE.test(affiliateParagraph)) issues.push('제휴 추천 제품에 의약품 또는 복용 유도 표현 포함');
+
+  return issues;
+}
+
+// 원고를 두 번째로 AI에 보내 재작성시키지 않고, 저장 전에 꼭 필요한
+// 형식과 건강 안전 항목만 빠르게 확인한다. 글의 세부 문체·구성 기준은
+// 첫 작성 프롬프트에서 안내하며 이 검사 때문에 재작성 호출을 만들지 않는다.
+function inspectHealthMinimum(article) {
+  const m = measure(article);
+  const issues = [];
+  const paragraphs = (article.blocks || []).filter((block) => block.type === 'paragraph');
   const lastParagraph = paragraphs.at(-1)?.text || '';
-  if (!NEWS_CTA_ACTION_RE.test(lastParagraph)) issues.push('마지막 생활형 CTA에 구체적인 행동 제안 없음');
-  if (!NEWS_AFFILIATE_RE.test(lastParagraph)) issues.push('마지막 제휴 추천 제품 문구 없음');
-  if (NEWS_MEDICINE_RE.test(lastParagraph)) issues.push('제휴 추천 제품에 의약품 또는 복용 유도 표현 포함');
+
+  if (!String(article.title || '').trim()) issues.push('제목 없음');
+  if (!paragraphs.length) issues.push('본문 문단 없음');
+  if (m.images < MIN_IMAGES || m.images > MAX_IMAGES) {
+    issues.push(`이미지 슬롯 ${m.images}개(허용 ${MIN_IMAGES}~${MAX_IMAGES}개)`);
+  }
+  if (!Array.isArray(article.tags) || article.tags.length !== 6) {
+    issues.push(`해시태그 ${(article.tags || []).length}개(정확히 6개 필요)`);
+  }
+  if (NEWS_MEDICINE_RE.test(lastParagraph)) {
+    issues.push('제휴 추천 제품에 의약품 또는 복용 유도 표현 포함');
+  }
 
   return issues;
 }
@@ -428,40 +489,14 @@ async function writeArticle(topic, refs) {
     topic
   );
 
-  const m = measure(article);
-  const frameIssue = frame.check ? frame.check(article) : null;
-  const qaIssues = inspectNewsArticle(article);
-  if (frameIssue) qaIssues.push(frameIssue);
-  if (qaIssues.length) {
-    console.log(
-      `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
-    );
-    const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-생활 건강 문제 하나와 검색 질문 하나에 집중하고 기사 문장을 복사하지 마세요. 제목은 '핵심 키워드 + 질문 + 답변 범위'의 검색 질문형으로 쓰고, 첫 문단 첫 2~4문장 안에 질문의 직접 답을 제시하세요. 본문은 ${MIN_CHARS}~2,200자 안팎으로 쓰고, 발표 기관과 날짜, 비용 없이 실천할 방법, 선택 기준, 주의가 필요한 사람을 포함하세요. 질병 치료·예방을 단정하지 마세요. 소제목 5~7개 중 질문형을 최소 3개 쓰고, 각 질문형 소제목 아래 첫 문장은 직접 답으로 시작하세요. quote 최대 1개, 굵은 핵심 구절 2~4곳, 이미지 슬롯 4~6개, 해시태그 6개를 지키세요. 소제목끼리는 본문 없이 연속 배치하지 마세요. 소제목 바로 아래 핵심 quote를 두는 것은 허용합니다. 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하고 과장·공포 표현을 쓰지 마세요. 마지막 일반 문단은 반복 습관을 짚은 뒤 오늘 점검·준비·선택할 한 가지를 제안하고, "이 글에 제휴하면 좋은 제품 후보:" 뒤에 글과 직접 관련된 비처방 제품 1개를 추천하세요. 의약품·약 복용·치료 효과를 추천하거나 유도하지 마세요.\n`;
-    try {
-      let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
-      if (retry && retry.title && Array.isArray(retry.blocks)) {
-        retry = ensureHealthRecommendation(
-          ensureKeySummary(formatNewsParagraphs(simplifyNewsStructure(normalize(retry)))),
-          topic
-        );
-        const rm = measure(retry);
-        const retryIssues = inspectNewsArticle(retry);
-        const retryFrameIssue = frame.check ? frame.check(retry) : null;
-        if (retryFrameIssue) retryIssues.push(retryFrameIssue);
-        if (!retryIssues.length || (retryIssues.length < qaIssues.length && rm.chars >= m.chars)) {
-          article = retry;
-          console.log(`[writer] 뉴스 글 재작성 채택(글자 ${rm.chars}, 남은 QA ${retryIssues.length}건)`);
-        }
-      }
-    } catch (e) {
-      console.log(`[writer] 재작성 실패(원본 사용): ${e.message}`);
-    }
+  const advisoryIssues = inspectNewsArticle(article);
+  if (advisoryIssues.length) {
+    console.log(`[writer] 건강 원고 권장 기준 참고(${advisoryIssues.join(', ')}) — 재작성 없이 진행`);
   }
 
-  const finalIssues = inspectNewsArticle(article);
-  if (finalIssues.length) {
-    throw new Error(`건강 원고 최종 검수 미달: ${finalIssues.join(', ')}`);
+  const minimumIssues = inspectHealthMinimum(article);
+  if (minimumIssues.length) {
+    throw new Error(`건강 원고 필수 형식·안전 확인 실패: ${minimumIssues.join(', ')}`);
   }
 
   // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
@@ -1103,6 +1138,7 @@ module.exports = {
   suggestProductHooks,
   measure,
   inspectNewsArticle,
+  inspectHealthMinimum,
   ensureKeySummary,
   getTitleSummaryCount,
   ensureHealthRecommendation,

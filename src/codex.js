@@ -70,7 +70,7 @@ function checkCli() {
  * codex exec를 호출해 마지막 텍스트 응답을 받는다.
  * 프롬프트는 stdin으로 전달하고, 이미지가 있으면 공식 --image 옵션으로 첨부한다.
  */
-function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal } = {}) {
+function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal, json = false } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       const error = new Error('Codex 호출이 중지되었습니다.');
@@ -89,6 +89,7 @@ function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal } = {}) {
       '--cd',
       PROJECT_ROOT,
     ];
+    if (json) args.push('--json');
     const validImages = imagePaths.filter((file) => file && fs.existsSync(file));
     if (validImages.length) args.push('--image', ...validImages);
     args.push('-');
@@ -144,6 +145,31 @@ function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal } = {}) {
     child.stdin.write(String(prompt), 'utf8');
     child.stdin.end();
   });
+}
+
+// codex exec의 JSONL 이벤트를 받아 이미지 생성 스레드와 최종 메시지를 추적한다.
+// 일반 글쓰기 호출은 기존 invoke/invokeJson을 그대로 사용한다.
+async function invokeEvents(prompt, opts = {}) {
+  const raw = await invoke(prompt, { ...opts, json: true });
+  const events = String(raw || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try { return JSON.parse(line); } catch { return null; }
+    })
+    .filter(Boolean);
+  const started = events.find((event) => event.type === 'thread.started');
+  const messages = events
+    .filter((event) => event.type === 'item.completed' && event.item?.type === 'agent_message')
+    .map((event) => String(event.item.text || '').trim())
+    .filter(Boolean);
+  return {
+    raw,
+    events,
+    threadId: started?.thread_id || null,
+    finalText: messages[messages.length - 1] || '',
+  };
 }
 
 // 응답 텍스트에서 JSON 부분만 추출해 파싱
@@ -204,6 +230,7 @@ async function checkAuth(force = false) {
 module.exports = {
   checkCli,
   invoke,
+  invokeEvents,
   invokeJson,
   extractJson,
   checkAuth,

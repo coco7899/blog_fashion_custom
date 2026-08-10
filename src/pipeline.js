@@ -10,6 +10,7 @@ const publisher = require('./publisher');
 const brandconnect = require('./brandconnect');
 const aiimage = require('./aiimage');
 const imageZip = require('./imageZip');
+const healthImages = require('./healthImages');
 
 // 링크 분석 결과는 제목을 고르는 짧은 시간 동안만 메모리에 보관한다.
 // 네이버 계정 정보나 비밀번호는 저장하지 않는다.
@@ -69,7 +70,7 @@ function buildImageQueries(topic, article) {
 
 // 임시저장/발행 (파이프라인 마지막 단계 — 저장만 재시도할 때도 사용)
 // mode 기본값 'draft'(임시저장). 'publish'면 즉시 발행.
-async function publishAndNotify(draftId, article, judgments, visibility, mode = 'draft') {
+async function publishAndNotify(draftId, article, judgments, visibility, mode = 'draft', publishOptions = {}) {
   const savingLabel = mode === 'publish' ? '발행' : '임시저장';
   store.updateDraft(draftId, { status: 'publishing', step: `네이버 블로그 에디터에 작성/${savingLabel} 중` });
   // 출처: 참고한 뉴스 기사 링크 (글 맨 아래에 클릭 가능한 링크로 추가)
@@ -86,14 +87,135 @@ async function publishAndNotify(draftId, article, judgments, visibility, mode = 
     onStep: (s) => store.updateDraft(draftId, { step: s }),
     sources,
     products,
+    editExistingDraftTitle: publishOptions.editExistingDraftTitle || '',
+    insertCover: Boolean(publishOptions.insertCover),
+    strictImages: Boolean(publishOptions.strictImages),
+    expectedImageCount: publishOptions.expectedImageCount,
   });
   const { savedAsDraft, postUrl } = result;
+  if (publishOptions.intermediate) {
+    store.updateDraft(draftId, {
+      status: publishOptions.nextStatus || 'images',
+      step: publishOptions.nextStep || '1차 임시저장 완료 · 이미지 생성 준비',
+      postUrl,
+      savedAsDraft,
+      error: null,
+    });
+    console.log(`[pipeline] ${draftId} 1차 임시저장 완료: ${postUrl}`);
+    return publishOptions.returnResult ? result : postUrl;
+  }
   const doneStatus = savedAsDraft ? 'saved' : 'published';
-  const doneLabel = savedAsDraft ? '임시저장 완료' : '발행 완료';
-  store.updateDraft(draftId, { status: doneStatus, step: doneLabel, postUrl, savedAsDraft, error: null });
+  const doneLabel = publishOptions.doneLabel || (savedAsDraft ? '임시저장 완료' : '발행 완료');
+  store.updateDraft(draftId, {
+    status: doneStatus,
+    step: doneLabel,
+    postUrl,
+    savedAsDraft,
+    error: null,
+    ...(publishOptions.donePatch || {}),
+  });
   console.log(`[pipeline] ${draftId} ${doneLabel}: ${postUrl}`);
 
-  return postUrl;
+  return publishOptions.returnResult ? result : postUrl;
+}
+
+async function placeHealthImagesAndSave(draftId, visibility = 'public') {
+  const meta = store.getMeta(draftId);
+  const article = store.getArticle(draftId);
+  const judgments = store.getJudgments(draftId);
+  if (!meta || !article) throw new Error('이미지를 배치할 건강 글을 찾지 못했습니다.');
+  if (!meta.postUrl || meta.savedAsDraft === false) {
+    throw new Error('1차 임시저장된 건강 글만 이미지 자동 배치를 할 수 있습니다.');
+  }
+
+  const imageJudgments = judgments.filter((item) => item?.file);
+  const bodyImageCount = imageJudgments.filter((item) => item.slot !== 0).length;
+  if (!imageJudgments.some((item) => item.slot === 0) || bodyImageCount < 4) {
+    throw new Error('대표이미지 1장과 본문 이미지 4장 이상이 모두 준비되지 않았습니다.');
+  }
+
+  store.updateDraft(draftId, {
+    status: 'publishing',
+    step: '같은 네이버 임시글을 다시 열어 이미지 배치 중',
+    imagePlacementPending: true,
+    imagePlacementCompleted: false,
+    secondDraftSaved: false,
+    imagePlacementOnlyError: false,
+    imagePlacementError: null,
+    error: null,
+  });
+
+  try {
+    const result = await publishAndNotify(
+      draftId,
+      article,
+      judgments,
+      visibility || meta.visibility || 'public',
+      'draft',
+      {
+        editExistingDraftTitle: article.title,
+        insertCover: true,
+        strictImages: true,
+        expectedImageCount: imageJudgments.length,
+        returnResult: true,
+        doneLabel: `2차 임시저장 완료 · 대표이미지 1장 + 본문 이미지 ${bodyImageCount}장 배치`,
+        donePatch: {
+          imagePlacementPending: false,
+          imagePlacementCompleted: true,
+          secondDraftSaved: true,
+          insertedImageCount: imageJudgments.length,
+          imagePlacementOnlyError: false,
+          imagePlacementError: null,
+        },
+      }
+    );
+    return {
+      savedAsDraft: result.savedAsDraft,
+      updatedExistingDraft: result.updatedExistingDraft,
+      insertedImageCount: result.insertedImageCount,
+    };
+  } catch (error) {
+    store.updateDraft(draftId, {
+      status: 'error',
+      step: `이미지는 저장됐지만 네이버 자동 배치 실패: ${error.message}`,
+      imagePlacementPending: true,
+      imagePlacementCompleted: false,
+      secondDraftSaved: false,
+      imagePlacementOnlyError: true,
+      imagePlacementError: error.message,
+      imageOnlyError: false,
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+async function completeHealthImagesAndPlacement(draftId, visibility = 'public') {
+  const imageResult = await healthImages.complete(draftId);
+  const meta = store.getMeta(draftId) || {};
+  if (!meta.imagePlacementRequired || meta.savedAsDraft === false) return { images: imageResult };
+  const placement = await placeHealthImagesAndSave(draftId, visibility || meta.visibility || 'public');
+  return { images: imageResult, placement };
+}
+
+async function resumePendingHealthDrafts() {
+  const pending = store.listDrafts().filter(
+    (draft) =>
+      draft.autoImageWorkflow &&
+      draft.imagePlacementRequired &&
+      draft.articleAvailable &&
+      draft.postUrl &&
+      (draft.imagesPending || draft.imagePlacementPending)
+  );
+  for (const draft of pending) {
+    try {
+      if (draft.imagesPending) await completeHealthImagesAndPlacement(draft.id, draft.visibility || 'public');
+      else await placeHealthImagesAndSave(draft.id, draft.visibility || 'public');
+    } catch (error) {
+      console.error(`[pipeline] ${draft.id} 건강 이미지 작업 자동 재개 실패: ${error.message}`);
+    }
+  }
+  return pending.length;
 }
 
 /**
@@ -149,7 +271,7 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     });
 
     // 3. 수집한 건강 자료를 바탕으로 생활 건강정보 글을 작성한다.
-    setStep('writing', `건강정보 원고 작성·자체 검수 중 (참고자료 ${refs.length}건)`);
+    setStep('writing', `건강정보 원고 작성 중 (참고자료 ${refs.length}건)`);
     const article = await writer.writeArticle(healthTopic, refs);
     store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
@@ -158,7 +280,8 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       frameLabel: article.frameLabel,
     });
 
-    // 4. 이미지를 생성하지 않고, 나중에 사용자가 채울 이미지 자리와 장면 설명만 준비한다.
+    // 4. 네이버 첫 임시저장에는 이미지 자리와 장면 설명만 넣고,
+    // 저장 성공 직후 Codex 내장 이미지 생성 작업을 이어서 실행한다.
     setStep('images', '본문 이미지 자리와 추천 장면을 정리하는 중');
     const slots = article.blocks.filter((block) => block.type === 'image');
     if (slots.length < 4) throw new Error('건강 원고의 이미지 자리가 4개보다 적습니다.');
@@ -188,11 +311,40 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       imageSlotCount: slots.length,
       imagesPending: true,
       imageZipAvailable: false,
+      autoImageWorkflow: true,
+      imageOnlyError: false,
+      imagePlacementRequired: (opts.mode || 'draft') === 'draft',
+      imagePlacementPending: false,
+      imagePlacementCompleted: false,
+      secondDraftSaved: false,
+      imagePlacementOnlyError: false,
+      imagePlacementError: null,
     });
 
     // 5. 이미지 자리 안내를 본문 위치에 넣고 기사 출처와 함께 임시저장/발행한다.
-    const postUrl = await publishAndNotify(draftId, article, judgments, visibility, opts.mode || 'draft');
-    return { ok: true, postUrl };
+    const runMode = opts.mode || 'draft';
+    const postUrl = await publishAndNotify(draftId, article, judgments, visibility, runMode, {
+      intermediate: runMode === 'draft',
+      nextStatus: 'images',
+      nextStep: '1차 임시저장 완료 · 대표이미지와 본문 이미지 생성 준비',
+    });
+    // 6. 사용자의 추가 요청을 기다리지 않고 이미지를 생성·저장한 뒤,
+    // 같은 임시글을 다시 열어 자리 문구를 지우고 이미지를 넣어 2차 임시저장한다.
+    try {
+      const completed = await completeHealthImagesAndPlacement(draftId, visibility);
+      return { ok: true, postUrl, ...completed };
+    } catch (imageError) {
+      // 1차 임시글과 로컬 이미지가 있으면 그대로 보존하고 실패한 단계만 다시 시도할 수 있게 한다.
+      console.error(`[pipeline] ${draftId} 이미지 생성·배치 실패: ${imageError.message}`);
+      const latest = store.getMeta(draftId) || {};
+      return {
+        ok: true,
+        postUrl,
+        imagesPending: Boolean(latest.imagesPending),
+        imagePlacementPending: Boolean(latest.imagePlacementPending),
+        imageError: imageError.message,
+      };
+    }
   } catch (e) {
     const stopped = e.message && e.message.includes('중지');
     console.error(`[pipeline] ${draftId} ${stopped ? '중지' : '실패'}:`, e.message);
@@ -374,4 +526,12 @@ async function runProduct(draftId, visibility, opts = {}) {
   }
 }
 
-module.exports = { run, runProduct, prepareProductChoices, publishAndNotify };
+module.exports = {
+  run,
+  runProduct,
+  prepareProductChoices,
+  publishAndNotify,
+  placeHealthImagesAndSave,
+  completeHealthImagesAndPlacement,
+  resumePendingHealthDrafts,
+};
