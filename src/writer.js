@@ -38,8 +38,10 @@ ${writingSkill}
 - 11 스킬의 입력 모드 중 “실제 상품과 링크가 없는 건강정보 글”로 작성하세요. 제품 상세정보가 없으므로 특정 제품의 기능·소재·효과를 만들지 말고 제품 카테고리의 일반적인 비교 기준만 쓰세요.
 - 기록·메모·며칠 적어 보기는 증상의 시간·횟수·변화가 판단이나 진료 상담에 실제로 필요한 주제에서만 제안하세요. 기록이 필요해도 휴대전화 메모처럼 별도 구매가 필요 없는 방법을 짧게 안내하고, 기록 노트·건강 수첩·증상 일지·다이어리를 제품 후보나 제품 선택 소제목으로 만들지 마세요. 단순 식사, 음료 온도, 운동, 옷차림, 휴식처럼 바로 행동할 수 있는 주제에는 기록을 습관적으로 넣지 말고 해당 행동을 직접 안내하세요. 기록 장면 이미지도 같은 기준일 때만 사용하세요.
 - 제품을 글의 해결책처럼 앞세우지 마세요. 먼저 오늘 먹어 볼 음식·식사 구성·생활습관·가벼운 운동 중 주제에 맞는 행동 2~3개를 제안하고, 제품이 있다면 어떤 번거로움을 덜어 주는지 앞 문장에서 주제에 맞게 자연스럽게 설명하세요. "이런 실천을 더 편하게 이어 가는 제품도 있습니다"라는 고정 문장을 반복하지 마세요.
+- 제품 연결 직전에는 자연스러운 다리 문장을 두 단계로 쓰세요. 첫 문단에는 제품명을 쓰지 말고 생활관리 뒤에도 남는 구체적인 불편과 제품 없이 해볼 방법을 설명하세요. 다음 문단에서 그 방법을 반복할 때 생기는 준비·세척·휴대·보관의 번거로움을 짚은 뒤에만 제품 카테고리를 처음 언급하세요.
+- 제품 선택 소제목에 제품명을 바로 넣지 마세요. "욕실에서 이 관리를 편하게 이어가려면?", "식사 준비 시간을 줄이려면 무엇을 확인할까요?"처럼 앞에서 설명한 행동을 이어받는 생활 질문으로 쓰고, 소제목 아래 본문에서 필요 이유와 함께 제품명을 처음 제시하세요.
 - 첫 일반 문단은 독자가 실제로 겪는 구체적인 시간·장소·행동과 불편 1~2문장으로 시작하세요. 예: 아침 첫걸음은 괜찮아졌지만 저녁에 다시 아픈 상황, 몸살처럼 느껴져도 체온을 재지 않고 지나치는 상황. 이어지는 문단에서 검색 질문에 자연스럽게 답하세요. 직접 사용한 경험처럼 꾸미는 "저도 써봤는데" 문장은 쓰지 마세요.
-- 제품이 글의 행동과 자연스럽게 연결되는 경우에만 질문형 소제목 하나를 제품 선택 기준에 사용하세요. 제품이 왜 필요한지 생활 속 번거로움으로 설명한 뒤, 확인할 점 4~6개를 짧은 목록으로 제시하고 마지막에 비교해 보라는 문장으로 마무리하세요. 응급 신호나 진료 안내보다 제품 설명을 앞에 두지 마세요.
+- 제품이 글의 행동과 자연스럽게 연결되는 경우에만 질문형 소제목 하나를 제품 선택 기준에 사용하세요. 해결 방법 문단에서 해당 제품을 쓰는 구체적인 생활 장면과 필요성을 먼저 설명하고, 바로 다음에만 제품 소제목과 확인할 점 4~6개를 두세요. 위험 신호·진료 기준을 설명한 뒤 새로운 제품을 갑자기 꺼내지 말고, 마지막 정보 구간은 진료 기준으로 끝내세요.
 - 이미지는 생성하지 않고 image 블록 위치와 장면 설명만 임시글에 표시합니다. 이미지 다운로드·생성 과정·ZIP·목록·표는 글에 쓰지 마세요.
 - 출처 제목·URL·출처 목록은 본문, 이미지 캡션, 해시태그에 넣지 마세요. 조사에 사용한 자료는 내부 기록으로만 남기며 독자가 읽는 글에는 표시하지 않습니다.
 - image desc/caption은 기사 속 건강 주제, 식재료, 생활 실천 장면과 직접 관련되게 쓰세요.
@@ -59,7 +61,7 @@ ${writingSkill}
 3. **가능한 원인과 악화 요인**: 다음 구간에서 흔한 원인, 생활 습관, 환경 요인을 나누어 설명하세요. 증상만으로 원인을 하나로 확정하지 말고, 이 구간에 해결 방법을 미리 섞지 마세요.
 4. **해결 방법 및 생활 대책**: 그다음 구간에서 오늘 할 수 있는 행동을 우선순위대로 제시하세요. 행동마다 무엇을 어떻게 바꾸는지, 언제 멈추거나 조정해야 하는지를 구체적으로 쓰세요.
 5. **주의 신호와 진료 기준**: 마지막 정보 구간에서 지속 기간, 통증·붓기·발열, 기능 저하 등 주제에 맞는 상담·진료 기준을 분명히 구분하세요.
-6. 제품 선택 기준이 꼭 필요하면 해결 방법 뒤, 주의 신호보다 앞이나 뒤의 보조 구간으로만 넣으세요. 제품이 증상·원인·대책보다 먼저 나오면 안 됩니다.
+6. 제품 선택 기준이 꼭 필요하면 해결 방법 뒤의 보조 구간으로만 넣으세요. “남은 생활 불편 → 제품 없이 가능한 방법 → 반복할 때의 번거로움 → 제품이 단순하게 해 주는 과정 → 선택 기준”의 연결을 지키세요. 제품 구간 다음에는 주의 신호와 진료 기준이 와야 하며, 진료 기준 뒤에는 제품 소제목을 새로 만들지 마세요.
 7. 증상 중심이 아닌 식생활·운동·수면 주제는 같은 논리를 “생활 문제 → 현재 상태 확인 → 영향을 주는 요인 → 실천 대책 → 주의할 사람”으로 적용하세요.
 8. 앞에서 전체 내용을 개괄한 뒤 본문에서 똑같이 반복하지 마세요. 각 구간은 자신의 역할에 해당하는 새 정보만 담아야 합니다.
 
@@ -102,8 +104,9 @@ ${refText}
     {"type": "image", "slot": 3, "caption": "식재료 또는 건강식품", "desc": "글에서 설명한 식재료나 건강식품"},
     {"type": "heading", "text": "어떻게 관리하고 해결해야 할까요?"},
     {"type": "paragraph", "text": "비용 없이 먼저 실천할 해결 방법과 생활 대책을 우선순위대로 안내하고, 멈추거나 조정할 기준도 함께 설명합니다."},
-    {"type": "heading", "text": "생활용품은 무엇을 확인해 골라야 할까요?"},
-    {"type": "paragraph", "text": "생활 속에서 반복되는 어떤 번거로움을 덜어 주는지 먼저 설명합니다. 제품이 주제와 자연스럽게 맞을 때만 크기·사용 편의·관리 방법처럼 실제 비교할 기준 4~6개를 짧은 목록으로 안내합니다."},
+    {"type": "paragraph", "text": "제품명을 쓰지 않고 생활관리 뒤에도 남는 구체적인 불편과 집에 있는 도구로 먼저 해볼 방법을 설명합니다."},
+    {"type": "heading", "text": "이 관리를 일상에서 편하게 이어가려면?"},
+    {"type": "paragraph", "text": "앞의 방법을 반복할 때 생기는 준비·세척·휴대·보관의 번거로움을 먼저 짚고, 그 과정을 단순하게 해 주는 제품 카테고리를 자연스럽게 처음 언급합니다. 크기·사용 편의·관리 방법처럼 실제 비교할 기준 4~6개를 이어서 안내합니다."},
     {"type": "image", "slot": 4, "caption": "건강한 활용 장면", "desc": "실생활에서 적용하는 구체적인 장면"},
     {"type": "heading", "text": "어떤 신호가 있으면 진료를 받아야 할까요?"},
     {"type": "paragraph", "text": "지속 기간, 심한 통증·붓기·발열, 기능 저하처럼 주제에 맞는 위험 신호와 진료 기준을 설명합니다."},
@@ -463,6 +466,35 @@ function ensureHealthRecommendation(article, topic) {
   return article;
 }
 
+const HEALTH_RISK_HEADING_RE = /진료|응급|병원|의료진|위험\s*신호|주의.{0,6}신호/;
+const HEALTH_PRODUCT_HEADING_RE = /제품|생활용품|도구|선택|골라|고르|좌욕기|온도계|혈압계|요거트|주방저울|수면안대|쿠션/;
+
+// 제품 선택 구간이 진료·응급 기준 뒤에 생성되면 흐름이 끊긴다.
+// 제품 소제목과 바로 아래 선택 기준 문단을 해결 방법 뒤, 진료 기준 앞으로 옮긴다.
+function normalizeHealthProductFlow(article) {
+  const blocks = article.blocks || [];
+  const riskIndex = blocks.findIndex(
+    (block) => block.type === 'heading' && HEALTH_RISK_HEADING_RE.test(block.text || '')
+  );
+  const productHeadingIndex = blocks.findIndex(
+    (block) =>
+      block.type === 'heading' &&
+      HEALTH_PRODUCT_HEADING_RE.test(block.text || '') &&
+      !HEALTH_RISK_HEADING_RE.test(block.text || '')
+  );
+
+  if (riskIndex < 0 || productHeadingIndex < riskIndex) return article;
+
+  const moveCount = blocks[productHeadingIndex + 1]?.type === 'paragraph' ? 2 : 1;
+  const productSection = blocks.splice(productHeadingIndex, moveCount);
+  const newRiskIndex = blocks.findIndex(
+    (block) => block.type === 'heading' && HEALTH_RISK_HEADING_RE.test(block.text || '')
+  );
+  blocks.splice(newRiskIndex, 0, ...productSection);
+  article.blocks = blocks;
+  return article;
+}
+
 // 생성 결과를 코드에서도 한 번 더 점검한다. 의미 판단은 프롬프트에 맡기되,
 // 글자 수·금지어·소제목·이미지·근거 없는 전망처럼 명확한 위반은 재작성을 요청한다.
 function inspectNewsArticle(article) {
@@ -565,9 +597,11 @@ async function writeArticle(topic, refs) {
     throw new Error('글 작성 결과 형식이 올바르지 않습니다.');
   }
   article = lockSelectedTopicTitle(article, topic);
-  article = ensureHealthRecommendation(
-    ensureKeySummary(formatNewsParagraphs(normalizeHealthIntroduction(simplifyNewsStructure(normalize(article))))),
-    topic
+  article = normalizeHealthProductFlow(
+    ensureHealthRecommendation(
+      ensureKeySummary(formatNewsParagraphs(normalizeHealthIntroduction(simplifyNewsStructure(normalize(article))))),
+      topic
+    )
   );
 
   const advisoryIssues = inspectNewsArticle(article);
@@ -1230,6 +1264,7 @@ module.exports = {
   lockSelectedTopicTitle,
   getTitleSummaryCount,
   ensureHealthRecommendation,
+  normalizeHealthProductFlow,
   getSafeProductCandidate,
   wrapNewsLine,
   wrapProductLine,
