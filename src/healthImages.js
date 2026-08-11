@@ -172,11 +172,11 @@ async function renderCover(backgroundFile, destination, keyword, phrase) {
       body{font-family:Pretendard,"Malgun Gothic",sans-serif;background:#183b35}
       .cover{position:relative;width:${COVER_SIZE}px;height:${COVER_SIZE}px;background:url(data:image/png;base64,${background}) center/cover no-repeat}
       .cover:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(12,38,34,.86) 0%,rgba(12,38,34,.65) 43%,rgba(12,38,34,.12) 76%,rgba(12,38,34,.04) 100%)}
-      .copy{position:absolute;left:72px;top:0;bottom:0;width:500px;display:flex;flex-direction:column;justify-content:center;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.28)}
-      .eyebrow{font-size:23px;font-weight:650;letter-spacing:.12em;color:#d7f0dd;margin-bottom:22px}
-      .keyword{font-size:72px;line-height:1.1;font-weight:850;letter-spacing:-.055em;word-break:keep-all}
-      .line{width:72px;height:6px;border-radius:9px;background:#9bd2aa;margin:30px 0 24px}
-      .phrase{font-size:34px;line-height:1.4;font-weight:630;letter-spacing:-.025em;word-break:keep-all}
+      .copy{position:absolute;left:64px;top:0;bottom:0;width:570px;display:flex;flex-direction:column;justify-content:center;color:#fff;text-shadow:0 3px 18px rgba(0,0,0,.38)}
+      .eyebrow{font-size:26px;font-weight:700;letter-spacing:.12em;color:#d7f0dd;margin-bottom:24px}
+      .keyword{font-size:88px;line-height:1.06;font-weight:880;letter-spacing:-.06em;word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance}
+      .line{width:86px;height:7px;border-radius:9px;background:#9bd2aa;margin:32px 0 26px}
+      .phrase{font-size:46px;line-height:1.3;font-weight:700;letter-spacing:-.035em;word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance}
     </style></head><body><div class="cover"><div class="copy"><div class="eyebrow">생활 건강 확인</div><div class="keyword">${htmlEscape(keyword)}</div><div class="line"></div><div class="phrase">${htmlEscape(phrase)}</div></div></div></body></html>`);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     await page.screenshot({ path: destination, type: 'png' });
