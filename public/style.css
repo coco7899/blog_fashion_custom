@@ -73,6 +73,20 @@ input[type="text"], select {
 }
 #keyword { flex: 1; min-width: 200px; }
 
+.affiliate-product-field {
+  display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 5px 12px;
+  align-items: center; margin: 0 0 16px; padding: 14px 16px;
+  border: 1px solid #bde8cc; border-radius: 11px; background: #f3fcf7;
+}
+.affiliate-product-field label { font-size: 14px; font-weight: 800; color: #176a38; }
+.affiliate-product-field label span {
+  display: inline-block; margin-left: 4px; padding: 2px 6px; border-radius: 999px;
+  background: #dff6e8; color: #26834b; font-size: 10px; vertical-align: 1px;
+}
+.affiliate-product-field input { width: 100%; background: #fff; border-color: #9ed9b2; }
+.affiliate-product-field input:focus { outline: 2px solid rgba(3,199,90,.2); border-color: #03c75a; }
+.affiliate-product-field p { grid-column: 2; margin: 0; color: #5f7467; font-size: 12px; line-height: 1.45; }
+
 .status { font-size: 13px; color: #2563eb; margin-top: 10px; }
 .status.err { color: #c0392b; }
 
@@ -128,6 +142,8 @@ input[type="text"], select {
 }
 
 @media (max-width: 600px) {
+  .affiliate-product-field { grid-template-columns: 1fr; }
+  .affiliate-product-field p { grid-column: 1; }
   .product-hook-choice { padding: 12px 10px; }
   .product-hook-content strong { font-size: 13px; }
   .draft { align-items: flex-start; flex-direction: column; }

@@ -58,6 +58,13 @@ let loginPolling = false;
 let runningTopicIndex = null;        // 현재 실행 중인 글감 인덱스 (오렌지)
 const completedTopics = new Set();   // 이미 실행 완료한 글감 인덱스 (연회색)
 let runQueue = [];                   // 대기 중인 글감 인덱스 (순서대로 자동 처리)
+const queuedAffiliateProducts = new Map(); // 대기열에 넣을 당시 지정한 제휴상품
+
+function selectedAffiliateProduct() {
+  return String($('affiliateProductInput')?.value || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+$('affiliateProductInput').addEventListener('input', refreshTopicButtons);
 
 // 세션 파일은 있어도 실제 로그인이 만료됐을 수 있어, 유효성을 따로 확인해 배지에 반영한다.
 // (서버 verify는 10분 캐시라 자주 호출해도 부담이 적지만, 클라이언트도 2분 간격으로 throttle)
@@ -231,8 +238,10 @@ $('linkModeBtn').onclick = async () => {
   if (!/^https?:\/\//.test(url)) return alert('뉴스 기사 링크(https://...)를 붙여넣어 주세요.');
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
+  const affiliateProduct = selectedAffiliateProduct();
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
-  if (!(await uiConfirm(`이 기사 링크를 바탕으로 AI가 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}\n시작할까요?`))) return;
+  const productLine = affiliateProduct ? `\n제휴상품: ${affiliateProduct}` : '\n제휴상품: 주제에 맞게 자동 매칭';
+  if (!(await uiConfirm(`이 기사 링크를 바탕으로 AI가 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}${productLine}\n시작할까요?`))) return;
   const btn = $('linkModeBtn');
   btn.disabled = true;
   const st = $('newsModeStatus');
@@ -240,7 +249,7 @@ $('linkModeBtn').onclick = async () => {
   st.className = 'status';
   st.textContent = '기사를 확인하는 중...';
   try {
-    const data = await api('/api/run-link', { method: 'POST', body: { url, visibility, mode } });
+    const data = await api('/api/run-link', { method: 'POST', body: { url, visibility, mode, affiliateProduct } });
     st.textContent = `"${(data.title || '').slice(0, 40)}" 기사로 작성 시작 — 아래 진행 상황에서 확인하세요.`;
     watchDraft(data.draftId);
   } catch (e) {
@@ -256,6 +265,7 @@ $('clearTopicsBtn').onclick = async () => {
   if (!(await uiConfirm('찾아둔 글감 목록을 모두 삭제할까요?'))) return;
   currentSearch = null;
   runQueue = [];
+  queuedAffiliateProducts.clear();
   runningTopicIndex = null;
   completedTopics.clear();
   $('topicsList').innerHTML = '';
@@ -284,6 +294,7 @@ function renderTopics(data, visOverride, { scroll = true } = {}) {
   runningTopicIndex = null;
   completedTopics.clear();
   runQueue = [];
+  queuedAffiliateProducts.clear();
   const list = $('topicsList');
   list.innerHTML = '';
   data.topics.forEach((t, i) => {
@@ -354,10 +365,12 @@ async function restoreLatestTopics() {
 //  안전하게 순서대로 처리한다. 사용자는 여러 개를 눌러두고 자리를 비워도 된다.)
 async function startRun(topicIndex, visOverride) {
   if (!currentSearch) return;
-  if (completedTopics.has(topicIndex) || runningTopicIndex === topicIndex) return;
+  const affiliateProduct = selectedAffiliateProduct();
+  if ((completedTopics.has(topicIndex) && !affiliateProduct) || runningTopicIndex === topicIndex) return;
   // 대기 중인 글감을 다시 누르면 대기 취소
   if (runQueue.includes(topicIndex)) {
     runQueue = runQueue.filter((x) => x !== topicIndex);
+    queuedAffiliateProducts.delete(topicIndex);
     refreshTopicButtons();
     return;
   }
@@ -365,11 +378,16 @@ async function startRun(topicIndex, visOverride) {
   const visibility = visOverride || $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '네이버 블로그에 임시저장';
   const busy = runningTopicIndex !== null || runQueue.length > 0;
+  const productLine = affiliateProduct
+    ? `\n제휴상품: ${affiliateProduct}\n이 상품에 맞춰 글의 생활 장면과 선택 기준을 연결합니다.`
+    : '\n제휴상품: 주제에 맞게 자동 매칭';
   const msg = busy
-    ? `"${currentSearch.topics[topicIndex].title}"\n\n대기열에 추가합니다. 앞의 작업이 끝나면 이어서 ${actLabel}까지 자동 진행합니다.\n추가할까요?`
-    : `"${currentSearch.topics[topicIndex].title}"\n\n이 글감으로 AI가 글을 쓰고 ${actLabel}까지 자동 진행합니다.\n시작할까요?`;
+    ? `"${currentSearch.topics[topicIndex].title}"\n\n대기열에 추가합니다. 앞의 작업이 끝나면 이어서 ${actLabel}까지 자동 진행합니다.${productLine}\n추가할까요?`
+    : `"${currentSearch.topics[topicIndex].title}"\n\n이 글감으로 AI가 글을 쓰고 ${actLabel}까지 자동 진행합니다.${productLine}\n시작할까요?`;
   if (!(await uiConfirm(msg))) return;
+  if (completedTopics.has(topicIndex)) completedTopics.delete(topicIndex);
   runQueue.push(topicIndex);
+  queuedAffiliateProducts.set(topicIndex, affiliateProduct);
   refreshTopicButtons();
   processQueue(visOverride);
 }
@@ -379,6 +397,8 @@ async function processQueue(visOverride) {
   if (runningTopicIndex !== null) return; // 이미 하나 실행 중이면 대기
   if (!runQueue.length) return;
   const topicIndex = runQueue.shift();
+  const affiliateProduct = queuedAffiliateProducts.get(topicIndex) || '';
+  queuedAffiliateProducts.delete(topicIndex);
   runningTopicIndex = topicIndex;
   refreshTopicButtons();
   const visibility = visOverride || $('runVisibility').value;
@@ -386,7 +406,7 @@ async function processQueue(visOverride) {
   try {
     const { draftId } = await api('/api/run', {
       method: 'POST',
-      body: { searchId: currentSearch.searchId, topicIndex, visibility, mode },
+      body: { searchId: currentSearch.searchId, topicIndex, visibility, mode, affiliateProduct },
     });
     watchDraft(draftId, topicIndex);
   } catch (e) {
@@ -394,6 +414,7 @@ async function processQueue(visOverride) {
     if (/로그인/.test(e.message)) {
       runningTopicIndex = null;
       runQueue = [];
+      queuedAffiliateProducts.clear();
       refreshTopicButtons();
       loginValidity = { at: 0, expired: true, checking: false };
       refreshStatus();
@@ -417,8 +438,11 @@ async function runAllTopics() {
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
-  if (!(await uiConfirm(`글감 ${pending.length}개를 대기열에 넣고 하나씩 차례대로 ${actLabel}까지 자동 진행합니다.\n(동시가 아니라 안전하게 순서대로 처리됩니다)\n시작할까요?`))) return;
+  const affiliateProduct = selectedAffiliateProduct();
+  const productLine = affiliateProduct ? `\n제휴상품: ${affiliateProduct}` : '\n제휴상품: 글마다 자동 매칭';
+  if (!(await uiConfirm(`글감 ${pending.length}개를 대기열에 넣고 하나씩 차례대로 ${actLabel}까지 자동 진행합니다.\n(동시가 아니라 안전하게 순서대로 처리됩니다)${productLine}\n시작할까요?`))) return;
   runQueue.push(...pending);
+  pending.forEach((index) => queuedAffiliateProducts.set(index, affiliateProduct));
   refreshTopicButtons();
   processQueue();
 }
@@ -430,9 +454,14 @@ function refreshTopicButtons() {
     b.classList.remove('btn-green', 'btn-running', 'btn-done', 'btn-primary', 'btn-ghost', 'btn-queued');
     b.disabled = false;
     if (completedTopics.has(i)) {
-      b.disabled = true;
-      b.classList.add('btn-done');
-      b.innerHTML = '실행완료';
+      if (selectedAffiliateProduct()) {
+        b.classList.add('btn-primary');
+        b.innerHTML = '지정 상품으로<br>다시쓰기';
+      } else {
+        b.disabled = true;
+        b.classList.add('btn-done');
+        b.innerHTML = '실행완료';
+      }
     } else if (i === runningTopicIndex) {
       b.disabled = true;
       b.classList.add('btn-running');
@@ -533,6 +562,7 @@ $('stopBtn').onclick = async () => {
   // 폴링 중단 + 대기열 비우기 + 화면 초기화 (버튼 전부 흰색)
   watchingDraft = null;
   runQueue = [];
+  queuedAffiliateProducts.clear();
   resetProgressUI();
   resetTopicButtons();
   $('progressMsg').className = 'status err';
@@ -642,6 +672,7 @@ async function loadDrafts() {
     div.querySelector('.d-title').textContent = d.title || d.topic?.title || d.keyword;
     div.querySelector('.d-sub').textContent =
       `${new Date(d.createdAt).toLocaleString('ko-KR')} · ${d.keyword} · ${d.visibility === 'private' ? '비공개' : '공개'}` +
+      (d.affiliateProduct ? ` · 지정 제휴상품: ${d.affiliateProduct}` : ' · 제휴상품 자동 매칭') +
       (d.frameLabel ? ` · 구성: ${d.frameLabel}` : '') +
       (d.status === 'error' ? ` · ${d.error || ''}` : '');
     const previewBtn = div.querySelector('.btn-preview');

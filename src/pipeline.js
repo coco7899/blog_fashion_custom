@@ -253,10 +253,12 @@ async function run(draftId, search, topic, visibility, opts = {}) {
     store.updateDraft(draftId, {
       refs: refs.map((r) => ({ title: r.title, url: r.url, source: r.source, kind: r.kind })),
     });
+    const affiliateProduct = String(opts.affiliateProduct || topic.affiliateProduct || '').trim();
     const healthTopic = {
       ...topic,
       angle: withoutAffiliateAngle(topic.angle),
-      primaryProduct: undefined,
+      affiliateProduct: affiliateProduct || undefined,
+      primaryProduct: affiliateProduct || undefined,
       productReason: undefined,
       productKeywords: undefined,
     };
@@ -267,7 +269,9 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       healthPlan: {
         problem: healthTopic.problem || '',
         action: healthTopic.action || '',
+        affiliateProduct: affiliateProduct || '',
       },
+      affiliateProduct: affiliateProduct || undefined,
     });
 
     // 3. 수집한 건강 자료를 바탕으로 생활 건강정보 글을 작성한다.

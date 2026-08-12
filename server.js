@@ -132,11 +132,17 @@ app.delete('/api/topics', (req, res) => {
 // ── 수동 실행: 글감 선택 → 파이프라인 (임시저장 또는 발행) ────
 app.post('/api/run', async (req, res) => {
   const { searchId, topicIndex, visibility } = req.body || {};
+  const affiliateProduct = String((req.body && req.body.affiliateProduct) || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
   const mode = req.body && req.body.mode === 'publish' ? 'publish' : 'draft';
   const search = store.getSearch(searchId);
   if (!search) return res.status(400).json({ error: '검색 세션을 찾을 수 없습니다. 글감을 다시 찾아주세요.' });
-  const topic = search.topics && search.topics[topicIndex];
-  if (!topic) return res.status(400).json({ error: '글감을 찾을 수 없습니다.' });
+  const sourceTopic = search.topics && search.topics[topicIndex];
+  if (!sourceTopic) return res.status(400).json({ error: '글감을 찾을 수 없습니다.' });
+  const topic = { ...sourceTopic, affiliateProduct: affiliateProduct || undefined };
 
   const login = await auth.verify();
   if (!login.loggedIn) {
@@ -150,10 +156,12 @@ app.post('/api/run', async (req, res) => {
     topicIndex,
     visibility: visibility === 'private' ? 'private' : 'public',
     mode,
+    affiliateProduct: affiliateProduct || undefined,
   });
   // 백그라운드 실행
   pipeline.run(meta.id, search, topic, meta.visibility, {
     mode,
+    affiliateProduct: affiliateProduct || undefined,
   });
   res.json({ draftId: meta.id });
 });
@@ -217,6 +225,11 @@ app.post('/api/run-link', async (req, res) => {
   const url = String((req.body && req.body.url) || '').trim();
   const visibility = req.body && req.body.visibility === 'private' ? 'private' : 'public';
   const mode = req.body && req.body.mode === 'publish' ? 'publish' : 'draft';
+  const affiliateProduct = String((req.body && req.body.affiliateProduct) || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
   if (!/^https?:\/\/.+/.test(url)) {
     return res.status(400).json({ error: '올바른 뉴스 기사 URL을 입력하세요. (https://... )' });
   }
@@ -246,10 +259,12 @@ app.post('/api/run-link', async (req, res) => {
       angle: '이 뉴스를 바탕으로 사실을 확인해 독자에게 유용한 블로그 글로 재구성',
       refs: [0],
       keywords: [],
+      affiliateProduct: affiliateProduct || undefined,
     };
-    const meta = store.createDraft({ keyword: '링크 글쓰기', topic, visibility, mode, sourceUrl: url });
+    const meta = store.createDraft({ keyword: '링크 글쓰기', topic, visibility, mode, sourceUrl: url, affiliateProduct: affiliateProduct || undefined });
     pipeline.run(meta.id, { ...search, id: searchId }, topic, visibility, {
       mode,
+      affiliateProduct: affiliateProduct || undefined,
     }).catch((error) => {
       console.error('[run-link] 백그라운드 실행 실패:', error.message);
       store.updateDraft(meta.id, { status: 'error', step: '실패: ' + error.message, error: error.message });
@@ -426,7 +441,7 @@ app.post('/api/drafts/:id/retry', async (req, res) => {
   if (!sources.length) return res.status(400).json({ error: '재사용할 참고자료가 없어 글감을 다시 찾아야 합니다.' });
   const search = { keyword: meta.keyword, sources };
   const topic = Object.assign({}, meta.topic, { refs: sources.map((_, i) => i) });
-  pipeline.run(id, search, topic, meta.visibility || 'public', { mode });
+  pipeline.run(id, search, topic, meta.visibility || 'public', { mode, affiliateProduct: meta.affiliateProduct || meta.topic?.affiliateProduct });
   res.json({ ok: true, draftId: id });
 });
 
