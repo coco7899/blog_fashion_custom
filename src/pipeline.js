@@ -26,7 +26,8 @@ async function prepareProductChoices(productUrl) {
   const product = resolved.product;
   const detail = resolved.detail || {};
   if (!product || !product.name) throw new Error('상품 정보를 확인하지 못했습니다. 링크를 확인해주세요.');
-  const choices = await writer.suggestProductHooks(product, detail);
+  const titlePlan = await writer.suggestProductHooks(product, detail);
+  const choices = titlePlan.choices;
   const planId = crypto.randomUUID();
   productPlans.set(planId, {
     createdAt: now,
@@ -35,11 +36,15 @@ async function prepareProductChoices(productUrl) {
     link: resolved.link || productUrl,
     detail,
     choices,
+    recommendedIndex: titlePlan.recommendedIndex,
+    recommendationReason: titlePlan.recommendationReason,
   });
   return {
     planId,
     product: { name: product.name, image: product.image || (detail.images || [])[0] || '' },
     choices,
+    recommendedIndex: titlePlan.recommendedIndex,
+    recommendationReason: titlePlan.recommendationReason,
   };
 }
 

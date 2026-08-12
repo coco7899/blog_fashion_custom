@@ -158,7 +158,7 @@ app.post('/api/run', async (req, res) => {
   res.json({ draftId: meta.id });
 });
 
-// ── 상품 링크 분석: 구매 고민이 담긴 후킹 제목 3개를 먼저 제안 ──
+// ── 상품 링크 분석: 고민형 3개 + 키워드형 1개 제목을 먼저 제안 ──
 app.post('/api/product-hooks', async (req, res) => {
   const url = String((req.body && req.body.url) || '').trim();
   if (!/^https?:\/\/.+/.test(url)) {
@@ -186,7 +186,7 @@ app.post('/api/run-product', async (req, res) => {
       return res.status(400).json({ error: '올바른 상품 링크(https://...)를 입력하세요.' });
     }
     if (url && !planId) {
-      return res.status(400).json({ error: '먼저 구매 고민 제목 3개를 받은 뒤 하나를 선택해주세요.' });
+      return res.status(400).json({ error: '먼저 제목 뽑기로 추천 제목을 받은 뒤 하나를 선택해주세요.' });
     }
 
     const login = await auth.verify();

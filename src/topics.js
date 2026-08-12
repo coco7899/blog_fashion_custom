@@ -1,6 +1,7 @@
 // 수집된 뉴스/블로그 목록 → Codex로 글감 후보 생성
 // (blog_fashion-01 "연예인 뉴스 블로그" 스킬 명세 반영: 분야 확대·최신성·팩트체크·추천)
 const codex = require('./codex');
+const { isTitleTooSimilarToAny } = require('./titleSimilarity');
 
 // 글감으로 쓸 수 있는 뉴스의 최대 나이(일). 이보다 오래된 기사는 후보에서 제외한다.
 // 검색 결과에 몇 년 전 기사가 섞여 들어와 "옛날 소식"이 글감으로 뽑히는 것을 막는다.
@@ -8,18 +9,8 @@ const RECENT_PRIORITY_DAYS = 2;
 const MAX_SOURCE_AGE_DAYS = 7;
 const SPORTS_RE = /스포츠|야구|축구|농구|배구|골프|테니스|KBO|MLB|K리그|프리미어리그|올림픽|월드컵|선수|감독|트레이드|이적시장|경기\s*(결과|일정|분석)/i;
 
-function normalizeHeadline(value) {
-  return String(value || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/&(?:quot|apos|amp);/g, '')
-    .replace(/[^\p{L}\p{N}]+/gu, '');
-}
-
 function isCopiedSourceTitle(title, sources) {
-  const normalized = normalizeHeadline(title);
-  if (!normalized) return false;
-  return (sources || []).some((source) => normalizeHeadline(source && source.title) === normalized);
+  return isTitleTooSimilarToAny(title, sources);
 }
 
 async function rewriteCopiedTopicTitles(topics, sources, signal) {
@@ -28,7 +19,7 @@ async function rewriteCopiedTopicTitles(topics, sources, signal) {
     .filter((index) => index >= 0);
   if (!copiedIndexes.length) return topics;
 
-  console.log(`[topics] 기사 제목과 같은 글감 ${copiedIndexes.length}건 재작성`);
+  console.log(`[topics] 기사 제목과 지나치게 유사한 글감 ${copiedIndexes.length}건 재작성`);
   const copiedTopics = copiedIndexes.map((index) => ({
     index,
     title: String(topics[index].title || ''),
@@ -36,12 +27,14 @@ async function rewriteCopiedTopicTitles(topics, sources, signal) {
     angle: String(topics[index].angle || ''),
   }));
   const sourceTitles = (sources || []).map((source) => String(source && source.title || '')).filter(Boolean);
-  const rewritten = await codex.invokeJson(`아래 글감 제목은 뉴스 또는 블로그 원문 제목과 같습니다.
+  const rewritten = await codex.invokeJson(`아래 글감 제목은 뉴스 또는 블로그 원문 제목과 지나치게 유사합니다.
 확인된 사실과 글의 관점은 유지하면서 네이버 홈판용 제목으로 다시 작성하세요.
 
 규칙:
 - 원문 제목을 그대로 복사하지 마세요.
 - 공백, 따옴표, 쉼표, 특수기호만 바꾼 제목도 같은 제목으로 봅니다.
+- 원문 제목의 앞 절·핵심 구절·어순을 유지한 채 뒷부분만 바꾸는 것도 금지합니다.
+- 같은 사실을 다루더라도 글의 독자 관점이나 읽을 이유가 먼저 보이는 완전히 새로운 문장 구조를 사용하세요.
 - 사실에 없는 장면·감정·분위기를 새로 만들지 마세요.
 - 더 문학적이거나 모호하게 쓰지 말고, 무슨 소식인지 직접 이해되게 쓰세요.
 - 각 항목의 index는 그대로 유지하세요.

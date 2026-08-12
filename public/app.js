@@ -59,7 +59,7 @@ let runningTopicIndex = null;        // 현재 실행 중인 글감 인덱스 (�
 let runningTopicSearchId = null;     // 실행을 시작한 검색 목록 ID (새 목록의 같은 번호와 혼동 방지)
 const completedTopics = new Set();   // 이미 실행 완료한 글감 인덱스 (연회색)
 let runQueue = [];                   // 대기 중인 글감 인덱스 (순서대로 자동 처리)
-let productHookPlan = null;          // 상품 링크 분석 후 사용자가 고를 고민 제목 3개
+let productHookPlan = null;          // 상품 링크 분석 후 사용자가 고를 고민형 3개 + 키워드형 1개
 
 // 세션 파일은 있어도 실제 로그인이 만료됐을 수 있어, 유효성을 따로 확인해 배지에 반영한다.
 // (서버 verify는 10분 캐시라 자주 호출해도 부담이 적지만, 클라이언트도 2분 간격으로 throttle)
@@ -314,7 +314,7 @@ $('productLinkBtn').onclick = async () => {
   const st = $('productModeStatus');
   st.hidden = false;
   st.className = 'status';
-  st.textContent = '상품을 살 때 생기는 고민을 찾고 있어요...';
+  st.textContent = '제품을 분석해 고민형·키워드형 제목을 찾고 있어요...';
   clearProductHookChoices();
   try {
     const data = await api('/api/product-hooks', { method: 'POST', body: { url } });
@@ -323,12 +323,19 @@ $('productLinkBtn').onclick = async () => {
     box.hidden = false;
     const heading = document.createElement('div');
     heading.className = 'product-hook-heading';
-    heading.textContent = `${data.product?.name || '이 상품'}을 찾는 사람의 고민 3가지예요. 하나를 골라주세요.`;
+    heading.textContent = `${data.product?.name || '이 상품'}에 맞는 제목 4개를 찾았어요. 하나를 골라주세요.`;
     box.appendChild(heading);
     data.choices.forEach((choice, index) => {
+      if (index === 0 || index === 3) {
+        const group = document.createElement('div');
+        group.className = `product-hook-group ${index === 3 ? 'keyword' : 'concern'}`;
+        group.textContent = index === 3 ? '🔎 키워드 기반 추천 1개' : '💭 고민 제목 3개';
+        box.appendChild(group);
+      }
       const choiceBtn = document.createElement('button');
       choiceBtn.type = 'button';
-      choiceBtn.className = 'product-hook-choice';
+      const isRecommended = index === data.recommendedIndex;
+      choiceBtn.className = `product-hook-choice${choice.type === 'keyword' ? ' keyword' : ''}${isRecommended ? ' recommended' : ''}`;
       const number = document.createElement('span');
       number.className = 'product-hook-number';
       number.textContent = String(index + 1);
@@ -336,19 +343,34 @@ $('productLinkBtn').onclick = async () => {
       content.className = 'product-hook-content';
       const title = document.createElement('strong');
       title.textContent = choice.title;
+      if (isRecommended) {
+        const badge = document.createElement('em');
+        badge.className = 'product-hook-badge';
+        badge.textContent = 'AI 최적 추천';
+        content.appendChild(badge);
+      }
       const concern = document.createElement('span');
-      concern.textContent = `고민: ${choice.concern}`;
+      concern.textContent = `${choice.type === 'keyword' ? '검색 의도' : '고민'}: ${choice.concern}`;
       const situation = document.createElement('span');
       situation.textContent = `선택 상황: ${choice.situation}`;
+      const keywords = document.createElement('span');
+      keywords.className = 'product-hook-keywords';
+      keywords.textContent = choice.type === 'keyword' && choice.keywords?.length
+        ? `핵심 키워드: ${choice.keywords.join(' · ')}`
+        : '';
       const purchaseReason = document.createElement('span');
       purchaseReason.className = 'product-hook-reason';
       purchaseReason.textContent = `구매 이유: ${choice.purchaseReason}`;
-      content.append(title, concern, situation, purchaseReason);
+      content.append(title, concern, situation);
+      if (keywords.textContent) content.appendChild(keywords);
+      content.appendChild(purchaseReason);
       choiceBtn.append(number, content);
       choiceBtn.onclick = () => runSelectedProductHook(index, choice);
       box.appendChild(choiceBtn);
     });
-    st.textContent = '글로 쓰고 싶은 고민 제목을 선택해주세요.';
+    st.textContent = data.recommendationReason
+      ? `AI 추천 이유: ${data.recommendationReason}`
+      : '글로 쓰고 싶은 제목을 선택해주세요.';
   } catch (e) {
     st.className = 'status err';
     st.textContent = '실패: ' + e.message;
@@ -358,7 +380,7 @@ $('productLinkBtn').onclick = async () => {
 };
 
 async function runSelectedProductHook(selectedIndex, choice) {
-  if (!productHookPlan) return alert('상품 링크로 고민 제목을 다시 받아주세요.');
+  if (!productHookPlan) return alert('상품 링크를 넣고 제목 뽑기를 다시 눌러주세요.');
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
@@ -369,7 +391,7 @@ async function runSelectedProductHook(selectedIndex, choice) {
   buttons.forEach((button) => { button.disabled = true; });
   st.hidden = false;
   st.className = 'status';
-  st.textContent = '선택한 고민과 제목으로 글을 작성하는 중입니다...';
+  st.textContent = '선택한 제목 전략으로 글을 작성하는 중입니다...';
   try {
     const data = await api('/api/run-product', {
       method: 'POST',

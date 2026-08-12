@@ -2,6 +2,7 @@
 const codex = require('./codex');
 const skills = require('./skills');
 const frames = require('./frames');
+const { isTitleTooSimilarToAny } = require('./titleSimilarity');
 
 const BLOCK_TYPES = new Set(['heading', 'paragraph', 'quote', 'divider', 'image']);
 
@@ -56,6 +57,7 @@ ${skill}
 9. 이미지는 **최소 1장, 기본 2장 이상, 최대 4장** 사용합니다. 첫 번째 image 블록은 어떤 글보다도 앞에 두어 본문 상단 대표 이미지로 사용하세요. 두 번째부터는 해당 사진과 직접 관련된 내용이 시작되거나 마무리되는 단락 사이에 배치하세요. 서로 다른 장면이나 인물을 보여 주는 관련 기사 사진이 더 있으면 3~4장까지 늘릴 수 있습니다. 같은 사진의 단순 크기·자르기 변형이나 내용과 무관한 사진으로 수를 채우지 말고, 실제로 관련된 적절한 후보가 1장뿐일 때만 최종 게시 사진을 1장으로 줄이세요.
 10. 본문은 공백 포함 **최소 800자 이상** 쓰세요. 확인된 내용이 충분하면 더 길게 쓰되 분량을 채우려고 사실·표현을 반복하지 마세요.
 11. 제목은 무슨 소식인지, 무엇이 새롭거나 달라졌는지 바로 보이게 쓰세요. 인물 이름을 무조건 맨 앞에 두지 말고 기사 제목이나 검색어를 나열하지 마세요.
+   - 참고자료 제목의 앞 절, 핵심 구절, 어순을 그대로 가져와 뒷부분만 바꾸지 마세요. 같은 사실을 쓰더라도 블로그에서 짚을 관점이 먼저 보이도록 완전히 새 문장으로 구성하세요.
    - 사용자가 글감 목록에서 고른 제목은 이미 홈판용으로 구성된 최종 제목입니다. 더 감성적이거나 문학적인 문장으로 다시 만들지 말고 그대로 사용하세요.
    - 핵심 사실이 분명하고 자연스럽다면 뉴스형 문장 구조라는 이유만으로 억지로 바꾸지 마세요.
    - "촛불 앞", "전한 근황", "시선이 머문", "여운을 남긴"처럼 참고자료에 없는 장면·감정을 덧붙이지 마세요.
@@ -274,7 +276,7 @@ const NEWS_PREDICTION_RE =
 
 // 생성 결과를 코드에서도 한 번 더 점검한다. 의미 판단은 프롬프트에 맡기되,
 // 글자 수·금지어·소제목·이미지·근거 없는 전망처럼 명확한 위반은 재작성을 요청한다.
-function inspectNewsArticle(article) {
+function inspectNewsArticle(article, refs = []) {
   const m = measure(article);
   const text = (article.blocks || []).map((block) => block.text || '').join(' ');
   const issues = [];
@@ -291,6 +293,7 @@ function inspectNewsArticle(article) {
     (blocks[index - 1].type === 'quote' || blocks[index - 1].type === 'heading')
   )) issues.push('강조 블록이 연속으로 배치됨');
   if (NEWS_TITLE_FORBIDDEN_RE.test(article.title || '')) issues.push('제목 금지 표현 포함');
+  if (isTitleTooSimilarToAny(article.title, refs)) issues.push('기사 제목과 지나치게 유사');
   if (NEWS_TITLE_FORBIDDEN_RE.test(text)) issues.push('본문 금지 표현 포함');
   if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
   if (!(article.blocks || []).some((block) => block.type === 'paragraph')) issues.push('본문 문단 없음');
@@ -332,7 +335,7 @@ async function writeArticle(topic, refs) {
 
   const m = measure(article);
   const frameIssue = frame.check ? frame.check(article) : null;
-  const qaIssues = inspectNewsArticle(article);
+  const qaIssues = inspectNewsArticle(article, refs);
   if (frameIssue) qaIssues.push(frameIssue);
   if (qaIssues.length) {
     console.log(
@@ -348,7 +351,7 @@ async function writeArticle(topic, refs) {
           topic
         );
         const rm = measure(retry);
-        const retryIssues = inspectNewsArticle(retry);
+        const retryIssues = inspectNewsArticle(retry, refs);
         const retryFrameIssue = frame.check ? frame.check(retry) : null;
         if (retryFrameIssue) retryIssues.push(retryFrameIssue);
         if (!retryIssues.length || (retryIssues.length < qaIssues.length && rm.chars >= m.chars)) {
@@ -359,6 +362,10 @@ async function writeArticle(topic, refs) {
     } catch (e) {
       console.log(`[writer] 재작성 실패(원본 사용): ${e.message}`);
     }
+  }
+
+  if (isTitleTooSimilarToAny(article.title, refs)) {
+    throw new Error('기사 제목과 충분히 다른 블로그 제목을 만들지 못했습니다. 글감을 다시 선택해주세요.');
   }
 
   // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
@@ -741,6 +748,8 @@ ${skill}
 
 ${selectedHook ? `【사용자가 고른 고민과 제목 — 다른 제목으로 바꾸지 말 것】
 - 최종 제목: ${selectedHook.title}
+- 제목 전략: ${selectedHook.type === 'keyword' ? '키워드 기반 추천' : '구매 고민 기반'}
+- 핵심 키워드: ${(selectedHook.keywords || []).join(', ') || '없음'}
 - 구매자가 가진 고민: ${selectedHook.concern}
 - 이 상품을 찾는 상황: ${selectedHook.situation}
 - 이 방향에서의 핵심 구매 이유: ${selectedHook.purchaseReason || ''}
@@ -890,12 +899,13 @@ async function writeProductArticle(product, detail, selectedHook = null, options
 }
 
 /**
- * 상품 링크를 받은 뒤 글을 쓰기 전에 구매 고민이 담긴 후킹 제목 3개를 만든다.
- * 사용자가 이 중 하나를 골라야 본문 생성이 시작된다.
+ * 상품 링크를 받은 뒤 글을 쓰기 전에 고민형 제목 3개와 키워드형 제목 1개를 만든다.
+ * 제품 특성에 가장 잘 맞는 제목 하나도 함께 추천하며, 사용자가 고른 뒤 본문 생성을 시작한다.
  */
 async function suggestProductHooks(product, detail) {
-  const prompt = `아래 상품을 실제로 구매하려는 사람이 가질 만한 서로 다른 고민 3가지를 찾고,
-각 고민이 제목만 읽어도 드러나는 네이버 블로그용 후킹 제목 3개를 제안하세요.
+  const prompt = `아래 상품을 분석해 네이버 블로그용 제목 전략을 세우세요.
+서로 다른 구매 고민을 다룬 고민형 제목 3개와, 실제 검색 의도를 반영한 키워드형 제목 1개를 제안하세요.
+네 제목 가운데 이 제품에 가장 잘 맞을 것으로 판단되는 제목 하나도 추천하세요.
 
 상품명: ${product.name || '상품'}
 카테고리: ${product.query || ''}
@@ -903,7 +913,8 @@ async function suggestProductHooks(product, detail) {
 ${String(detail.description || '').slice(0, 5000)}
 
 규칙:
-- 세 제목은 고민과 사용 상황이 서로 달라야 합니다.
+- choices의 1~3번은 concern 유형, 4번은 keyword 유형으로 정확히 구성하세요.
+- 고민형 세 제목은 고민과 사용 상황이 서로 달라야 합니다.
 - 이 제품이 왜 필요한지 또는 어떤 상황에서 선택하는지가 제목에 보여야 합니다.
 - 제목은 '구체적인 타깃의 고민·상황 + 상품명 + 명확한 구매 판단 요소'가 한눈에 보이게 만드세요.
 - 타깃은 막연한 연령·성별이 아니라 발볼·발등, 설치 공간, 호환 모델, 사용 장소처럼 이 상품을 실제로 찾는 사람의 조건으로 좁히세요.
@@ -916,29 +927,48 @@ ${String(detail.description || '').slice(0, 5000)}
 - 과장, 공포 조장, 확인되지 않은 효과, 가격, 리뷰, 평점은 쓰지 마세요.
 - 직접 사용한 것처럼 쓰지 마세요.
 - '충격', '정체', '결국', '소름', '전부 공개' 같은 낚시 표현은 금지합니다.
+- 키워드형 제목은 상품명, 제품군, 모델·용량·사이즈·호환·사용법처럼 상세 정보에서 확인된 핵심 검색어와 구매 판단 의도를 자연스러운 문장으로 조합하세요.
+- 키워드형 제목은 핵심 검색어를 앞쪽에 두되 같은 단어를 반복하거나 검색어를 쉼표로 나열하지 마세요. 확인되지 않은 인기 키워드나 검색량 수치를 만들지 마세요.
+- recommendedIndex는 제품의 검색 방식과 정보 구조를 보고 0~3 중 하나를 고르세요. 모델명·규격·호환·용량처럼 명확한 검색어가 중요한 상품은 keyword 유형을 우선 검토하고, 생활 불편이 구매를 촉발하는 상품은 concern 유형을 우선 검토하세요.
+- recommendationReason에는 왜 그 제목 전략이 이 제품에 적합한지 한 문장으로 설명하세요.
 
 JSON 형식:
 {
+  "recommendedIndex": 3,
+  "recommendationReason": "이 제품은 모델명과 호환 여부를 함께 찾는 구매자가 많을 유형이라 핵심 검색어가 앞에 오는 제목이 적합합니다.",
   "choices": [
-    {"title":"고민이 포함된 후킹 제목", "concern":"구매자의 구체적인 고민", "situation":"이 제품을 선택하는 생활 상황", "purchaseReason":"확인된 특징이 이 고민을 해결해 구매할 이유", "angle":"글에서 풀어갈 중심 방향"},
-    {"title":"...", "concern":"...", "situation":"...", "purchaseReason":"...", "angle":"..."},
-    {"title":"...", "concern":"...", "situation":"...", "purchaseReason":"...", "angle":"..."}
+    {"type":"concern", "title":"고민이 포함된 후킹 제목", "concern":"구매자의 구체적인 고민", "situation":"이 제품을 선택하는 생활 상황", "purchaseReason":"확인된 특징이 이 고민을 해결해 구매할 이유", "angle":"글에서 풀어갈 중심 방향", "keywords":[]},
+    {"type":"concern", "title":"...", "concern":"...", "situation":"...", "purchaseReason":"...", "angle":"...", "keywords":[]},
+    {"type":"concern", "title":"...", "concern":"...", "situation":"...", "purchaseReason":"...", "angle":"...", "keywords":[]},
+    {"type":"keyword", "title":"핵심 검색어가 자연스럽게 들어간 제목", "concern":"이 검색을 하는 구매자의 확인 목적", "situation":"검색 후 구매를 판단하는 상황", "purchaseReason":"검색어와 연결되는 확인된 제품 특징과 구매 이유", "angle":"키워드에서 구매 판단으로 이어지는 글의 중심 방향", "keywords":["핵심키워드", "구매의도키워드"]}
   ]
 }`;
   const raw = await codex.invokeJson(prompt, { timeoutMs: WRITE_TIMEOUT_MS });
   const choices = Array.isArray(raw && raw.choices) ? raw.choices : [];
   const normalized = choices
-    .map((choice) => ({
+    .map((choice, index) => ({
+      type: index === 3 ? 'keyword' : 'concern',
       title: String(choice && choice.title || '').trim(),
       concern: String(choice && choice.concern || '').trim(),
       situation: String(choice && choice.situation || '').trim(),
       purchaseReason: String(choice && choice.purchaseReason || '').trim(),
       angle: String(choice && choice.angle || '').trim(),
+      keywords: index === 3 && Array.isArray(choice && choice.keywords)
+        ? choice.keywords.map((keyword) => String(keyword || '').trim()).filter(Boolean).slice(0, 4)
+        : [],
     }))
     .filter((choice) => choice.title && choice.concern && choice.situation && choice.purchaseReason)
-    .slice(0, 3);
-  if (normalized.length !== 3) throw new Error('구매 고민 제목 3개를 만들지 못했습니다. 다시 시도해주세요.');
-  return normalized;
+    .slice(0, 4);
+  if (normalized.length !== 4) throw new Error('고민형 제목 3개와 키워드형 제목 1개를 만들지 못했습니다. 다시 시도해주세요.');
+  const requestedIndex = Number(raw && raw.recommendedIndex);
+  const recommendedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < 4
+    ? requestedIndex
+    : 3;
+  return {
+    choices: normalized,
+    recommendedIndex,
+    recommendationReason: String(raw && raw.recommendationReason || '').trim(),
+  };
 }
 
 module.exports = {

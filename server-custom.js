@@ -37,8 +37,32 @@ process.on('uncaughtException', (error) => {
 });
 
 process.env.PORT = process.env.PORT || '4000';
-// Git 저장소 밖의 형제 폴더에 작업 이력을 보관한다.
-// 필요하면 BLOG_FASHION_DATA_DIR 환경변수로 다른 위치를 지정할 수 있다.
-process.env.BLOG_FASHION_DATA_DIR =
-  process.env.BLOG_FASHION_DATA_DIR || path.join(__dirname, '..', 'blog_fashion_data');
+
+// 4000(연예·쇼핑커넥트) 앱은 건강 블로그와 코드 저장소를 공유하더라도
+// 작업 이력, 검색 결과, 초안, 네이버 세션을 절대 같은 폴더에 저장하지 않는다.
+// 범용 BLOG_FASHION_DATA_DIR 값은 의도치 않은 교차 연결을 만들 수 있으므로
+// 이 진입점에서는 4000 전용 환경변수만 허용하고 내부 저장 경로를 강제로 고정한다.
+const DATA_PROFILE = 'fashion-custom-4000';
+const DATA_DIR = path.resolve(
+  process.env.BLOG_FASHION_4000_DATA_DIR ||
+    path.join(__dirname, '..', 'blog_fashion_custom_4000_data')
+);
+const DATA_PROFILE_FILE = path.join(DATA_DIR, '.app-profile.json');
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+if (fs.existsSync(DATA_PROFILE_FILE)) {
+  const savedProfile = JSON.parse(fs.readFileSync(DATA_PROFILE_FILE, 'utf8'));
+  if (savedProfile.profile !== DATA_PROFILE) {
+    throw new Error(`4000 전용 데이터 폴더가 아닙니다: ${DATA_DIR}`);
+  }
+} else {
+  fs.writeFileSync(
+    DATA_PROFILE_FILE,
+    JSON.stringify({ profile: DATA_PROFILE, createdAt: new Date().toISOString() }, null, 2),
+    'utf8'
+  );
+}
+
+process.env.BLOG_FASHION_DATA_DIR = DATA_DIR;
+console.log(`[setup] 4000 전용 데이터 폴더: ${DATA_DIR}`);
 require('./server.js');
