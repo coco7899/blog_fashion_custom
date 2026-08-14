@@ -6,7 +6,8 @@ const express = require('express');
 const setup = require('./src/setup');
 const codex = require('./src/codex');
 const store = require('./src/store');
-const auth = require('./src/naverAuth');
+const auth = require('./src/tistoryAuth');
+const naverAuth = require('./src/naverAuth');
 const collector = require('./src/collector');
 const topics = require('./src/topics');
 const pipeline = require('./src/pipeline');
@@ -23,6 +24,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ── 환경/로그인 상태 ─────────────────────────────────────────
 app.get('/api/status', (req, res) => {
   const env = setup.checkAll();
+  const blogProfile = auth.getProfile();
   // 인증 실패 상태면 2분마다 백그라운드로 재점검 (재로그인 후 자동 복구)
   const authNow = codex.getAuthStatus();
   if (env.codex.ok && authNow && !authNow.ok && Date.now() - authNow.at > 2 * 60 * 1000) {
@@ -36,9 +38,13 @@ app.get('/api/status', (req, res) => {
     codexAuth: authNow, // null이면 아직 점검 전
 
     session: auth.hasState(),
-    blogId: auth.getProfile().blogId || null,
+    blogId: blogProfile.blogName || null,
+    blogUrl: blogProfile.blogUrl || null,
     loginInProgress: auth.isLoginInProgress(),
     loginError: auth.getLastLoginError(),
+    naverSession: naverAuth.hasState(),
+    naverLoginInProgress: naverAuth.isLoginInProgress(),
+    naverLoginError: naverAuth.getLastLoginError(),
   });
 });
 
@@ -62,6 +68,28 @@ app.get('/api/login/status', async (req, res) => {
 
 app.post('/api/logout', (req, res) => {
   auth.logout();
+  res.json({ ok: true });
+});
+
+app.post('/api/naver-login', (req, res) => {
+  if (naverAuth.isLoginInProgress()) {
+    return res.json({ started: false, error: '이미 네이버 로그인 창이 열려 있습니다.' });
+  }
+  naverAuth.startLogin().then((result) => console.log('[naver-login]', JSON.stringify(result)));
+  res.json({ started: true });
+});
+
+app.get('/api/naver-login/status', async (req, res) => {
+  try {
+    const result = await naverAuth.verify(req.query.fresh === '1');
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/naver-logout', (req, res) => {
+  naverAuth.logout();
   res.json({ ok: true });
 });
 
@@ -146,7 +174,10 @@ app.post('/api/run', async (req, res) => {
 
   const login = await auth.verify();
   if (!login.loggedIn) {
-    return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
+    return res.status(401).json({ error: '티스토리 로그인이 필요합니다. 먼저 로그인해주세요.' });
+  }
+  if (!naverAuth.hasState()) {
+    return res.status(401).json({ error: '네이버 브랜드커넥트 로그인이 필요합니다. 상단에서 네이버 로그인 후 다시 실행해주세요.' });
   }
 
   const meta = store.createDraft({
@@ -199,7 +230,10 @@ app.post('/api/run-product', async (req, res) => {
 
     const login = await auth.verify();
     if (!login.loggedIn) {
-      return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
+      return res.status(401).json({ error: '티스토리 로그인이 필요합니다. 먼저 로그인해주세요.' });
+    }
+    if (!naverAuth.hasState()) {
+      return res.status(401).json({ error: '네이버 브랜드커넥트 로그인이 필요합니다. 상단에서 네이버 로그인 후 다시 실행해주세요.' });
     }
 
     const meta = store.createDraft({ type: 'product', keyword: '쇼핑커넥트 상품', visibility, mode, sourceUrl: url || undefined });
@@ -237,7 +271,10 @@ app.post('/api/run-link', async (req, res) => {
   try {
     const login = await auth.verify();
     if (!login.loggedIn) {
-      return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
+      return res.status(401).json({ error: '티스토리 로그인이 필요합니다. 먼저 로그인해주세요.' });
+    }
+    if (!naverAuth.hasState()) {
+      return res.status(401).json({ error: '네이버 브랜드커넥트 로그인이 필요합니다. 상단에서 네이버 로그인 후 다시 실행해주세요.' });
     }
 
     // 기사 제목 확인 (본문 수집은 파이프라인에서 다시 수행)
@@ -353,6 +390,25 @@ app.post('/api/schedule', (req, res) => {
   }
 });
 
+app.post('/api/schedule/control', async (req, res) => {
+  const command = scheduler._internals.normalizeCommand(req.body && req.body.command);
+  if (!command) return res.status(400).json({ error: '“시작” 또는 “중지”를 입력하세요.' });
+  if (command === 'start') {
+    const [tistoryLogin, naverLogin] = await Promise.all([auth.verify(), naverAuth.verify()]);
+    if (!tistoryLogin.loggedIn) {
+      return res.status(401).json({ error: '티스토리 로그인이 필요합니다.' });
+    }
+    if (!naverLogin.loggedIn) {
+      return res.status(401).json({ error: '네이버 브랜드커넥트 로그인이 필요합니다.' });
+    }
+  }
+  try {
+    res.json(scheduler.control(command, { resume: req.body && req.body.resume === true }));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // ── 임시저장/발행만 재시도 (AI 작성·이미지가 끝난 초안 대상) ──
 app.post('/api/drafts/:id/retry-publish', async (req, res) => {
   const id = req.params.id;
@@ -364,12 +420,19 @@ app.post('/api/drafts/:id/retry-publish', async (req, res) => {
   if (meta.status === 'publishing') return res.status(400).json({ error: '이미 작업이 진행 중입니다.' });
 
   const login = await auth.verify();
-  if (!login.loggedIn) return res.status(401).json({ error: '네이버 로그인이 필요합니다.' });
+  if (!login.loggedIn) return res.status(401).json({ error: '티스토리 로그인이 필요합니다.' });
 
   const judgments = store.getJudgments(id);
+  const completeHealthImages =
+    judgments.some((item) => Number(item?.slot) === 0 && item?.file) &&
+    judgments.filter((item) => Number(item?.slot) > 0 && item?.file).length >= 4;
   // 백그라운드 실행 — UI는 드래프트 폴링으로 진행 확인
   pipeline
-    .publishAndNotify(id, article, judgments, meta.visibility || 'public', mode)
+    .publishAndNotify(id, article, judgments, meta.visibility || 'public', mode, {
+      insertCover: completeHealthImages,
+      strictImages: completeHealthImages,
+      expectedImageCount: completeHealthImages ? judgments.filter((item) => item?.file).length : undefined,
+    })
     .catch((e) => {
       console.error(`[retry-publish] ${id} 실패:`, e.message);
       store.updateDraft(id, { status: 'error', step: '재시도 실패: ' + e.message, error: e.message });
@@ -377,16 +440,16 @@ app.post('/api/drafts/:id/retry-publish', async (req, res) => {
   res.json({ ok: true, draftId: id });
 });
 
-// 네이버 임시글은 그대로 두고 실패하거나 누락된 이미지 작업만 다시 실행한다.
+// 티스토리 비공개 글은 그대로 두고 실패하거나 누락된 이미지 작업만 다시 실행한다.
 app.post('/api/drafts/:id/retry-images', (req, res) => {
   const id = req.params.id;
   const meta = store.getMeta(id);
   const article = store.getArticle(id);
   if (!meta) return res.status(404).json({ error: '초안을 찾을 수 없습니다.' });
   if (!article) return res.status(400).json({ error: '작성된 글이 없습니다.' });
-  if (!meta.postUrl) return res.status(400).json({ error: '네이버 임시저장을 먼저 완료해야 합니다.' });
+  if (!meta.postUrl) return res.status(400).json({ error: '티스토리 비공개 저장을 먼저 완료해야 합니다.' });
   const work = meta.imagePlacementRequired
-    ? pipeline.completeHealthImagesAndPlacement(id, meta.visibility || 'public')
+    ? pipeline.completeHealthImagesAndPlacement(id, meta.visibility || 'public', meta.mode || 'draft')
     : healthImages.complete(id);
   work.catch((error) => {
     console.error(`[retry-images] ${id} 실패: ${error.message}`);
@@ -394,7 +457,7 @@ app.post('/api/drafts/:id/retry-images', (req, res) => {
   res.json({ ok: true, draftId: id });
 });
 
-// 로컬 이미지는 준비됐지만 네이버 배치만 실패한 경우, 같은 임시글을 다시 열어 배치 단계만 재시도한다.
+// 로컬 이미지는 준비됐지만 티스토리 배치만 실패한 경우, 같은 비공개 글을 다시 열어 배치 단계만 재시도한다.
 app.post('/api/drafts/:id/retry-image-placement', (req, res) => {
   const id = req.params.id;
   const meta = store.getMeta(id);
@@ -402,9 +465,9 @@ app.post('/api/drafts/:id/retry-image-placement', (req, res) => {
   if (!meta) return res.status(404).json({ error: '초안을 찾을 수 없습니다.' });
   if (!article) return res.status(400).json({ error: '작성된 글이 없습니다.' });
   if (!meta.postUrl || !meta.imageCount) {
-    return res.status(400).json({ error: '1차 임시저장과 이미지 생성을 먼저 완료해야 합니다.' });
+    return res.status(400).json({ error: '1차 비공개 저장과 이미지 생성을 먼저 완료해야 합니다.' });
   }
-  pipeline.placeHealthImagesAndSave(id, meta.visibility || 'public').catch((error) => {
+  pipeline.placeHealthImagesAndSave(id, meta.visibility || 'public', meta.mode || 'draft').catch((error) => {
     console.error(`[retry-image-placement] ${id} 실패: ${error.message}`);
   });
   res.json({ ok: true, draftId: id });
@@ -421,7 +484,7 @@ app.post('/api/drafts/:id/retry', async (req, res) => {
   }
 
   const login = await auth.verify();
-  if (!login.loggedIn) return res.status(401).json({ error: '네이버 로그인이 필요합니다.' });
+  if (!login.loggedIn) return res.status(401).json({ error: '티스토리 로그인이 필요합니다.' });
 
   // 재시도 시작 — 중지 플래그/오류 초기화
   store.updateDraft(id, { status: 'collecting', step: '재시도 준비 중', error: null, stopRequested: false, mode });
@@ -450,7 +513,7 @@ app.get('/api/drafts', (req, res) => {
   res.json(store.listDrafts());
 });
 
-// 모든 작업(초안) 삭제 — 로컬 이력만 지움 (네이버 저장 글은 유지)
+// 모든 작업(초안) 삭제 — 로컬 이력만 지움 (티스토리 저장 글은 유지)
 app.delete('/api/drafts', (req, res) => {
   const n = store.clearDrafts();
   console.log(`[drafts] 작업 이력 ${n}건 삭제`);
@@ -656,6 +719,7 @@ function cleanupOrphanDrafts() {
   let n = 0;
   for (const d of store.listDrafts()) {
     if (
+      !d.auto &&
       d.autoImageWorkflow &&
       d.articleAvailable &&
       d.postUrl &&
@@ -683,10 +747,10 @@ function cleanupOrphanDrafts() {
   if (removedSportsTopics) console.log(`[setup] 저장된 스포츠 글감 ${removedSportsTopics}건 제외`);
   cleanupOrphanDrafts();
   // 브라우저 설치가 오래 걸리더라도 대시보드는 먼저 열어 둔다.
-  // 설치가 끝나기 전에는 네이버 임시저장만 사용할 수 없고 글감·원고 작업은 계속 가능하다.
+  // 설치가 끝나기 전에는 티스토리 자동 저장만 사용할 수 없고 글감·원고 작업은 계속 가능하다.
   const chromiumReady = setup.chromiumInstalled();
   if (!chromiumReady) {
-    console.warn('[setup] Playwright Chromium 준비 중 — 완료 전에는 네이버 임시저장을 실행할 수 없습니다.');
+    console.warn('[setup] Playwright Chromium 준비 중 — 완료 전에는 티스토리 자동 저장을 실행할 수 없습니다.');
     setup.ensureChromium().then((chrome) => {
       if (!chrome.ok) console.error('[setup]', chrome.error);
     });

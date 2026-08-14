@@ -90,6 +90,15 @@ input[type="text"], select {
 .status { font-size: 13px; color: #2563eb; margin-top: 10px; }
 .status.err { color: #c0392b; }
 
+.auto-control-card { border-color: #fed7aa; background: linear-gradient(135deg, #fff 0%, #fff7ed 100%); }
+.auto-control-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.auto-control-heading h2 { margin-bottom: 3px; }
+.auto-control-heading p { color: #7c5b43; font-size: 13px; }
+.auto-command-row { display: flex; gap: 8px; margin-top: 14px; }
+.auto-command-row input { flex: 1; min-width: 180px; background: #fff; border-color: #fdba74; }
+.auto-command-row input:focus { outline: 2px solid rgba(249,115,22,.18); border-color: #f97316; }
+.auto-control-card .badge-on { background: #dcfce7; color: #16733a; }
+
 .topics { display: flex; flex-direction: column; gap: 10px; }
 .topic {
   border: 1px solid #e0e4e8; border-radius: 10px; padding: 14px 16px;

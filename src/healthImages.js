@@ -11,6 +11,8 @@ const store = require('./store');
 
 const MIN_IMAGE_BYTES = 8 * 1024;
 const COVER_SIZE = 1080;
+const COVER_STYLE_VERSION = 'orange-soft-v4';
+const COVER_GRADIENT = 'linear-gradient(135deg,rgba(154,52,18,.58) 0%,rgba(234,88,12,.40) 48%,rgba(249,115,22,.18) 78%,rgba(251,146,60,.08) 100%)';
 const GENERATED_ROOT = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'generated_images');
 const DOWNLOAD_ROOT = path.join(os.homedir(), 'Downloads', '건강블로그이미지');
 const inflight = new Map();
@@ -173,13 +175,13 @@ async function renderCover(backgroundFile, destination, keyword, phrase) {
     await page.setContent(`<!doctype html><html><head><style>
       ${font ? `@font-face{font-family:Pretendard;src:url(data:font/woff2;base64,${font}) format('woff2');font-weight:100 900;}` : ''}
       *{box-sizing:border-box}html,body{margin:0;width:${COVER_SIZE}px;height:${COVER_SIZE}px;overflow:hidden}
-      body{font-family:Pretendard,"Malgun Gothic",sans-serif;background:#183b35}
+      body{font-family:Pretendard,"Malgun Gothic",sans-serif;background:#9a3412}
       .cover{position:relative;width:${COVER_SIZE}px;height:${COVER_SIZE}px;background:url(data:image/png;base64,${background}) center/cover no-repeat}
-      .cover:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(12,38,34,.9) 0%,rgba(12,38,34,.72) 52%,rgba(12,38,34,.18) 82%,rgba(12,38,34,.05) 100%)}
+      .cover:before{content:"";position:absolute;inset:0;background:${COVER_GRADIENT}}
       .copy{position:absolute;left:48px;top:0;bottom:0;width:624px;padding:18px 0;display:flex;flex-direction:column;justify-content:center;color:#fff;text-shadow:0 4px 22px rgba(0,0,0,.46)}
-      .eyebrow{font-size:26px;font-weight:700;letter-spacing:.12em;color:#d7f0dd;margin-bottom:12px;flex-shrink:0}
+      .eyebrow{font-size:26px;font-weight:700;letter-spacing:.12em;color:#fff7ed;margin-bottom:12px;flex-shrink:0}
       .keyword{font-size:${keywordFontSize}px;line-height:.92;font-weight:900;letter-spacing:-.075em;word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance;flex-shrink:0}
-      .line{width:96px;height:8px;border-radius:9px;background:#9bd2aa;margin:18px 0 16px;flex-shrink:0}
+      .line{width:96px;height:8px;border-radius:9px;background:#fb923c;margin:18px 0 16px;flex-shrink:0}
       .phrase{font-size:46px;line-height:1.3;font-weight:700;letter-spacing:-.035em;word-break:keep-all;overflow-wrap:anywhere;text-wrap:balance}
     </style></head><body><div class="cover"><div class="copy"><div class="eyebrow">생활 건강 확인</div><div class="keyword">${htmlEscape(keyword)}</div><div class="line"></div><div class="phrase">${htmlEscape(phrase)}</div></div></div></body></html>`);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -217,6 +219,7 @@ function coverBackgroundPrompt(meta, article, keyword, phrase) {
     `글 주제: ${article.title}. 핵심 키워드: ${keyword}. 관련 내용: ${phrase}.`,
     `장면: ${firstSlot?.desc || '건강 정보를 확인하는 자연스러운 한국인의 생활 장면'}.`,
     '한국의 실제 생활 공간, 부드러운 자연광, 과장되지 않은 현실적인 사진, 정사각형 1:1 구도.',
+    '전체 색감은 따뜻한 오렌지·앰버 계열로 구성하고 진한 초록이나 청록이 화면을 지배하지 않게 하세요.',
     '왼쪽 절반은 나중에 제목을 배치할 수 있도록 단순하고 어두운 여백으로 남기고 주요 피사체는 오른쪽에 두세요.',
     '이미지 자체에는 어떠한 글자, 숫자, 로고, 상표, 워터마크도 넣지 마세요.',
   ].join('\n');
@@ -249,7 +252,8 @@ async function runComplete(draftId) {
 
   const coverName = `00-대표이미지-${safeSegment(keyword, 24)}.png`;
   const coverFile = path.join(targetDir, coverName);
-  if (!isSquareCover(coverFile)) {
+  const needsOrangeCover = !isSquareCover(coverFile) || meta.coverStyleVersion !== COVER_STYLE_VERSION;
+  if (needsOrangeCover) {
     store.updateDraft(draftId, { status: 'images', step: `${finalLabel} · 대표이미지 배경 생성 중 (1/${slots.length + 1})` });
     const coverBackground = await generateBuiltInImage(coverBackgroundPrompt(meta, article, keyword, phrase));
     await renderCover(coverBackground, coverFile, keyword, phrase);
@@ -332,6 +336,7 @@ async function runComplete(draftId) {
     coverAspectRatio: '1:1',
     coverWidth: COVER_SIZE,
     coverHeight: COVER_SIZE,
+    coverStyleVersion: COVER_STYLE_VERSION,
     imageOnlyError: false,
     imageError: null,
     imagePlacementPending: placementRequired,
@@ -375,6 +380,7 @@ function complete(draftId) {
 
 async function resumePending() {
   const pending = store.listDrafts().filter((draft) =>
+    !draft.auto &&
     draft.autoImageWorkflow &&
     !draft.imagePlacementRequired &&
     draft.imagesPending &&
@@ -400,4 +406,6 @@ module.exports = {
   safeSegment,
   resolveDownloadDir,
   isSquareCover,
+  COVER_GRADIENT,
+  COVER_STYLE_VERSION,
 };

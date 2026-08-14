@@ -1,6 +1,5 @@
-// 커스텀 사본(블로그 자동화 + 숏폼) 전용 실행 파일.
-// 3000=원본 블로그, 3001~30xx=상세페이지 자동화(Next.js가 위로 자동 잠식)와 겹치지 않도록
-// 이 건강 블로그 사본은 기본 포트 8000에서 실행한다. 필요하면 PORT 환경변수로 덮어쓸 수 있다.
+// 티스토리 블로그 자동화 + 숏폼 전용 실행 파일.
+// 기본 포트는 3000이며 필요하면 PORT 환경변수로 덮어쓸 수 있다.
 const fs = require('fs');
 const path = require('path');
 const util = require('util');
@@ -36,22 +35,24 @@ process.on('uncaughtException', (error) => {
   setTimeout(() => process.exit(1), 100);
 });
 
-process.env.PORT = process.env.PORT || '8000';
+process.env.PORT = process.env.PORT || '3000';
+// 이 대시보드는 사용자의 건강 블로그 전용으로 실행한다.
+// 로그인 계정에 블로그가 여러 개 있어도 다른 블로그를 자동 선택하지 않는다.
+process.env.TISTORY_BLOG_NAME = process.env.TISTORY_BLOG_NAME || 'lalachocho';
+process.env.TISTORY_BLOG_URL = process.env.TISTORY_BLOG_URL || 'https://lalachocho.tistory.com';
 
-// 8000 건강 앱은 연예·쇼핑커넥트 앱과 작업 이력, 검색 결과, 초안,
-// 네이버 세션을 절대 같은 폴더에 저장하지 않는다.
-// 범용 BLOG_FASHION_DATA_DIR 값은 무시하고 건강 전용 환경변수만 허용한다.
-const DATA_PROFILE = 'health-blog-8000';
-const HEALTH_DATA_DIR = path.resolve(
-  process.env.HEALTH_BLOG_DATA_DIR || path.join(__dirname, '..', 'health_blog_data')
+// 기존 네이버 앱의 작업 이력과 세션을 섞지 않도록 티스토리 전용 데이터 폴더를 쓴다.
+const DATA_PROFILE = 'tistory-blog-3000';
+const TISTORY_DATA_DIR = path.resolve(
+  process.env.TISTORY_BLOG_DATA_DIR || path.join(__dirname, '..', 'tistory_blog_data')
 );
-const DATA_PROFILE_FILE = path.join(HEALTH_DATA_DIR, '.app-profile.json');
+const DATA_PROFILE_FILE = path.join(TISTORY_DATA_DIR, '.app-profile.json');
 
-fs.mkdirSync(HEALTH_DATA_DIR, { recursive: true });
+fs.mkdirSync(TISTORY_DATA_DIR, { recursive: true });
 if (fs.existsSync(DATA_PROFILE_FILE)) {
   const savedProfile = JSON.parse(fs.readFileSync(DATA_PROFILE_FILE, 'utf8'));
   if (savedProfile.profile !== DATA_PROFILE) {
-    throw new Error(`8000 건강 전용 데이터 폴더가 아닙니다: ${HEALTH_DATA_DIR}`);
+    throw new Error(`3000 티스토리 전용 데이터 폴더가 아닙니다: ${TISTORY_DATA_DIR}`);
   }
 } else {
   fs.writeFileSync(
@@ -61,6 +62,7 @@ if (fs.existsSync(DATA_PROFILE_FILE)) {
   );
 }
 
-process.env.BLOG_FASHION_DATA_DIR = HEALTH_DATA_DIR;
-console.log(`[setup] 8000 건강 전용 데이터 폴더: ${HEALTH_DATA_DIR}`);
+process.env.BLOG_FASHION_DATA_DIR = TISTORY_DATA_DIR;
+console.log(`[setup] 3000 티스토리 전용 데이터 폴더: ${TISTORY_DATA_DIR}`);
+console.log(`[setup] 티스토리 발행 대상: ${process.env.TISTORY_BLOG_URL}`);
 require('./server.js');

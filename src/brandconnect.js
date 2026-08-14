@@ -5,7 +5,7 @@ const browserHelper = require('./browser');
 const auth = require('./naverAuth');
 const codex = require('./codex');
 
-const CREATOR_ID = '719569259757728'; // 사용자의 브랜드커넥트 크리에이터 ID
+const CREATOR_ID = process.env.NAVER_BRANDCONNECT_CREATOR_ID || '981491868759168';
 const BASE = `https://brandconnect.naver.com/${CREATOR_ID}/affiliate`;
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -117,9 +117,9 @@ async function issueInContext(context, productUrl) {
       .catch(() => null);
     if (!l) {
       l = await page.evaluate(() => navigator.clipboard.readText().catch(() => null)).catch(() => null);
-      if (l && !/naver\.me|https?:\/\//.test(l)) l = null;
+      if (l && !/^https?:\/\/naver\.me\/[A-Za-z0-9]+/i.test(l.trim())) l = null;
     }
-    return l;
+    return l && /^https?:\/\/naver\.me\/[A-Za-z0-9]+/i.test(l.trim()) ? l.trim() : null;
   };
 
   let link = await readLink();
@@ -138,7 +138,10 @@ async function searchProducts(query, opts) {
 }
 
 // 인기 카테고리 키워드 풀 — "지금 반응 좋은 상품"을 찾을 때 돌아가며 검색
-const TREND_KEYWORDS = ['황태채', '손질 새우', '무가당 그릭요거트', '견과류', '오트밀', '무가당 두유', '단백질 식품', '세척 당근', '저당 식품', '건강기능식품'];
+const TREND_KEYWORDS = [
+  '밀폐 소분용기', '전자 주방저울', '차광 수면안대', '폼롤러', '허리 쿠션',
+  '변기 설치형 좌욕기', '디지털 주방 온도계', '스텝퍼', '무가당 그릭요거트', '견과류',
+];
 
 /**
  * 지금 반응(리뷰 수) 좋은 제휴 상품 1개를 고른다.
@@ -181,17 +184,27 @@ ${referenceText}
 
 원칙:
 - 치료·예방 효과를 주장해야만 팔 수 있는 상품은 제외합니다.
-- 독자의 준비·손질·보관·활용 불편을 현실적으로 줄이는 일반 식재료나 건강식품을 우선합니다.
+- 식품이나 건강기능식품을 우선하지 마세요. 글의 핵심 생활 행동과 가장 직접적으로 연결되는 상품군을 고릅니다.
+- 생활용품·주방도구·운동용품·수면환경용품·위생용품·보관용품·측정도구와 일반 식품을 동등한 후보로 비교합니다.
+- 예: 식사 준비→전자 주방저울·밀폐 소분용기·채칼, 걷기·근력운동→스트레칭 밴드·폼롤러·스텝퍼, 수면 환경→차광 수면안대·암막용품, 자세 관리→허리 쿠션, 위생·좌욕 관리→변기 설치형 좌욕기.
+- 증상이나 질환 이름만 보고 영양제·건강기능식품을 기본 추천하지 마세요. 준비·세척·휴대·보관·운동·휴식의 구체적인 불편을 줄이는 비식품 도구가 더 자연스러우면 그것을 선택합니다.
+- 다만 위의 직접 매칭 상품이 쇼핑커넥트에 없을 때 사용할 건강식품·영양제 폴백 검색어도 별도로 만드세요. 글에서 실제로 다룬 영양소나 식사 맥락과 가까운 제품만 고르고, 질환 치료·예방을 암시하지 마세요.
+- supplementFallbackKeywords는 건강식품·영양제의 짧고 실제 검색 가능한 상품명 1~3개입니다. 일반 생활제품 keywords와 섞지 마세요.
+- 의료기기·측정도구는 진단이나 치료를 대신한다고 표현하지 않아도 안전하게 사용할 수 있는 경우만 후보로 둡니다.
 - 한 글에는 주력 상품 하나만 정합니다.
 - keywords는 쇼핑커넥트에서 실제로 검색할 수 있는 짧은 상품명 1~3개입니다.
 
 JSON 형식:
-{"primaryProduct":"주력 상품 하나","productReason":"필요한 현실적인 이유","keywords":["상품 검색어1","상품 검색어2"]}`;
+{"primaryProduct":"주력 상품 하나","productReason":"필요한 현실적인 이유","keywords":["상품 검색어1","상품 검색어2"],"supplementFallbackKeywords":["관련 영양제 검색어1","관련 건강식품 검색어2"]}`;
   const result = await codex.invokeJson(prompt, { timeoutMs: 120000 });
   return {
     primaryProduct: String(result?.primaryProduct || '').trim(),
     productReason: String(result?.productReason || '').trim(),
     keywords: (Array.isArray(result?.keywords) ? result.keywords : [])
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .slice(0, 3),
+    supplementFallbackKeywords: (Array.isArray(result?.supplementFallbackKeywords) ? result.supplementFallbackKeywords : [])
       .map((value) => String(value).trim())
       .filter(Boolean)
       .slice(0, 3),

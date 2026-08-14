@@ -48,13 +48,14 @@ const STEPS = [
   { key: 'collecting', label: '자료 수집' },
   { key: 'writing', label: 'AI 글 작성' },
   { key: 'images', label: '이미지 자리 준비' },
-  { key: 'publishing', label: '임시저장' },
+  { key: 'publishing', label: '티스토리 저장' },
   { key: 'saved', label: '완료' },
 ];
 
 let currentSearch = null;
 let watchingDraft = null;
 let loginPolling = false;
+let naverLoginPolling = false;
 let runningTopicIndex = null;        // 현재 실행 중인 글감 인덱스 (오렌지)
 const completedTopics = new Set();   // 이미 실행 완료한 글감 인덱스 (연회색)
 let runQueue = [];                   // 대기 중인 글감 인덱스 (순서대로 자동 처리)
@@ -65,6 +66,73 @@ function selectedAffiliateProduct() {
 }
 
 $('affiliateProductInput').addEventListener('input', refreshTopicButtons);
+
+function formatScheduleTime(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('ko-KR', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+async function refreshAutoPublishStatus() {
+  try {
+    const status = await api('/api/schedule');
+    const badge = $('autoPublishBadge');
+    const message = $('autoPublishStatus');
+    if (status.active) {
+      badge.className = 'badge badge-on';
+      badge.textContent = status.running ? '글 작성 중' : '작동 중';
+      if (status.running) {
+        message.textContent = `현재 글을 작성·발행하고 있습니다. 이번 실행에서 완료한 글은 ${status.sessionCount}개입니다.`;
+      } else {
+        message.textContent = `이번 실행 ${status.sessionCount}개 완료 · 다음 시작 ${formatScheduleTime(status.nextRunAt)}`;
+      }
+      if (status.lastError) {
+        message.className = 'status err';
+        message.textContent = `최근 실패: ${status.lastError} · 15분 뒤 자동 재시도합니다.`;
+      } else {
+        message.className = 'status';
+      }
+    } else {
+      badge.className = 'badge badge-off';
+      badge.textContent = status.running ? '마지막 글 처리 중' : '중지됨';
+      message.className = 'status';
+      message.textContent = status.running
+        ? '중지 명령을 받았습니다. 현재 처리 중인 글까지만 마친 뒤 멈춥니다.'
+        : '컴퓨터를 다시 켜면 자동으로 시작되지 않습니다. 실행하려면 “시작”을 입력하세요.';
+    }
+  } catch (error) {
+    $('autoPublishStatus').className = 'status err';
+    $('autoPublishStatus').textContent = error.message;
+  }
+}
+
+async function submitAutoCommand() {
+  const input = $('autoCommandInput');
+  const button = $('autoCommandBtn');
+  const command = input.value.trim();
+  if (!command) {
+    $('autoPublishStatus').className = 'status err';
+    $('autoPublishStatus').textContent = '“시작” 또는 “중지”를 입력하세요.';
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api('/api/schedule/control', { method: 'POST', body: { command } });
+    input.value = '';
+    await refreshAutoPublishStatus();
+  } catch (error) {
+    $('autoPublishStatus').className = 'status err';
+    $('autoPublishStatus').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('autoCommandBtn').onclick = submitAutoCommand;
+$('autoCommandInput').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') submitAutoCommand();
+});
 
 // 세션 파일은 있어도 실제 로그인이 만료됐을 수 있어, 유효성을 따로 확인해 배지에 반영한다.
 // (서버 verify는 10분 캐시라 자주 호출해도 부담이 적지만, 클라이언트도 2분 간격으로 throttle)
@@ -89,6 +157,11 @@ async function refreshStatus() {
     // 실제 오류 상태는 서버 로그와 글쓰기 작업 결과에서 계속 확인할 수 있다.
     $('envBadge').hidden = true;
     $('envBadge').textContent = '';
+    const targetBlogLink = $('targetBlogLink');
+    if (targetBlogLink && s.blogUrl) {
+      targetBlogLink.href = s.blogUrl;
+      targetBlogLink.textContent = `발행 대상 · ${s.blogId || 'lalachocho'}`;
+    }
     if (s.session) {
       checkLoginValidity(); // 실제 유효성(만료 여부) 확인
       if (loginValidity.expired) {
@@ -105,13 +178,33 @@ async function refreshStatus() {
     } else if (s.loginError && !s.loginInProgress) {
       badge.className = 'badge badge-off';
       badge.textContent = '로그인 실패: ' + s.loginError;
-      $('loginBtn').textContent = '네이버 로그인';
+      $('loginBtn').textContent = '티스토리 로그인';
       $('logoutBtn').hidden = true;
     } else {
       badge.className = 'badge badge-off';
       badge.textContent = '로그인 필요';
-      $('loginBtn').textContent = '네이버 로그인';
+      $('loginBtn').textContent = '티스토리 로그인';
       $('logoutBtn').hidden = true;
+    }
+    const naverBadge = $('naverLoginBadge');
+    if (s.naverSession) {
+      naverBadge.className = 'badge';
+      naverBadge.textContent = '브랜드커넥트 로그인됨';
+      $('naverLoginBtn').textContent = '다시 로그인';
+      $('naverLogoutBtn').hidden = false;
+    } else if (s.naverLoginError && !s.naverLoginInProgress) {
+      naverBadge.className = 'badge badge-off';
+      naverBadge.textContent = '네이버 로그인 실패';
+      $('naverLoginBtn').textContent = '네이버 로그인';
+      $('naverLogoutBtn').hidden = true;
+    } else if (s.naverLoginInProgress) {
+      naverBadge.className = 'badge badge-warn';
+      naverBadge.textContent = '네이버 로그인 중...';
+    } else {
+      naverBadge.className = 'badge badge-off';
+      naverBadge.textContent = '브랜드커넥트 로그인 필요';
+      $('naverLoginBtn').textContent = '네이버 로그인';
+      $('naverLogoutBtn').hidden = true;
     }
     return s;
   } catch {
@@ -150,8 +243,43 @@ $('loginBtn').onclick = async () => {
 };
 
 $('logoutBtn').onclick = async () => {
-  if (!(await uiConfirm('저장된 네이버 로그인 세션을 삭제할까요?'))) return;
+  if (!(await uiConfirm('저장된 티스토리 로그인 세션을 삭제할까요?'))) return;
   await api('/api/logout', { method: 'POST' });
+  refreshStatus();
+};
+
+$('naverLoginBtn').onclick = async () => {
+  $('naverLoginBtn').disabled = true;
+  try {
+    await api('/api/naver-login', { method: 'POST' });
+    $('naverLoginBadge').className = 'badge badge-warn';
+    $('naverLoginBadge').textContent = '브라우저 창에서 네이버 로그인해주세요...';
+    if (!naverLoginPolling) {
+      naverLoginPolling = true;
+      const poll = setInterval(async () => {
+        const status = await api('/api/status').catch(() => null);
+        if (status && status.naverSession && !status.naverLoginInProgress) {
+          clearInterval(poll);
+          naverLoginPolling = false;
+          await api('/api/naver-login/status?fresh=1').catch(() => {});
+          refreshStatus();
+        } else if (status && !status.naverLoginInProgress && !status.naverSession) {
+          clearInterval(poll);
+          naverLoginPolling = false;
+          refreshStatus();
+        }
+      }, 2000);
+    }
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    $('naverLoginBtn').disabled = false;
+  }
+};
+
+$('naverLogoutBtn').onclick = async () => {
+  if (!(await uiConfirm('저장된 네이버 브랜드커넥트 로그인 세션을 삭제할까요?'))) return;
+  await api('/api/naver-logout', { method: 'POST' });
   refreshStatus();
 };
 
@@ -239,7 +367,7 @@ $('linkModeBtn').onclick = async () => {
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const affiliateProduct = selectedAffiliateProduct();
-  const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
+  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '비공개 저장';
   const productLine = affiliateProduct ? `\n제휴상품: ${affiliateProduct}` : '\n제휴상품: 주제에 맞게 자동 매칭';
   if (!(await uiConfirm(`이 기사 링크를 바탕으로 AI가 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}${productLine}\n시작할까요?`))) return;
   const btn = $('linkModeBtn');
@@ -278,7 +406,7 @@ $('runAllBtn').onclick = () => runAllTopics();
 
 // ── 모든 작업 삭제 (#7) ───────────────────────
 $('clearDraftsBtn').onclick = async () => {
-  if (!(await uiConfirm('작업 이력의 모든 작업 기록을 삭제할까요? (네이버 블로그에 저장된 글은 지워지지 않습니다)'))) return;
+  if (!(await uiConfirm('작업 이력의 모든 작업 기록을 삭제할까요? (티스토리에 저장된 글은 지워지지 않습니다)'))) return;
   try {
     await api('/api/drafts', { method: 'DELETE' });
     loadDrafts();
@@ -361,7 +489,7 @@ async function restoreLatestTopics() {
 }
 
 // ── 파이프라인 실행: 여러 글감을 대기열에 쌓아 하나씩 자동 처리 ──
-// (동시 발행은 네이버 로그인 브라우저·세션이 충돌하고 스팸 감지 위험이 커서,
+// (동시 발행은 티스토리 로그인 브라우저·세션이 충돌하고 스팸 감지 위험이 커서,
 //  안전하게 순서대로 처리한다. 사용자는 여러 개를 눌러두고 자리를 비워도 된다.)
 async function startRun(topicIndex, visOverride) {
   if (!currentSearch) return;
@@ -376,7 +504,7 @@ async function startRun(topicIndex, visOverride) {
   }
   const mode = $('runMode').value; // 'draft' | 'publish'
   const visibility = visOverride || $('runVisibility').value;
-  const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '네이버 블로그에 임시저장';
+  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '티스토리에 비공개 저장';
   const busy = runningTopicIndex !== null || runQueue.length > 0;
   const productLine = affiliateProduct
     ? `\n제휴상품: ${affiliateProduct}\n이 상품에 맞춰 글의 생활 장면과 선택 기준을 연결합니다.`
@@ -410,15 +538,24 @@ async function processQueue(visOverride) {
     });
     watchDraft(draftId, topicIndex);
   } catch (e) {
-    // 네이버 로그인 만료(401)면 대기열을 멈추고 재로그인을 안내한다 (계속하면 전부 실패)
-    if (/로그인/.test(e.message)) {
+    // 로그인 만료(401)면 대기열을 멈추고 해당 서비스 재로그인을 안내한다.
+    if (/네이버|브랜드커넥트/.test(e.message)) {
+      runningTopicIndex = null;
+      runQueue = [];
+      queuedAffiliateProducts.clear();
+      refreshTopicButtons();
+      refreshStatus();
+      alert('브랜드커넥트 제휴 링크를 발급하려면 네이버 로그인이 필요해요.\n제휴상품 영역의 "네이버 로그인"을 완료한 뒤 실행해주세요.');
+      return;
+    }
+    if (/티스토리.*로그인|로그인.*티스토리/.test(e.message)) {
       runningTopicIndex = null;
       runQueue = [];
       queuedAffiliateProducts.clear();
       refreshTopicButtons();
       loginValidity = { at: 0, expired: true, checking: false };
       refreshStatus();
-      alert('네이버 로그인이 만료되어 실행할 수 없어요.\n우측 상단 "다시 로그인"으로 네이버에 다시 로그인한 뒤 실행해주세요.');
+      alert('티스토리 로그인이 만료되어 실행할 수 없어요.\n우측 상단 "다시 로그인"으로 티스토리에 다시 로그인한 뒤 실행해주세요.');
       return;
     }
     alert(e.message);
@@ -437,7 +574,7 @@ async function runAllTopics() {
   if (!pending.length) return alert('대기열에 추가할 글감이 없습니다.');
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
-  const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
+  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '비공개 저장';
   const affiliateProduct = selectedAffiliateProduct();
   const productLine = affiliateProduct ? `\n제휴상품: ${affiliateProduct}` : '\n제휴상품: 글마다 자동 매칭';
   if (!(await uiConfirm(`글감 ${pending.length}개를 대기열에 넣고 하나씩 차례대로 ${actLabel}까지 자동 진행합니다.\n(동시가 아니라 안전하게 순서대로 처리됩니다)${productLine}\n시작할까요?`))) return;
@@ -486,7 +623,7 @@ function renderSteps(status, mode) {
   const wrap = $('progressSteps');
   wrap.innerHTML = '';
   const order = STEPS.map((s) => s.key);
-  // 'published'(즉시 발행)와 'saved'(임시저장)는 모두 완료로 취급
+  // 'published'(공개 발행)와 'saved'(비공개 저장)는 모두 완료로 취급
   const norm = status === 'published' ? 'saved' : status;
   const idx = order.indexOf(norm === 'error' ? '' : norm);
   STEPS.forEach((s, i) => {
@@ -506,7 +643,7 @@ function renderSteps(status, mode) {
     else if (i === idx) active = true;
     if (done) el.classList.add('done');
     if (active) el.classList.add('active');
-    const label = s.key === 'publishing' ? (mode === 'publish' ? '발행' : '임시저장') : s.label;
+    const label = s.key === 'publishing' ? (mode === 'publish' ? '발행' : '비공개 저장') : s.label;
     // 완료=✓, 진행중=◐, 대기=번호
     const mark = done ? '✓' : active ? '◐' : String(i + 1);
     el.textContent = `${mark} ${label}`;
@@ -606,7 +743,7 @@ function watchDraft(draftId, topicIndex = null) {
         $('stopBtn').hidden = true;
         resetTopicButtons();
         loadDrafts();
-        // 한 글의 이미지 생성·배치·2차 임시저장이 끝나기 전에는 다음 글로 넘어가지 않는다.
+        // 한 글의 이미지 생성·배치·최종 저장이 끝나기 전에는 다음 글로 넘어가지 않는다.
         // 아래 이력에서 실패 단계만 재시도하면 완료 후 대기열이 다시 이어진다.
       }
     } catch {}
@@ -639,7 +776,7 @@ async function loadDrafts() {
       ? '이미지 재시도 필요'
       : d.status === 'images'
         ? awaitingPlacement && !awaitingImageWork
-          ? '네이버 이미지 배치 대기'
+          ? '티스토리 이미지 배치 대기'
           : '이미지 생성 중'
         : awaitingImageWork
           ? '이미지 생성 대기'
@@ -650,7 +787,6 @@ async function loadDrafts() {
               : d.status === 'error'
                 ? '실패'
                 : '진행 중';
-    const linkLabel = d.savedAsDraft ? '글쓰기 열기 →' : '글 보기 →';
     const placementRetry = d.status === 'error' && d.imagePlacementOnlyError;
     const imageRetry = d.status === 'error' && d.imageOnlyError;
     const needsFullRetry =
@@ -662,10 +798,10 @@ async function loadDrafts() {
       </div>
       <div class="d-actions">
         <span class="tag-status ${tag}">${tagText}</span>
-        ${d.status === 'error' && d.topic && !d.recovered ? `<button class="btn btn-primary btn-retry">${placementRetry ? '이미지 배치 재시도' : imageRetry ? '이미지부터 재시도' : needsFullRetry ? '처음부터 재시도' : `${d.mode === 'publish' ? '발행' : '임시저장'} 재시도`}</button>` : ''}
+        ${d.status === 'error' && d.topic && !d.recovered ? `<button class="btn btn-primary btn-retry">${placementRetry ? '이미지 배치 재시도' : imageRetry ? '이미지부터 재시도' : needsFullRetry ? '처음부터 재시도' : `${d.mode === 'publish' ? '발행' : '비공개 저장'} 재시도`}</button>` : ''}
         ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
         ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
-        ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
+        ${d.postUrl && done ? '<button class="btn btn-primary btn-republish">다시발행</button>' : ''}
       </div>`;
     const sfBtn = div.querySelector('.btn-shortform');
     if (sfBtn) sfBtn.onclick = () => sfOpenPanel(d.id, d.title || (d.topic && d.topic.title) || d.keyword);
@@ -683,11 +819,11 @@ async function loadDrafts() {
     const retryBtn = div.querySelector('.btn-retry');
     if (retryBtn) {
       retryBtn.onclick = async () => {
-        const noun = d.mode === 'publish' ? '발행' : '임시저장';
+        const noun = d.mode === 'publish' ? '발행' : '비공개 저장';
         const message = placementRetry
-          ? '저장된 이미지는 그대로 두고 같은 네이버 임시글에 이미지 배치만 다시 시도할까요?'
+          ? '저장된 이미지는 그대로 두고 같은 티스토리 비공개 글에 이미지 배치만 다시 시도할까요?'
           : imageRetry
-          ? '네이버 1차 임시글은 그대로 두고 이미지를 다시 만든 뒤 자동 배치까지 이어서 진행할까요?'
+          ? '티스토리 1차 비공개 글은 그대로 두고 이미지를 다시 만든 뒤 자동 배치까지 이어서 진행할까요?'
           : needsFullRetry
           ? `실패한 글감을 처음부터 다시 작성하고 이미지 자리를 준비한 후 ${noun}할까요?`
           : `작성된 글 그대로 ${noun}만 다시 시도할까요?`;
@@ -703,6 +839,22 @@ async function loadDrafts() {
           await api(`/api/drafts/${d.id}/${endpoint}`, { method: 'POST', body: { mode: d.mode || 'draft' } });
           watchDraft(d.id);
         } catch (e) {
+          alert(e.message);
+        }
+      };
+    }
+    const republishBtn = div.querySelector('.btn-republish');
+    if (republishBtn) {
+      republishBtn.onclick = async () => {
+        if (!(await uiConfirm('작성된 원고와 이미지를 같은 티스토리 글에 다시 공개 발행할까요?'))) return;
+        republishBtn.disabled = true;
+        republishBtn.textContent = '재발행 중...';
+        try {
+          await api(`/api/drafts/${d.id}/retry-publish`, { method: 'POST', body: { mode: 'publish' } });
+          watchDraft(d.id);
+        } catch (e) {
+          republishBtn.disabled = false;
+          republishBtn.textContent = '다시발행';
           alert(e.message);
         }
       };
@@ -826,30 +978,7 @@ async function openPreview(id) {
         }
       }
     }
-    // 상품 글에만 기사 출처를 표시한다. 건강 글의 조사 출처는 내부 기록으로만 보관한다.
-    const newsRefs = (meta.refs || []).filter((r) => r && r.url && r.kind === 'news');
-    const appendNewsRefs = () => {
-      if (!newsRefs.length) return;
-      body.appendChild(document.createElement('hr'));
-      const st = document.createElement('h3');
-      st.textContent = isProductPost ? '📌 참고한 건강 기사' : '📌 출처';
-      body.appendChild(st);
-      const ul = document.createElement('div');
-      ul.style.fontSize = '13px';
-      newsRefs.slice(0, 8).forEach((r) => {
-        const line = document.createElement('div');
-        line.style.marginBottom = '6px';
-        const a = document.createElement('a');
-        a.href = r.url;
-        a.target = '_blank';
-        a.style.color = '#2563eb';
-        a.textContent = `· ${r.title || r.url}`;
-        line.appendChild(a);
-        ul.appendChild(line);
-      });
-      body.appendChild(ul);
-    };
-    if (isProductPost) appendNewsRefs();
+    // 조사 자료는 사실 확인용 내부 기록으로만 보관하고 미리보기에도 표시하지 않는다.
     if (deferredPreviewCta?.text) {
       const cta = document.createElement('p');
       cta.style.cssText = 'text-align:left;margin-top:48px';
@@ -858,28 +987,47 @@ async function openPreview(id) {
         .replace(/\n/g, '<br>');
       body.appendChild(cta);
     }
-    if (article.tags?.length) {
-      const tags = document.createElement('div');
-      tags.className = 'tags';
-      tags.textContent = article.tags.map((t) => '#' + t).join(' ');
-      body.appendChild(tags);
-    }
     // 주력 상품 링크는 미리보기에서도 항상 마지막에 둔다.
-    const prods = (meta.products || []).filter((p) => p && p.link);
+    const prods = (meta.products || [])
+      .map((p) => ({ ...p, image: p.image || meta.product?.image || '' }))
+      .filter((p) => p && /^https:\/\/naver\.me\/[A-Za-z0-9]+$/i.test(p.link || ''));
     if (prods.length) {
+      const cta = document.createElement('p');
+      cta.style.cssText = 'margin:36px 0 12px;font-weight:700';
+      cta.textContent = '👉 내 생활에 정말 필요한 선택일까요? 실제 구성과 현재 가격을 지금 확인해 보세요.';
+      body.appendChild(cta);
       prods.forEach((p) => {
-        const line = document.createElement('div');
-        line.style.cssText = 'font-size:13px;margin-bottom:6px';
-        const a = document.createElement('a');
-        a.href = p.link;
-        a.target = '_blank';
-        a.style.color = '#03c75a';
-        a.textContent = `▶ ${p.name || '상품'} 선택 기준 확인하기 → ${p.link}`;
-        line.appendChild(a);
+        const line = document.createElement('a');
+        line.style.cssText = 'display:flex;overflow:hidden;margin-bottom:10px;border:1px solid #e5e7eb;border-radius:12px;color:#222;text-decoration:none;background:#fff';
+        line.href = p.link;
+        line.target = '_blank';
+        line.rel = 'nofollow sponsored noopener';
+        const thumb = document.createElement('div');
+        thumb.style.cssText = `flex:0 0 150px;min-height:130px;background:${p.image ? `url("${p.image}") center/cover` : 'linear-gradient(135deg,#fff7ed,#fed7aa)'}`;
+        if (p.image) {
+          const image = document.createElement('img');
+          image.src = p.image;
+          image.alt = p.name || '상품 이미지';
+          image.referrerPolicy = 'no-referrer';
+          image.style.cssText = 'display:block;width:100%;height:100%;min-height:130px;object-fit:cover';
+          thumb.appendChild(image);
+        }
+        const info = document.createElement('div');
+        info.style.cssText = 'display:flex;min-width:0;flex:1;flex-direction:column;justify-content:center;padding:16px 18px';
+        const name = document.createElement('b');
+        name.textContent = p.name || '상품 상세 정보';
+        const price = document.createElement('span');
+        const amount = Number(String(p.price || '').replace(/[^0-9]/g, ''));
+        price.style.cssText = 'margin-top:7px;color:#555;font-size:13px';
+        price.textContent = amount > 0 ? `${amount.toLocaleString('ko-KR')}원 · 상품 상세 정보 보기` : '상품 상세 정보 보기';
+        const host = document.createElement('span');
+        host.style.cssText = 'margin-top:7px;color:#888;font-size:12px';
+        host.textContent = 'naver.me';
+        info.append(name, price, host);
+        line.append(thumb, info);
         body.appendChild(line);
       });
     }
-    if (!isProductPost) appendNewsRefs();
     $('modal').hidden = false;
   } catch (e) {
     alert(e.message);
@@ -1106,7 +1254,9 @@ $('sfZipBtn').onclick = async () => {
 
 // 초기화
 refreshStatus();
+refreshAutoPublishStatus();
 restoreLatestTopics();
 loadDrafts();
 setInterval(loadDrafts, 15000);
 setInterval(refreshStatus, 10000);
+setInterval(refreshAutoPublishStatus, 10000);

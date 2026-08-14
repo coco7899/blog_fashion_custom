@@ -3,30 +3,46 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>건강블로그자동화</title>
+  <title>티스토리 건강블로그자동화</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
     <div class="wrap header-inner">
-      <h1>🌿 건강블로그자동화 <span style="color:#7c3aed">+ 🎬 숏폼</span> <span style="font-size:11px;background:#e8f7ee;color:#16733a;padding:2px 8px;border-radius:999px;vertical-align:middle;font-weight:700">건강 전용 · 8000</span></h1>
+      <h1>🌿 티스토리 건강블로그자동화 <span style="color:#7c3aed">+ 🎬 숏폼</span> <span style="font-size:11px;background:#e8f7ee;color:#16733a;padding:2px 8px;border-radius:999px;vertical-align:middle;font-weight:700">티스토리 · 3000</span></h1>
       <div class="login-area">
+        <a id="targetBlogLink" class="badge" href="https://lalachocho.tistory.com/" target="_blank" rel="noopener">투데이 건강 · lalachocho</a>
         <span id="envBadge" class="badge" hidden></span>
         <span id="loginBadge" class="badge badge-off">확인 중...</span>
-        <button id="loginBtn" class="btn btn-green">네이버 로그인</button>
+        <button id="loginBtn" class="btn btn-green">티스토리 로그인</button>
         <button id="logoutBtn" class="btn btn-ghost" hidden>세션 삭제</button>
       </div>
     </div>
   </header>
 
   <main class="wrap">
+    <section class="card auto-control-card">
+      <div class="auto-control-heading">
+        <div>
+          <h2>⏱ 연속 자동발행</h2>
+          <p>컴퓨터를 켠 뒤 <b>시작</b>을 입력하면 바로 시작합니다. 글 개수 제한 없이, 발행이 끝날 때마다 30~75분의 불규칙한 간격을 둡니다.</p>
+        </div>
+        <span id="autoPublishBadge" class="badge badge-off">중지됨</span>
+      </div>
+      <div class="auto-command-row">
+        <input id="autoCommandInput" type="text" autocomplete="off" placeholder="시작 또는 중지 입력" />
+        <button id="autoCommandBtn" class="btn btn-green" type="button">명령 실행</button>
+      </div>
+      <p id="autoPublishStatus" class="status">컴퓨터를 다시 켜면 자동으로 시작되지 않습니다.</p>
+    </section>
+
     <!-- 건강 포스팅 만들기 -->
     <section class="card">
       <h2>✍️ 건강 포스팅 만들기</h2>
       <div class="row" style="margin-bottom:12px">
-        <select id="runMode" title="임시저장할지 바로 발행할지">
-          <option value="draft">임시저장 (직접 발행)</option>
-          <option value="publish">바로 발행</option>
+        <select id="runMode" title="비공개로 저장할지 이미지까지 넣어 바로 발행할지">
+          <option value="draft">비공개 저장 (직접 발행)</option>
+          <option value="publish" selected>바로 발행</option>
         </select>
         <select id="runVisibility" title="발행 시 공개 설정">
           <option value="public">공개</option>
@@ -34,15 +50,21 @@
         </select>
       </div>
       <div class="affiliate-product-field">
-        <label for="affiliateProductInput">제휴상품 <span>선택 입력</span></label>
+        <label for="affiliateProductInput">브랜드커넥트 제휴상품 <span>검색어 선택 입력</span></label>
         <input id="affiliateProductInput" type="text" maxlength="80"
           placeholder="예: 변기 설치형 좌욕기, 무가당 플레인 요거트" />
-        <p>입력하면 이 상품에 맞춰 생활 장면·선택 기준·구매 전 확인 흐름까지 연결합니다. 비워두면 글 주제에 맞는 제품을 자동으로 매칭합니다.</p>
+        <p>입력하면 해당 검색어로 실제 상품을 찾고 제휴 링크를 발급합니다. 비워두면 글 주제에 맞는 상품을 자동으로 고르며, 발급된 링크는 글 마지막에 들어갑니다.</p>
+        <div class="row" style="margin-top:9px;gap:8px;align-items:center;flex-wrap:wrap">
+          <a class="badge" href="https://brandconnect.naver.com/981491868759168/affiliate/products" target="_blank" rel="noopener">브랜드커넥트 상품목록</a>
+          <span id="naverLoginBadge" class="badge badge-off">네이버 로그인 확인 중...</span>
+          <button id="naverLoginBtn" class="btn btn-green" type="button">네이버 로그인</button>
+          <button id="naverLogoutBtn" class="btn btn-ghost" type="button" hidden>네이버 세션 삭제</button>
+        </div>
       </div>
       <div class="mode-grid">
         <div class="mode-box">
           <h3>🌿 건강블로그 글감찾기</h3>
-          <p class="hint">최신 건강 기사와 신뢰할 수 있는 자료에서 생활 문제를 찾고, 근거와 실천 방법을 충실하게 정리합니다.<br /><b>이미지는 생성하지 않고 4~6개의 이미지 자리와 추천 장면을 표시한 건강정보 원고</b>를 네이버 임시글에 저장합니다.</p>
+          <p class="hint">최신 건강 기사와 신뢰할 수 있는 자료에서 생활 문제를 찾고, 근거와 실천 방법을 충실하게 정리합니다.<br /><b>먼저 티스토리에 비공개 저장한 뒤 대표이미지와 본문 이미지를 생성·배치하고, 선택한 공개 상태로 최종 저장합니다.</b></p>
           <div class="row" style="gap:8px">
             <button id="newsModeBtn" class="btn btn-primary">🎲 자동 글감 찾기</button>
             <button id="newsStopBtn" class="btn btn-danger" type="button" hidden>글감 찾기 중지</button>

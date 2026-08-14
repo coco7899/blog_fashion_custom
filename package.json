@@ -1,10 +1,11 @@
 {
-  "name": "naver-blog-auto-custom",
+  "name": "tistory-blog-auto-custom",
   "version": "0.1.0",
   "private": true,
-  "description": "네이버 블로그 자동화 + 숏폼 대시보드 (커스텀 사본) - 4000 포트에서 실행",
+  "description": "티스토리 블로그 자동발행 + 숏폼 대시보드 - 3000 포트",
   "scripts": {
-    "start": "node server-custom.js"
+    "start": "node server-custom.js",
+    "test": "node test/tistory.test.js"
   },
   "dependencies": {
     "express": "^4.19.2",

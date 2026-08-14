@@ -3,3 +3,4 @@ data/
 server-out.log
 server-err.log
 logs/
+debug.log
