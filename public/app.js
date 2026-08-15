@@ -774,7 +774,6 @@ async function loadDrafts() {
     const running = !done && d.status !== 'error';
     const tag = done ? 'tag-published' : d.status === 'error' ? 'tag-error' : 'tag-running';
     const tagText = d.status === 'saved' ? '임시저장됨' : d.status === 'published' ? '발행됨' : d.status === 'error' ? '실패' : '진행 중';
-    const linkLabel = d.status === 'saved' ? '글쓰기 열기 →' : '글 보기 →';
     div.innerHTML = `
       <div>
         <div class="d-title"></div>
@@ -786,7 +785,8 @@ async function loadDrafts() {
         ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
         ${d.imageZipAvailable ? `<a class="btn btn-ghost btn-sm" href="/api/drafts/${encodeURIComponent(d.id)}/product-images.zip" download>이미지 ZIP</a>` : ''}
         ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
-        ${d.postUrl ? `<a href="${d.postUrl}" target="_blank">${linkLabel}</a>` : ''}
+        ${d.status === 'saved' && d.articleAvailable !== false ? '<button class="btn btn-primary btn-republish">다시 발행</button>' : ''}
+        ${d.status === 'published' && d.postUrl ? `<a href="${d.postUrl}" target="_blank">글 보기 →</a>` : ''}
       </div>`;
     const sfBtn = div.querySelector('.btn-shortform');
     if (sfBtn) sfBtn.onclick = () => sfOpenPanel(d.id, d.title || (d.topic && d.topic.title) || d.keyword);
@@ -809,6 +809,20 @@ async function loadDrafts() {
           await api(`/api/drafts/${d.id}/retry-publish`, { method: 'POST', body: { mode: d.mode || 'draft' } });
           watchDraft(d.id);
         } catch (e) {
+          alert(e.message);
+        }
+      };
+    }
+    const republishBtn = div.querySelector('.btn-republish');
+    if (republishBtn) {
+      republishBtn.onclick = async () => {
+        if (!(await uiConfirm('임시저장된 글을 기존 원고 그대로 다시 발행할까요?'))) return;
+        republishBtn.disabled = true;
+        try {
+          await api(`/api/drafts/${d.id}/retry-publish`, { method: 'POST', body: { mode: 'publish' } });
+          watchDraft(d.id);
+        } catch (e) {
+          republishBtn.disabled = false;
           alert(e.message);
         }
       };
