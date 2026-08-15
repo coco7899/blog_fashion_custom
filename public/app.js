@@ -60,12 +60,23 @@ let runningTopicIndex = null;        // 현재 실행 중인 글감 인덱스 (�
 const completedTopics = new Set();   // 이미 실행 완료한 글감 인덱스 (연회색)
 let runQueue = [];                   // 대기 중인 글감 인덱스 (순서대로 자동 처리)
 const queuedAffiliateProducts = new Map(); // 대기열에 넣을 당시 지정한 제휴상품
+let autoControlPending = false;
 
 function selectedAffiliateProduct() {
   return String($('affiliateProductInput')?.value || '').replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
 $('affiliateProductInput').addEventListener('input', refreshTopicButtons);
+
+function updateRunModeUi() {
+  const temporary = $('runMode').value === 'draft';
+  $('runVisibility').disabled = temporary;
+  $('runVisibility').title = temporary
+    ? '임시저장에서는 공개 설정을 사용하지 않습니다.'
+    : '발행 시 공개 설정';
+}
+
+$('runMode').addEventListener('change', updateRunModeUi);
 
 function formatScheduleTime(value) {
   if (!value) return '';
@@ -79,6 +90,12 @@ async function refreshAutoPublishStatus() {
     const status = await api('/api/schedule');
     const badge = $('autoPublishBadge');
     const message = $('autoPublishStatus');
+    const startButton = $('autoStartBtn');
+    const stopButton = $('autoStopBtn');
+    startButton.disabled = autoControlPending || status.active || status.running;
+    stopButton.disabled = autoControlPending || !status.active;
+    startButton.setAttribute('aria-pressed', String(status.active));
+    stopButton.setAttribute('aria-pressed', String(!status.active));
     if (status.active) {
       badge.className = 'badge badge-on';
       badge.textContent = status.running ? '글 작성 중' : '작동 중';
@@ -98,8 +115,8 @@ async function refreshAutoPublishStatus() {
       badge.textContent = status.running ? '마지막 글 처리 중' : '중지됨';
       message.className = 'status';
       message.textContent = status.running
-        ? '중지 명령을 받았습니다. 현재 처리 중인 글까지만 마친 뒤 멈춥니다.'
-        : '컴퓨터를 다시 켜면 자동으로 시작되지 않습니다. 실행하려면 “시작”을 입력하세요.';
+        ? `중지 명령을 받았습니다. 현재 처리 중인 글까지만 마친 뒤 멈춥니다. 이번 실행에서 완료한 글은 ${status.sessionCount}개입니다.`
+        : `자동발행이 중지되었습니다. 이번 실행에서 완료한 글은 ${status.sessionCount}개입니다. 실행하려면 시작 버튼을 눌러주세요.`;
     }
   } catch (error) {
     $('autoPublishStatus').className = 'status err';
@@ -107,32 +124,29 @@ async function refreshAutoPublishStatus() {
   }
 }
 
-async function submitAutoCommand() {
-  const input = $('autoCommandInput');
-  const button = $('autoCommandBtn');
-  const command = input.value.trim();
-  if (!command) {
-    $('autoPublishStatus').className = 'status err';
-    $('autoPublishStatus').textContent = '“시작” 또는 “중지”를 입력하세요.';
-    return;
-  }
-  button.disabled = true;
+async function controlAutoPublish(command) {
+  const startButton = $('autoStartBtn');
+  const stopButton = $('autoStopBtn');
+  autoControlPending = true;
+  startButton.disabled = true;
+  stopButton.disabled = true;
+  let controlError = null;
   try {
     await api('/api/schedule/control', { method: 'POST', body: { command } });
-    input.value = '';
-    await refreshAutoPublishStatus();
   } catch (error) {
-    $('autoPublishStatus').className = 'status err';
-    $('autoPublishStatus').textContent = error.message;
+    controlError = error;
   } finally {
-    button.disabled = false;
+    autoControlPending = false;
+    await refreshAutoPublishStatus();
+    if (controlError) {
+      $('autoPublishStatus').className = 'status err';
+      $('autoPublishStatus').textContent = controlError.message;
+    }
   }
 }
 
-$('autoCommandBtn').onclick = submitAutoCommand;
-$('autoCommandInput').addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') submitAutoCommand();
-});
+$('autoStartBtn').onclick = () => controlAutoPublish('시작');
+$('autoStopBtn').onclick = () => controlAutoPublish('중지');
 
 // 세션 파일은 있어도 실제 로그인이 만료됐을 수 있어, 유효성을 따로 확인해 배지에 반영한다.
 // (서버 verify는 10분 캐시라 자주 호출해도 부담이 적지만, 클라이언트도 2분 간격으로 throttle)
@@ -367,7 +381,7 @@ $('linkModeBtn').onclick = async () => {
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const affiliateProduct = selectedAffiliateProduct();
-  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '비공개 저장';
+  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '티스토리 임시저장';
   const productLine = affiliateProduct ? `\n제휴상품: ${affiliateProduct}` : '\n제휴상품: 주제에 맞게 자동 매칭';
   if (!(await uiConfirm(`이 기사 링크를 바탕으로 AI가 글을 쓰고 ${actLabel}까지 진행합니다.\n${url}${productLine}\n시작할까요?`))) return;
   const btn = $('linkModeBtn');
@@ -504,7 +518,7 @@ async function startRun(topicIndex, visOverride) {
   }
   const mode = $('runMode').value; // 'draft' | 'publish'
   const visibility = visOverride || $('runVisibility').value;
-  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '티스토리에 비공개 저장';
+  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '티스토리에 임시저장';
   const busy = runningTopicIndex !== null || runQueue.length > 0;
   const productLine = affiliateProduct
     ? `\n제휴상품: ${affiliateProduct}\n이 상품에 맞춰 글의 생활 장면과 선택 기준을 연결합니다.`
@@ -574,7 +588,7 @@ async function runAllTopics() {
   if (!pending.length) return alert('대기열에 추가할 글감이 없습니다.');
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
-  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '비공개 저장';
+  const actLabel = mode === 'publish' ? `이미지까지 넣어 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
   const affiliateProduct = selectedAffiliateProduct();
   const productLine = affiliateProduct ? `\n제휴상품: ${affiliateProduct}` : '\n제휴상품: 글마다 자동 매칭';
   if (!(await uiConfirm(`글감 ${pending.length}개를 대기열에 넣고 하나씩 차례대로 ${actLabel}까지 자동 진행합니다.\n(동시가 아니라 안전하게 순서대로 처리됩니다)${productLine}\n시작할까요?`))) return;
@@ -623,7 +637,7 @@ function renderSteps(status, mode) {
   const wrap = $('progressSteps');
   wrap.innerHTML = '';
   const order = STEPS.map((s) => s.key);
-  // 'published'(공개 발행)와 'saved'(비공개 저장)는 모두 완료로 취급
+  // 'published'(발행)와 'saved'(임시저장)는 모두 완료로 취급
   const norm = status === 'published' ? 'saved' : status;
   const idx = order.indexOf(norm === 'error' ? '' : norm);
   STEPS.forEach((s, i) => {
@@ -643,7 +657,7 @@ function renderSteps(status, mode) {
     else if (i === idx) active = true;
     if (done) el.classList.add('done');
     if (active) el.classList.add('active');
-    const label = s.key === 'publishing' ? (mode === 'publish' ? '발행' : '비공개 저장') : s.label;
+    const label = s.key === 'publishing' ? (mode === 'publish' ? '발행' : '임시저장') : s.label;
     // 완료=✓, 진행중=◐, 대기=번호
     const mark = done ? '✓' : active ? '◐' : String(i + 1);
     el.textContent = `${mark} ${label}`;
@@ -781,7 +795,7 @@ async function loadDrafts() {
         : awaitingImageWork
           ? '이미지 생성 대기'
           : d.status === 'saved'
-            ? '완료'
+            ? '임시저장됨'
             : d.status === 'published'
               ? '발행됨'
               : d.status === 'error'
@@ -798,7 +812,7 @@ async function loadDrafts() {
       </div>
       <div class="d-actions">
         <span class="tag-status ${tag}">${tagText}</span>
-        ${d.status === 'error' && d.topic && !d.recovered ? `<button class="btn btn-primary btn-retry">${placementRetry ? '이미지 배치 재시도' : imageRetry ? '이미지부터 재시도' : needsFullRetry ? '처음부터 재시도' : `${d.mode === 'publish' ? '발행' : '비공개 저장'} 재시도`}</button>` : ''}
+        ${d.status === 'error' && d.topic && !d.recovered ? `<button class="btn btn-primary btn-retry">${placementRetry ? '이미지 배치 재시도' : imageRetry ? '이미지부터 재시도' : needsFullRetry ? '처음부터 재시도' : `${d.mode === 'publish' ? '발행' : '임시저장'} 재시도`}</button>` : ''}
         ${d.articleAvailable === false ? '<span class="tag-status tag-recovered">이력만 복구</span>' : '<button class="btn btn-ghost btn-preview">미리보기</button>'}
         ${d.title && d.articleAvailable !== false ? `<button class="btn btn-shorts btn-shortform" title="이 원고로 세로 숏폼 만들기">🎬 숏폼</button>` : ''}
         ${d.postUrl && done ? '<button class="btn btn-primary btn-republish">다시발행</button>' : ''}
@@ -807,7 +821,7 @@ async function loadDrafts() {
     if (sfBtn) sfBtn.onclick = () => sfOpenPanel(d.id, d.title || (d.topic && d.topic.title) || d.keyword);
     div.querySelector('.d-title').textContent = d.title || d.topic?.title || d.keyword;
     div.querySelector('.d-sub').textContent =
-      `${new Date(d.createdAt).toLocaleString('ko-KR')} · ${d.keyword} · ${d.visibility === 'private' ? '비공개' : '공개'}` +
+      `${new Date(d.createdAt).toLocaleString('ko-KR')} · ${d.keyword} · ${d.mode === 'draft' ? '임시저장' : d.visibility === 'private' ? '비공개 발행' : '공개 발행'}` +
       (d.affiliateProduct ? ` · 지정 제휴상품: ${d.affiliateProduct}` : ' · 제휴상품 자동 매칭') +
       (d.frameLabel ? ` · 구성: ${d.frameLabel}` : '') +
       (d.status === 'error' ? ` · ${d.error || ''}` : '');
@@ -819,7 +833,7 @@ async function loadDrafts() {
     const retryBtn = div.querySelector('.btn-retry');
     if (retryBtn) {
       retryBtn.onclick = async () => {
-        const noun = d.mode === 'publish' ? '발행' : '비공개 저장';
+        const noun = d.mode === 'publish' ? '발행' : '임시저장';
         const message = placementRetry
           ? '저장된 이미지는 그대로 두고 같은 티스토리 비공개 글에 이미지 배치만 다시 시도할까요?'
           : imageRetry
@@ -1255,6 +1269,7 @@ $('sfZipBtn').onclick = async () => {
 // 초기화
 refreshStatus();
 refreshAutoPublishStatus();
+updateRunModeUi();
 restoreLatestTopics();
 loadDrafts();
 setInterval(loadDrafts, 15000);

@@ -1,4 +1,4 @@
-// 수집 → AI 작성 → 이미지 생성/배치 → 티스토리 비공개 저장 또는 공개 발행 파이프라인
+// 수집 → AI 작성 → 이미지 생성/배치 → 티스토리 임시저장 또는 발행 파이프라인
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -68,10 +68,10 @@ function buildImageQueries(topic, article) {
   return out.slice(0, 3);
 }
 
-// 비공개 저장/발행 (파이프라인 마지막 단계 — 저장만 재시도할 때도 사용)
-// mode 기본값 'draft'(비공개 저장). 'publish'면 공개 발행.
+// 임시저장/발행 (파이프라인 마지막 단계 — 저장만 재시도할 때도 사용)
+// mode 기본값 'draft'(티스토리 임시저장). 'publish'면 선택한 공개 상태로 발행.
 async function publishAndNotify(draftId, article, judgments, visibility, mode = 'draft', publishOptions = {}) {
-  const savingLabel = mode === 'publish' ? '발행' : '비공개 저장';
+  const savingLabel = mode === 'publish' ? '발행' : '임시저장';
   store.updateDraft(draftId, { status: 'publishing', step: `티스토리 에디터에 작성/${savingLabel} 중` });
   // 참고자료는 사실 확인용 내부 기록으로만 보관하고 발행 본문에는 넣지 않는다.
   const meta = store.getMeta(draftId) || {};
@@ -97,21 +97,22 @@ async function publishAndNotify(draftId, article, judgments, visibility, mode = 
   if (publishOptions.intermediate) {
     store.updateDraft(draftId, {
       status: publishOptions.nextStatus || 'images',
-      step: publishOptions.nextStep || '1차 비공개 저장 완료 · 이미지 생성 준비',
+      step: publishOptions.nextStep || '1차 저장 완료 · 이미지 생성 준비',
       postUrl,
       savedAsDraft,
       error: null,
     });
-    console.log(`[pipeline] ${draftId} 1차 비공개 저장 완료: ${postUrl}`);
+    console.log(`[pipeline] ${draftId} 1차 저장 완료: ${postUrl}`);
     return publishOptions.returnResult ? result : postUrl;
   }
   const doneStatus = savedAsDraft ? 'saved' : 'published';
-  const doneLabel = publishOptions.doneLabel || (savedAsDraft ? '비공개 저장 완료' : '발행 완료');
+  const doneLabel = publishOptions.doneLabel || (savedAsDraft ? '임시저장 완료' : '발행 완료');
   store.updateDraft(draftId, {
     status: doneStatus,
     step: doneLabel,
     postUrl,
     savedAsDraft,
+    prePublishImageGeneration: false,
     representativeImageSet: Boolean(result.representativeImageSet),
     error: null,
     ...(publishOptions.donePatch || {}),
@@ -199,6 +200,33 @@ async function completeHealthImagesAndPlacement(draftId, visibility = 'public', 
   if (!meta.imagePlacementRequired || meta.savedAsDraft === false) return { images: imageResult };
   const placement = await placeHealthImagesAndSave(draftId, visibility || meta.visibility || 'public', finalMode);
   return { images: imageResult, placement };
+}
+
+async function generateHealthImagesAndPublish(draftId, visibility = 'public', mode = 'draft') {
+  const article = store.getArticle(draftId);
+  if (!article) throw new Error('이미지를 만들 건강 원고를 찾지 못했습니다.');
+  const imageResult = await healthImages.complete(draftId);
+  const completedJudgments = store.getJudgments(draftId);
+  const completedImages = completedJudgments.filter((item) => item?.file);
+  if (!completedImages.some((item) => Number(item.slot) === 0)) {
+    throw new Error('티스토리에 넣을 대표이미지가 준비되지 않았습니다.');
+  }
+  if (completedImages.filter((item) => Number(item.slot) > 0).length < 4) {
+    throw new Error('티스토리에 넣을 본문 이미지가 4장보다 적습니다.');
+  }
+  const postUrl = await publishAndNotify(draftId, article, completedJudgments, visibility, mode, {
+    insertCover: true,
+    strictImages: true,
+    expectedImageCount: completedImages.length,
+    donePatch: {
+      imagePlacementRequired: false,
+      imagePlacementPending: false,
+      imagePlacementCompleted: true,
+      secondDraftSaved: mode === 'draft',
+      insertedImageCount: completedImages.length,
+    },
+  });
+  return { postUrl, images: imageResult };
 }
 
 async function resumePendingHealthDrafts() {
@@ -338,8 +366,9 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       frameLabel: article.frameLabel,
     });
 
-    // 4. 티스토리 첫 비공개 저장에는 이미지 자리와 장면 설명만 넣고,
-    // 저장 성공 직후 Codex 내장 이미지 생성 작업을 이어서 실행한다.
+    // 4. 이미지 자리와 장면 설명을 확정한 뒤 실제 이미지를 먼저 생성한다.
+    // 티스토리 임시저장은 게시물이 아니어서 같은 글을 번호로 다시 열 수 없으므로,
+    // 이미지까지 모두 준비한 최종본을 한 번만 임시저장하거나 발행한다.
     setStep('images', '본문 이미지 자리와 추천 장면을 정리하는 중');
     const slots = article.blocks.filter((block) => block.type === 'image');
     if (slots.length < 4) throw new Error('건강 원고의 이미지 자리가 4개보다 적습니다.');
@@ -371,38 +400,19 @@ async function run(draftId, search, topic, visibility, opts = {}) {
       imageZipAvailable: false,
       autoImageWorkflow: true,
       imageOnlyError: false,
-      imagePlacementRequired: true,
+      imagePlacementRequired: false,
       imagePlacementPending: false,
       imagePlacementCompleted: false,
       secondDraftSaved: false,
       imagePlacementOnlyError: false,
       imagePlacementError: null,
+      prePublishImageGeneration: true,
     });
 
-    // 5. 먼저 비공개로 안전하게 저장한 뒤 이미지 생성과 최종 발행을 이어간다.
+    // 5. 대표이미지와 본문 이미지를 모두 만든 뒤 최종본을 티스토리에 한 번만 저장한다.
     const runMode = opts.mode || 'draft';
-    const postUrl = await publishAndNotify(draftId, article, judgments, 'private', 'draft', {
-      intermediate: true,
-      nextStatus: 'images',
-      nextStep: '1차 비공개 저장 완료 · 대표이미지와 본문 이미지 생성 준비',
-    });
-    // 6. 사용자의 추가 요청을 기다리지 않고 이미지를 생성·저장한 뒤,
-    // 같은 비공개 글을 다시 열어 자리 문구를 지우고 이미지를 넣어 최종 저장한다.
-    try {
-      const completed = await completeHealthImagesAndPlacement(draftId, visibility, runMode);
-      return { ok: true, postUrl, ...completed };
-    } catch (imageError) {
-      // 1차 임시글과 로컬 이미지가 있으면 그대로 보존하고 실패한 단계만 다시 시도할 수 있게 한다.
-      console.error(`[pipeline] ${draftId} 이미지 생성·배치 실패: ${imageError.message}`);
-      const latest = store.getMeta(draftId) || {};
-      return {
-        ok: true,
-        postUrl,
-        imagesPending: Boolean(latest.imagesPending),
-        imagePlacementPending: Boolean(latest.imagePlacementPending),
-        imageError: imageError.message,
-      };
-    }
+    const completed = await generateHealthImagesAndPublish(draftId, visibility, runMode);
+    return { ok: true, ...completed };
   } catch (e) {
     const stopped = e.message && e.message.includes('중지');
     console.error(`[pipeline] ${draftId} ${stopped ? '중지' : '실패'}:`, e.message);
@@ -597,5 +607,6 @@ module.exports = {
   publishAndNotify,
   placeHealthImagesAndSave,
   completeHealthImagesAndPlacement,
+  generateHealthImagesAndPublish,
   resumePendingHealthDrafts,
 };

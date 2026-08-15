@@ -440,17 +440,21 @@ app.post('/api/drafts/:id/retry-publish', async (req, res) => {
   res.json({ ok: true, draftId: id });
 });
 
-// 티스토리 비공개 글은 그대로 두고 실패하거나 누락된 이미지 작업만 다시 실행한다.
+// 실패하거나 누락된 이미지 작업만 다시 실행한다.
 app.post('/api/drafts/:id/retry-images', (req, res) => {
   const id = req.params.id;
   const meta = store.getMeta(id);
   const article = store.getArticle(id);
   if (!meta) return res.status(404).json({ error: '초안을 찾을 수 없습니다.' });
   if (!article) return res.status(400).json({ error: '작성된 글이 없습니다.' });
-  if (!meta.postUrl) return res.status(400).json({ error: '티스토리 비공개 저장을 먼저 완료해야 합니다.' });
-  const work = meta.imagePlacementRequired
-    ? pipeline.completeHealthImagesAndPlacement(id, meta.visibility || 'public', meta.mode || 'draft')
-    : healthImages.complete(id);
+  if (!meta.postUrl && !meta.prePublishImageGeneration) {
+    return res.status(400).json({ error: '티스토리 저장을 다시 진행할 원고 정보가 없습니다.' });
+  }
+  const work = meta.prePublishImageGeneration
+    ? pipeline.generateHealthImagesAndPublish(id, meta.visibility || 'public', meta.mode || 'draft')
+    : meta.imagePlacementRequired
+      ? pipeline.completeHealthImagesAndPlacement(id, meta.visibility || 'public', meta.mode || 'draft')
+      : healthImages.complete(id);
   work.catch((error) => {
     console.error(`[retry-images] ${id} 실패: ${error.message}`);
   });

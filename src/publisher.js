@@ -1,4 +1,4 @@
-// 티스토리 새 에디터 자동화: 제목/HTML 본문/이미지/태그 입력 → 비공개 저장 또는 공개 발행
+// 티스토리 새 에디터 자동화: 제목/HTML 본문/이미지/태그 입력 → 임시저장 또는 발행
 const fs = require('fs');
 const path = require('path');
 const auth = require('./tistoryAuth');
@@ -488,7 +488,52 @@ async function fillTags(page, tags) {
   }
 }
 
+async function saveTemporaryDraft(page) {
+  const candidates = [
+    page.getByRole('button', { name: /^임시저장(?:\s*\d+)?$/ }),
+    page.locator('button').filter({ hasText: '임시저장' }),
+    page.locator('[role="button"]').filter({ hasText: '임시저장' }),
+  ];
+  let button = null;
+  for (const candidate of candidates) {
+    const first = candidate.first();
+    if (await first.isVisible().catch(() => false)) {
+      button = first;
+      break;
+    }
+  }
+  if (!button) throw new Error('티스토리 임시저장 버튼을 찾지 못했습니다.');
+
+  const beforeText = String(await button.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+  await button.click({ timeout: 10000 });
+
+  const successTexts = [
+    /작성 중인 글이 저장되었습니다/,
+    /임시저장(?:이|을)? 완료/,
+    /임시 저장 완료/,
+  ];
+  let confirmed = false;
+  for (let attempt = 0; attempt < 20 && !confirmed; attempt += 1) {
+    for (const pattern of successTexts) {
+      if (await page.getByText(pattern).first().isVisible().catch(() => false)) {
+        confirmed = true;
+        break;
+      }
+    }
+    if (!confirmed) {
+      const afterText = String(await button.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      if (afterText && beforeText && afterText !== beforeText) confirmed = true;
+    }
+    if (!confirmed) await sleep(250);
+  }
+  if (!confirmed) throw new Error('티스토리 임시저장 완료 상태를 확인하지 못했습니다.');
+}
+
 async function savePost(page, mode, visibility, representativeCoverSrc = '') {
+  if (mode === 'draft') {
+    await saveTemporaryDraft(page);
+    return;
+  }
   await page.locator(SEL.complete).click({ timeout: 10000 });
   await sleep(800);
   if (representativeCoverSrc) await verifyRepresentativeCover(page, representativeCoverSrc);
@@ -569,19 +614,28 @@ async function publish(article, judgments = [], opts = {}) {
     }
     await fillTags(page, article.tags || []);
 
-    const saveLabel = options.mode === 'publish' && options.visibility !== 'private' ? '공개 발행' : '비공개 저장';
+    const saveLabel = options.mode === 'draft'
+      ? '임시저장'
+      : options.visibility === 'private'
+        ? '비공개 발행'
+        : '공개 발행';
     options.onStep(`${saveLabel} 중`);
     await savePost(page, options.mode, options.visibility, representativeCoverSrc);
     const representativeImageSet = Boolean(representativeCoverSrc);
 
-    let postId = postIdFromUrl(page.url()) || postIdFromUrl(editorUrl);
-    if (!postId) postId = await findPostIdByTitle(page, profile.blogUrl, article.title);
-    if (!postId) throw new Error('티스토리 저장은 요청했지만 저장된 글 번호를 확인하지 못했습니다.');
-
-    const savedAsDraft = options.mode !== 'publish' || options.visibility === 'private';
-    const postUrl = savedAsDraft
-      ? `${profile.blogUrl}/manage/newpost/${postId}?type=post&returnURL=%2Fmanage%2Fposts%2F`
-      : `${profile.blogUrl}/${postId}`;
+    const savedAsDraft = options.mode === 'draft';
+    let postUrl;
+    if (savedAsDraft) {
+      // 티스토리 임시저장은 게시물 번호를 만들지 않고 임시저장 보관함에 들어간다.
+      postUrl = `${profile.blogUrl}/manage/newpost/?type=post&returnURL=%2Fmanage%2Fposts%2F`;
+    } else {
+      let postId = postIdFromUrl(page.url()) || postIdFromUrl(editorUrl);
+      if (!postId) postId = await findPostIdByTitle(page, profile.blogUrl, article.title);
+      if (!postId) throw new Error('티스토리 발행은 요청했지만 저장된 글 번호를 확인하지 못했습니다.');
+      postUrl = options.visibility === 'private'
+        ? `${profile.blogUrl}/manage/newpost/${postId}?type=post&returnURL=%2Fmanage%2Fposts%2F`
+        : `${profile.blogUrl}/${postId}`;
+    }
     return {
       savedAsDraft,
       postUrl,

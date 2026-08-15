@@ -237,9 +237,18 @@ async function runComplete(draftId) {
   const title = safeSegment(article.title || meta.title || meta.keyword, 72);
   const targetDir = resolveDownloadDir(draftId, meta, title);
   fs.mkdirSync(targetDir, { recursive: true });
+  const prePublish = meta.prePublishImageGeneration === true;
   const placementRequired = meta.imagePlacementRequired === true && meta.savedAsDraft !== false;
-  const finalStatus = meta.savedAsDraft === false || meta.status === 'published' ? 'published' : 'saved';
-  const finalLabel = finalStatus === 'published' ? '발행 완료' : '1차 임시저장 완료';
+  const finalStatus = prePublish
+    ? 'images'
+    : meta.savedAsDraft === false || meta.status === 'published'
+      ? 'published'
+      : 'saved';
+  const finalLabel = prePublish
+    ? '원고 작성 완료'
+    : finalStatus === 'published'
+      ? '발행 완료'
+      : '임시저장 완료';
 
   store.updateDraft(draftId, {
     status: 'images',
@@ -321,8 +330,10 @@ async function runComplete(draftId) {
   };
   store.saveArticle(draftId, article);
   store.updateDraft(draftId, {
-    status: placementRequired ? 'images' : finalStatus,
-    step: placementRequired
+    status: placementRequired || prePublish ? 'images' : finalStatus,
+    step: prePublish
+      ? `대표이미지 1장 + 본문 이미지 ${slots.length}장 저장 완료 · 티스토리 저장 준비`
+      : placementRequired
       ? `대표이미지 1장 + 본문 이미지 ${slots.length}장 저장 완료 · 네이버 배치 준비`
       : `${finalLabel} · 대표이미지 1장 + 본문 이미지 ${slots.length}장 저장 완료`,
     imageCount: expectedNames.length,
@@ -361,10 +372,16 @@ function complete(draftId) {
   const job = runComplete(draftId)
     .catch((error) => {
       const meta = store.getMeta(draftId) || {};
-      const finalStatus = meta.savedAsDraft === false ? 'published' : 'error';
+      const finalStatus = meta.prePublishImageGeneration === true
+        ? 'error'
+        : meta.savedAsDraft === false
+          ? 'published'
+          : 'error';
       store.updateDraft(draftId, {
         status: finalStatus,
-        step: `네이버 임시저장은 완료됐지만 이미지 자동 생성 실패: ${error.message}`,
+        step: meta.prePublishImageGeneration === true
+          ? `티스토리 저장 전 이미지 자동 생성 실패: ${error.message}`
+          : `임시저장은 완료됐지만 이미지 자동 생성 실패: ${error.message}`,
         imagesPending: true,
         autoImageWorkflow: true,
         imageOnlyError: true,
