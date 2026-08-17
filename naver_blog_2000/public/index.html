@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>네이버 건강블로그자동화</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="wrap header-inner">
+      <h1>🌿 네이버 건강블로그자동화 <span style="color:#7c3aed">+ 🎬 숏폼</span> <span style="font-size:11px;background:#e8f7ee;color:#16733a;padding:2px 8px;border-radius:999px;vertical-align:middle;font-weight:700">네이버 · 2000</span></h1>
+      <div class="login-area">
+        <a id="targetBlogLink" class="badge" href="https://blog.naver.com/" target="_blank" rel="noopener">네이버 블로그 열기</a>
+        <span id="envBadge" class="badge" hidden></span>
+        <span id="loginBadge" class="badge badge-off">확인 중...</span>
+        <button id="loginBtn" class="btn btn-green">네이버 로그인</button>
+        <button id="logoutBtn" class="btn btn-ghost" hidden>세션 삭제</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card auto-control-card">
+      <div class="auto-control-heading">
+        <div>
+          <h2>⏱ 연속 자동발행</h2>
+          <p>컴퓨터를 켠 뒤 <b>시작</b> 버튼을 누르면 바로 시작합니다. 글 개수 제한 없이, 발행이 끝날 때마다 30~75분의 불규칙한 간격을 둡니다.</p>
+        </div>
+        <span id="autoPublishBadge" class="badge badge-off">중지됨</span>
+      </div>
+      <div class="auto-action-row" role="group" aria-label="연속 자동발행 제어">
+        <button id="autoStartBtn" class="btn btn-green" type="button">시작</button>
+        <button id="autoStopBtn" class="btn btn-danger" type="button">중지</button>
+      </div>
+      <p id="autoPublishStatus" class="status">컴퓨터를 다시 켜면 자동으로 시작되지 않습니다.</p>
+    </section>
+
+    <!-- 건강 포스팅 만들기 -->
+    <section class="card">
+      <h2>✍️ 건강 포스팅 만들기</h2>
+      <div class="row" style="margin-bottom:12px">
+        <select id="runMode" title="네이버 임시저장으로 남길지 바로 발행할지">
+          <option value="draft">임시저장</option>
+          <option value="publish" selected>바로 발행</option>
+        </select>
+        <select id="runVisibility" title="발행 시 공개 설정">
+          <option value="public">공개</option>
+          <option value="private">비공개</option>
+        </select>
+      </div>
+      <div class="affiliate-product-field">
+        <div class="affiliate-field-heading">
+          <label for="affiliateProductInput">브랜드커넥트 제휴상품</label>
+          <span class="affiliate-optional">검색어 선택 입력</span>
+        </div>
+        <input id="affiliateProductInput" type="text" maxlength="80"
+          placeholder="예: 변기 설치형 좌욕기, 무가당 플레인 요거트" />
+        <p class="affiliate-help">입력하면 해당 검색어로 실제 상품을 찾고 제휴 링크를 발급합니다. 1순위 상품이 없으면 글과 관련된 2순위 상품군에서 하나를 연결합니다. 비워두면 글 주제에 맞는 상품을 자동으로 고릅니다.</p>
+        <div class="affiliate-actions">
+          <a class="affiliate-catalog-link" href="https://brandconnect.naver.com/981491868759168/affiliate/products" target="_blank" rel="noopener">브랜드커넥트 상품목록</a>
+          <span class="badge">상단 네이버 로그인 세션을 함께 사용합니다</span>
+        </div>
+      </div>
+      <div class="mode-grid">
+        <div class="mode-box">
+          <h3>🌿 건강블로그 글감찾기</h3>
+          <p class="hint">최신 건강 기사와 신뢰할 수 있는 자료에서 생활 문제를 찾고, 근거와 실천 방법을 충실하게 정리합니다.<br /><b>대표이미지와 본문 이미지를 생성·배치한 최종본을 네이버 블로그에 임시저장하거나, 선택한 공개 상태로 바로 발행합니다.</b></p>
+          <div class="row" style="gap:8px">
+            <button id="newsModeBtn" class="btn btn-primary">🎲 자동 글감 찾기</button>
+            <button id="newsStopBtn" class="btn btn-danger" type="button" hidden>글감 찾기 중지</button>
+          </div>
+          <div class="row" style="margin-top:10px; width:100%">
+            <input id="keywordInput" type="text" placeholder="건강 키워드로 찾기 (예: 혈당스파이크, 중년 단백질, 장 건강)" style="flex:1; min-width:180px"
+              onkeydown="if(event.key==='Enter'){document.getElementById('keywordModeBtn').click();}" />
+            <button id="keywordModeBtn" class="btn btn-primary">🔎 키워드로 찾기</button>
+          </div>
+          <div class="row" style="margin-top:8px; width:100%">
+            <input id="linkInput" type="text" placeholder="또는 뉴스 기사 링크 붙여넣기 (https://...)" style="flex:1; min-width:180px" />
+            <button id="linkModeBtn" class="btn btn-ghost">링크로 글쓰기</button>
+          </div>
+          <p id="newsModeStatus" class="status" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 건강 글감 목록 -->
+    <section class="card" id="topicsCard" hidden>
+      <h2>글감 선택 <span class="hint-inline">— 여러 개를 눌러 대기열에 쌓으면 하나씩 자동 진행돼요</span>
+        <button id="clearTopicsBtn" class="btn btn-ghost btn-sm" style="float:right">모든 글감 삭제</button>
+        <button id="runAllBtn" class="btn btn-primary btn-sm" style="float:right; margin-right:6px">⚡ 전체 실행</button>
+      </h2>
+      <div id="topicsList" class="topics"></div>
+    </section>
+
+    <!-- 진행 상황 -->
+    <section class="card progress-card" id="progressCard" hidden>
+      <h2>진행 상황
+        <button id="stopBtn" class="btn btn-danger btn-sm" style="float:right">■ 진행 중지</button>
+      </h2>
+      <div class="progress-steps" id="progressSteps"></div>
+      <p id="progressMsg" class="status"></p>
+      <p id="progressResult" hidden></p>
+    </section>
+
+    <!-- 숏폼 (인라인) — 글쓰기 완료 후 '숏폼 제작하기'로 여기서 바로 생성·미리보기 -->
+    <section class="card" id="shortformCard" hidden>
+      <h2>🎬 숏폼 <span class="hint-inline" id="sfForTitle"></span>
+        <button id="sfCloseBtn" class="btn btn-ghost btn-sm" style="float:right">닫기</button>
+      </h2>
+
+      <!-- 생성 옵션 + 버튼 -->
+      <div id="sfMakeRow">
+        <div class="row" style="margin-bottom:10px">
+          <label class="sf-field">장면 수
+            <select id="sfSceneCount">
+              <option value="5">5장면</option>
+              <option value="6" selected>6장면</option>
+              <option value="7">7장면</option>
+              <option value="8">8장면</option>
+            </select>
+          </label>
+          <label class="sf-field">전체 길이
+            <select id="sfTotalSeconds">
+              <option value="20">약 20초</option>
+              <option value="30" selected>약 30초</option>
+              <option value="40">약 40초</option>
+              <option value="50">약 50초</option>
+            </select>
+          </label>
+          <label class="sf-field">배경 이미지
+            <select id="sfImageMode">
+              <option value="article" selected>원고 사진 우선</option>
+              <option value="ai">전부 AI 생성</option>
+            </select>
+          </label>
+        </div>
+        <button id="sfMakeBtn" class="btn btn-shorts">🎬 숏폼 제작하기</button>
+      </div>
+
+      <!-- 제작 과정 (진행률) -->
+      <div id="sfProcess" class="sf-process" hidden>
+        <div class="sf-proc-row">
+          <span class="sf-spin"></span>
+          <span id="sfProcStep">준비 중…</span>
+        </div>
+        <div class="sf-proc-bar"><div id="sfProcFill"></div></div>
+      </div>
+
+      <!-- 결과: 인라인 작은 미리보기 + 버튼 -->
+      <div id="sfResult" class="sf-inline" hidden>
+        <div class="sf-inline-stage">
+          <canvas id="sfMiniStage" width="1080" height="1920"></canvas>
+          <button id="sfMiniPlay" class="sf-mini-play" title="재생/정지">▶</button>
+        </div>
+        <div class="sf-inline-side">
+          <div id="sfMeta" class="hint" style="margin:0 0 6px"></div>
+          <div class="sf-inline-btns">
+            <button id="sfPreviewBtn" class="btn btn-primary">🔍 미리보기(크게)</button>
+            <button id="sfVideoBtn" class="btn btn-green">⬇ 영상 다운로드</button>
+            <button id="sfZipBtn" class="btn btn-ghost">🖼 이미지 전체 ZIP</button>
+            <button id="sfEditBtn" class="btn btn-ghost">✏ 편집기에서 자세히</button>
+            <button id="sfRemakeBtn" class="btn btn-ghost btn-sm">↻ 다시 만들기</button>
+          </div>
+          <div class="sf-export">
+            <div class="sf-proc-bar" id="sfExportBarWrap" hidden><div id="sfExportFill"></div></div>
+            <p id="sfExportStatus" class="status" hidden></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 작업 이력 -->
+    <section class="card">
+      <h2>작업 이력
+        <button id="clearDraftsBtn" class="btn btn-ghost btn-sm" style="float:right">모든 작업 삭제</button>
+      </h2>
+      <div id="draftsList" class="drafts"><p class="hint">아직 기록이 없습니다.</p></div>
+    </section>
+  </main>
+
+  <!-- 미리보기 모달 -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
+      <button id="modalClose" class="modal-close">✕</button>
+      <div id="modalBody" class="preview"></div>
+    </div>
+  </div>
+
+  <!-- 숏폼 큰 미리보기 모달 -->
+  <div id="sfModal" class="modal" hidden>
+    <div class="modal-box sf-modal-box">
+      <button id="sfModalClose" class="modal-close">✕</button>
+      <div class="sf-modal-stage">
+        <canvas id="sfBigStage" width="1080" height="1920"></canvas>
+      </div>
+      <div class="sf-transport" style="margin-top:12px">
+        <button id="sfBigPlay" class="btn btn-primary">▶ 재생</button>
+        <input id="sfBigSeek" type="range" min="0" max="1000" value="0" />
+        <span id="sfBigTime" class="hint" style="margin:0;min-width:74px;text-align:right">0.0 / 0.0초</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="shortform-render.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

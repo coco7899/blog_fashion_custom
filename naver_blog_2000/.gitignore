@@ -1,0 +1,11 @@
+node_modules/
+data/
+logs/
+*.log
+.env
+.env.*
+session/
+drafts/
+publish-error.png
+.app-profile.json
+.claude/

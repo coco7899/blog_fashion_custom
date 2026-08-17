@@ -1,0 +1,11 @@
+interface:
+  display_name: "쇼핑커넥트 블로그 글쓰기"
+  short_description: "독자의 문제부터 푸는 쇼핑커넥트 구매 가이드를 작성하고 검수합니다"
+  default_prompt: "Use $02-naver-shopping-connect-blog to create a Korean Naver Shopping Connect problem-solving purchase guide. Put the required commission disclosure first, omit price and delivery benefits, show only verified product facts in the top spec without a separate purchase-reason line, never pretend first-hand use, and connect the customer's problem, existing method's limitation, product difference, usage scene, fit, and concrete CTA. For automatic product selection, revise until every rubric check passes with at least 90 points and verify four related images and a complete ZIP before saving."
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

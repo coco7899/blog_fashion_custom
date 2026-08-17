@@ -1,0 +1,367 @@
+/* 프리텐다드(가변 폰트) 자체 호스팅 — 오프라인에서도 적용 */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Pretendard Variable', 'Pretendard', 'Malgun Gothic', -apple-system, sans-serif;
+  background: #f4f6f8;
+  color: #222;
+  line-height: 1.6;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px; }
+
+header {
+  background: #fff;
+  border-bottom: 1px solid #e5e8eb;
+  position: sticky; top: 0; z-index: 10;
+}
+.header-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 60px;
+}
+h1 { font-size: 19px; }
+.login-area { display: flex; align-items: center; gap: 8px; }
+
+.badge {
+  font-size: 12px; padding: 4px 10px; border-radius: 999px;
+  background: #e8f5e9; color: #1b7a2f; font-weight: 600;
+}
+.badge-off { background: #fdecea; color: #c0392b; }
+.badge-warn { background: #fff6e0; color: #a8720a; }
+
+.btn {
+  border: none; border-radius: 8px; padding: 9px 16px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-green { background: #03c75a; color: #fff; }
+.btn-ghost { background: #eef1f4; color: #555; }
+.btn-delete { background: #fdecea; color: #b42318; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-running { background: #ff8a3d; color: #fff; cursor: default; animation: pulse 1.2s infinite; }
+.btn-queued { background: #3b82f6; color: #fff; }
+.btn-queued:hover { opacity: .85; }
+.btn-running:disabled { opacity: 1; }
+/* 대기 중 글감: 다른 글감이 실행 중이어도 선명한 초록 유지 */
+.btn-green:disabled { opacity: 1; }
+/* 이미 실행 완료한 글감: 연회색 */
+.btn-done { background: #e5e8eb; color: #9aa0a6; cursor: default; }
+.btn-done:disabled { opacity: 1; }
+.badge-date { background: #eef4ff; color: #2456c6; }
+
+main { padding: 24px 16px 60px; }
+.card {
+  background: #fff; border: 1px solid #e5e8eb; border-radius: 14px;
+  padding: 22px; margin: 0 auto 18px;
+}
+.card h2 { font-size: 16px; margin-bottom: 10px; }
+.hint { font-size: 13px; color: #777; margin-bottom: 12px; }
+.hint-inline { font-size: 12px; color: #999; font-weight: 400; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+input[type="text"], select {
+  padding: 10px 12px; border: 1px solid #d5dade; border-radius: 8px;
+  font-size: 14px;
+}
+#keyword { flex: 1; min-width: 200px; }
+
+.affiliate-product-field {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 0 0 16px; padding: 18px;
+  border: 1px solid #bde8cc; border-radius: 12px; background: #f3fcf7;
+}
+.affiliate-field-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.affiliate-field-heading label { font-size: 15px; font-weight: 800; color: #176a38; }
+.affiliate-optional {
+  display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px;
+  background: #dff6e8; color: #26834b; font-size: 10px; vertical-align: 1px;
+}
+.affiliate-product-field input { width: 100%; min-height: 42px; background: #fff; border-color: #9ed9b2; }
+.affiliate-product-field input:focus { outline: 2px solid rgba(3,199,90,.2); border-color: #03c75a; }
+.affiliate-help { margin: -2px 0 2px; color: #5f7467; font-size: 12px; line-height: 1.55; }
+.affiliate-actions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 2px; padding-top: 12px; border-top: 1px solid #d8eee0;
+}
+.affiliate-catalog-link {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 7px 12px;
+  border: 1px solid #a9dabb; border-radius: 8px; background: #fff;
+  color: #176a38; font-size: 12px; font-weight: 750; text-decoration: none;
+  white-space: nowrap;
+}
+.affiliate-catalog-link:hover { background: #eaf8ef; }
+.affiliate-actions .badge { display: inline-flex; align-items: center; white-space: nowrap; }
+.affiliate-login-actions { display: flex; gap: 8px; margin-left: auto; }
+
+.status { font-size: 13px; color: #2563eb; margin-top: 10px; }
+.status.err { color: #c0392b; }
+
+.auto-control-card { border-color: #fed7aa; background: linear-gradient(135deg, #fff 0%, #fff7ed 100%); }
+.auto-control-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.auto-control-heading h2 { margin-bottom: 3px; }
+.auto-control-heading p { color: #7c5b43; font-size: 13px; }
+.auto-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.auto-action-row .btn { min-height: 40px; }
+.auto-action-row .btn:disabled { opacity: .45; }
+.auto-control-card .badge-on { background: #dcfce7; color: #16733a; }
+
+.topics { display: flex; flex-direction: column; gap: 10px; }
+.topic {
+  border: 1px solid #e0e4e8; border-radius: 10px; padding: 14px 16px;
+  display: flex; justify-content: space-between; gap: 12px; align-items: center;
+}
+.topic .t-badges { display: flex; gap: 6px; margin-bottom: 5px; }
+.topic .t-fact { font-size: 12px; color: #1b7a2f; margin-bottom: 3px; }
+.topic .t-title { font-weight: 700; font-size: 15px; margin-bottom: 3px; }
+.topic .t-angle { font-size: 13px; color: #666; }
+.topic .t-health-plan {
+  white-space: pre-line; margin-top: 8px; padding: 9px 11px;
+  border-radius: 8px; background: #f2fbf5; color: #225d38;
+  font-size: 12px; line-height: 1.55;
+}
+.topic .t-keywords { font-size: 12px; color: #2563eb; margin-top: 4px; }
+.topic button { white-space: nowrap; }
+
+.mode-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.mode-box {
+  border: 1px solid #e0e4e8; border-radius: 12px; padding: 18px;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+}
+.mode-box h3 { font-size: 15px; }
+.mode-box .hint { margin-bottom: 4px; }
+
+.product-hook-choices {
+  width: 100%; margin-top: 8px; padding-top: 12px; border-top: 1px solid #e5e8eb;
+}
+.product-hook-heading { font-size: 14px; font-weight: 700; color: #222; margin-bottom: 10px; }
+.product-hook-choice {
+  width: 100%; display: flex; align-items: flex-start; gap: 10px;
+  padding: 13px; margin-bottom: 8px; border: 1px solid #dce3e7; border-radius: 10px;
+  background: #fff; color: #222; text-align: left; cursor: pointer;
+}
+.product-hook-choice:hover { border-color: #03c75a; background: #f3fcf7; }
+.product-hook-choice:disabled { opacity: .55; cursor: default; }
+.product-hook-number {
+  flex: 0 0 26px; height: 26px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; background: #03c75a; color: #fff;
+  font-size: 13px; font-weight: 800;
+}
+.product-hook-content { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.product-hook-content strong { font-size: 14px; line-height: 1.45; }
+.product-hook-content span { font-size: 12px; line-height: 1.45; color: #667078; }
+.product-hook-content .product-hook-reason {
+  margin-top: 2px; color: #16733a; font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .affiliate-product-field { padding: 15px; }
+  .affiliate-actions { align-items: stretch; }
+  .affiliate-catalog-link { justify-content: center; width: 100%; }
+  .affiliate-actions .badge { width: 100%; text-align: center; }
+  .affiliate-login-actions { width: 100%; margin-left: 0; }
+  .affiliate-login-actions .btn { flex: 1; }
+  .product-hook-choice { padding: 12px 10px; }
+  .product-hook-content strong { font-size: 13px; }
+  .draft { align-items: flex-start; flex-direction: column; }
+  .draft .d-actions { width: 100%; flex-wrap: wrap; white-space: normal; }
+}
+
+/* 진행 상황 카드 — 그린 배경 */
+.progress-card { background: #eafaf0; border-color: #b7e4c7; }
+
+/* 진행 단계를 버튼처럼, 화살표로 연결해 직관적으로 */
+.progress-steps { display: flex; gap: 0; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.pstep {
+  font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 10px;
+  background: #fff; color: #9aa5ad; border: 1.5px solid #d7e4dc;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.pstep-arrow { color: #9dc9b0; margin: 0 6px; font-size: 13px; }
+.pstep.active {
+  background: #03c75a; color: #fff; border-color: #03c75a;
+  box-shadow: 0 2px 8px rgba(3,199,90,.35); animation: pulse 1.2s infinite;
+}
+.pstep.done { background: #d7f2e1; color: #1b7a2f; border-color: #a7dcbc; }
+.pstep.error { background: #fdecea; color: #c0392b; border-color: #f2b8b1; }
+@keyframes pulse { 50% { opacity: .65; } }
+.btn-danger { background: #e74c3c; color: #fff; }
+
+.drafts { display: flex; flex-direction: column; gap: 8px; }
+.draft {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  border: 1px solid #e9ecef; border-radius: 10px; padding: 10px 14px; font-size: 14px;
+}
+.draft .d-title { font-weight: 600; }
+.draft .d-sub { font-size: 12px; color: #888; }
+.draft .d-actions { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.draft a { color: #03c75a; font-weight: 600; text-decoration: none; font-size: 13px; }
+.tag-status { font-size: 12px; padding: 3px 9px; border-radius: 999px; }
+.tag-published { background: #e8f5e9; color: #1b7a2f; }
+.tag-error { background: #fdecea; color: #c0392b; }
+.tag-running { background: #e3edff; color: #2563eb; }
+.tag-recovered { background: #f1f3f5; color: #687078; }
+
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal[hidden] { display: none; }
+.modal-box {
+  background: #fff; border-radius: 14px; width: min(680px, 92vw);
+  max-height: 86vh; overflow-y: auto; padding: 30px; position: relative;
+}
+.modal-close {
+  position: absolute; top: 12px; right: 14px; border: none; background: none;
+  font-size: 18px; cursor: pointer; color: #999;
+}
+
+.preview { text-align: left; }
+.preview > * { text-align: left; }
+.preview h1 { font-size: 24px; margin-bottom: 18px; text-align: left; }
+.preview h3 { font-size: 19px; margin: 22px 0 8px; text-align: left; }
+.preview p {
+  margin-bottom: 16px;
+  font-size: 16px;
+  line-height: 1.7;
+  text-align: left;
+  white-space: pre-line;
+}
+.preview blockquote {
+  border-left: 4px solid #03c75a; padding: 8px 14px; margin: 14px 0;
+  color: #444; background: #f8faf9; font-weight: 600; text-align: left;
+}
+.preview:not(.preview-product) blockquote {
+  color: #245a42;
+  font-size: 19px;
+  line-height: 1.55;
+  font-weight: 750;
+}
+.preview:not(.preview-product) p b {
+  color: #1f6f54;
+  font-size: 1.04em;
+}
+.preview hr { border: none; border-top: 1px dashed #ccc; margin: 20px 0; }
+.preview img { max-width: 100%; border-radius: 8px; display: block; margin: 14px 0 4px; }
+.preview .caption { font-size: 12px; color: #999; text-align: left; margin-bottom: 14px; }
+.preview .image-placeholder {
+  min-height: 150px; margin: 16px 0; padding: 24px;
+  border: 2px dashed #a9cbb8; border-radius: 12px; background: #f4faf6;
+  color: #35644d; display: flex; flex-direction: column; justify-content: center; gap: 8px;
+}
+.preview .image-placeholder strong { font-size: 16px; }
+.preview .image-placeholder span { color: #6b7f73; font-size: 13px; line-height: 1.55; }
+.preview .tags { margin-top: 20px; font-size: 13px; color: #2563eb; text-align: left; }
+.preview.preview-product blockquote.product-point {
+  color: #333;
+  font-size: 19px;
+  line-height: 1.55;
+  font-weight: 750;
+}
+.preview.preview-product blockquote.product-summary {
+  color: #333;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+/* 자체 확인창 (native confirm 대체 — 모든 브라우저에서 동작) */
+.ui-confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.ui-confirm-box {
+  background: #fff; border-radius: 14px; padding: 22px;
+  max-width: 380px; width: calc(100% - 48px);
+  box-shadow: 0 12px 40px rgba(0,0,0,.25);
+}
+.ui-confirm-msg { white-space: pre-line; font-size: 14px; line-height: 1.6; color: #222; }
+.ui-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+/* ══════════════ 숏폼 생성기 (편집기 페이지) ══════════════ */
+.btn-shorts { background: #111827; color: #fff; }
+.sf-wrap { max-width: 1180px; }
+.sf-layout { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; }
+.sf-layout[hidden] { display: none; }
+@media (max-width: 760px) { .sf-layout { grid-template-columns: 1fr; } }
+
+.sf-preview-card { position: sticky; top: 70px; }
+.sf-stage { background: #0b0d10; border-radius: 14px; overflow: hidden; display: flex; justify-content: center; padding: 10px 0; }
+.sf-stage canvas { width: 258px; height: 459px; border-radius: 10px; display: block; }
+.sf-transport { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.sf-transport input[type="range"] { flex: 1; }
+/* 장면 이동 바 */
+.sf-scenenav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; }
+.sf-scenenav button { min-width: 40px; }
+.sf-scenenav .sf-cur { font-size: 13px; font-weight: 700; color: #333; min-width: 84px; text-align: center; }
+/* 작은 화면에서 미리보기 접기 */
+.sf-preview-card h2 .sf-fold { float: right; font-size: 12px; font-weight: 600; color: #7c3aed; cursor: pointer; background: none; border: none; }
+
+.sf-edit-col { display: flex; flex-direction: column; gap: 18px; }
+.sf-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #666; font-weight: 600; }
+.sf-style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.sf-range { display: flex; align-items: center; gap: 8px; }
+.sf-range input { flex: 1; }
+.sf-range b { font-size: 12px; color: #2563eb; min-width: 44px; text-align: right; }
+.sf-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #444; font-weight: 600; }
+.sf-subhead { font-size: 13px; color: #444; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid #eef1f4; }
+.sf-crow { display: flex; align-items: center; gap: 6px; }
+.sf-color { width: 100%; height: 34px; min-width: 0; border: 1px solid #d5dade; border-radius: 8px; padding: 2px; cursor: pointer; background: #fff; }
+
+/* 오디오(더빙·배경음악) */
+.sf-audio-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.sf-audio-row select { padding: 6px 8px; font-size: 12px; }
+.sf-arow { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: #666; font-weight: 600; }
+.sf-arow span { min-width: 76px; }
+.sf-arow input[type="range"] { flex: 1; }
+.sf-arow b { min-width: 42px; text-align: right; color: #2563eb; }
+
+.sf-scenes { display: flex; flex-direction: column; gap: 10px; }
+.sf-scene { display: flex; gap: 12px; border: 1px solid #e5e8eb; border-radius: 10px; padding: 10px; cursor: pointer; transition: border-color .12s, box-shadow .12s, background .12s; }
+.sf-scene:hover { border-color: #c9b8f0; }
+.sf-scene.active { border-color: #7c3aed; box-shadow: 0 0 0 2px #ede9fe; background: #faf8ff; }
+.sf-scene textarea, .sf-scene input, .sf-scene button { cursor: auto; }
+.sf-thumb { position: relative; width: 62px; height: 110px; flex: 0 0 62px; border-radius: 8px; overflow: hidden; background: #eef1f4; cursor: pointer; }
+.sf-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sf-thumb .sf-thumb-no { position: absolute; top: 4px; left: 4px; font-size: 11px; font-weight: 800; color: #fff; background: rgba(0,0,0,.55); border-radius: 6px; padding: 1px 6px; }
+.sf-badge { position: absolute; left: 4px; bottom: 4px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; }
+.sf-badge-ai { background: #7c3aed; }
+.sf-badge-up { background: #0ea5e9; }
+.sf-scene-body { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sf-scene-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.sf-sec { font-size: 12px; color: #666; }
+.sf-sec input { width: 58px; padding: 4px 6px; border: 1px solid #d5dade; border-radius: 6px; font-size: 12px; }
+.sf-scene textarea { width: 100%; border: 1px solid #d5dade; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; resize: vertical; line-height: 1.5; }
+.sf-scene textarea.s-narr { color: #777; font-size: 12px; background: #fafbfc; }
+textarea#captionInput { border: 1px solid #d5dade; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; resize: vertical; }
+
+/* ══════════════ 대시보드 인라인 숏폼 ══════════════ */
+.sf-process { margin-top: 6px; }
+.sf-proc-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #333; margin-bottom: 8px; }
+.sf-proc-bar { height: 8px; background: #eef1f4; border-radius: 999px; overflow: hidden; }
+.sf-proc-bar > div { height: 100%; width: 0%; background: #7c3aed; border-radius: 999px; transition: width .3s; }
+.sf-spin { width: 16px; height: 16px; border-radius: 50%; border: 3px solid #ddd; border-top-color: #7c3aed; display: inline-block; animation: sf-rot .8s linear infinite; flex: 0 0 auto; }
+@keyframes sf-rot { to { transform: rotate(360deg); } }
+
+.sf-inline { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.sf-inline-stage { position: relative; flex: 0 0 auto; width: 216px; height: 384px; border-radius: 12px; overflow: hidden; background: #0b0d10; }
+.sf-inline-stage canvas { width: 100%; height: 100%; display: block; }
+.sf-mini-play { position: absolute; inset: 0; margin: auto; width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(0,0,0,.5); color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.sf-mini-play:hover { background: rgba(0,0,0,.68); }
+.sf-inline-side { flex: 1; min-width: 240px; }
+.sf-inline-btns { display: flex; flex-direction: column; gap: 8px; align-items: stretch; max-width: 280px; }
+.sf-inline-btns .btn { width: 100%; }
+.sf-export { margin-top: 10px; max-width: 280px; }
+
+.sf-modal-box { width: min(440px, 94vw); padding: 20px; }
+.sf-modal-stage { background: #0b0d10; border-radius: 12px; overflow: hidden; display: flex; justify-content: center; padding: 8px 0; }
+.sf-modal-stage canvas { width: min(360px, 82vw); height: auto; display: block; border-radius: 8px; }
