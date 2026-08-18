@@ -3,3 +3,5 @@ data/
 logs/
 server-out.log
 server-err.log
+*.log
+naver_blog_2000_data/
