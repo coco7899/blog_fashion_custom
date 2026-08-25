@@ -43,6 +43,9 @@ ${skill}
 5. 핵심 사실 뒤에는 왜 그 지점을 볼 만한지 독자 관점의 맥락을 설명하세요. 시청률·흥행·관계 변화·향후 전개는 예측하지 마세요.
 6. 마지막 2~4문장에 글쓴이의 짧은 생각을 자연스럽게 녹이세요. 별도 소제목을 붙이지 말고 의견을 사실처럼 단정하지 마세요.
 7. 친근한 존댓말로 문단당 1~3문장을 쓰고 같은 어미 반복을 줄이세요. 과한 감탄·확신을 피하며 직접 보거나 사용한 것처럼 쓰지 마세요.
+   - 이미 일어난 뉴스의 사실은 "~했어요", "~였어요", "~로 알려졌어요", "~라고 했어요"처럼 직접 말하세요. 사실을 소개한 뒤 "이번 뉴스의 핵심에 더 가깝습니다", "구분해서 보는 편이 자연스럽습니다", "더 잘 어울립니다", "더 또렷하게 드러났죠"처럼 작가가 판정을 내리는 문장으로 끝내지 마세요.
+   - "~에 가깝습니다", "~보는 편이 자연스럽습니다", "~더 잘 어울립니다", "~또렷하게 드러났죠" 같은 해석형 종결어미는 쓰지 마세요. 독자가 볼 지점이 필요하면 평가하지 말고 기사에서 확인된 장면·발언·변화 자체를 한 문장으로 말하세요.
+   - **굵게** 표시하는 짧은 구절도 "헤어 컬러의 존재감", "이번 뉴스의 핵심", "관전 포인트"처럼 평가를 담은 표제가 아니라 기사에 나온 인물·작품·장면·변화처럼 확인 가능한 말만 사용하세요.
    - 제목, 소제목, 본문은 모두 왼쪽 정렬입니다.
    - 한 paragraph에는 하나의 내용만 담고, 인물의 출연 상태·작품 설정·배역·관전 포인트처럼 중심 내용이 바뀌면 새 paragraph로 나누세요.
    - 한 문단을 1~3문장으로 구성하되 문장 수를 맞추려고 서로 다른 내용을 한 문단에 묶지 마세요.
@@ -163,28 +166,47 @@ function simplifyNewsStructure(article) {
   return article;
 }
 
-// 연예 뉴스 글의 내용은 그대로 두고 화면에서만 짧은 줄로 보이게 한다.
-// 단어 중간을 자르지 않으며, 굵게(**) 구간 안에서는 줄을 나누지 않는다.
-function wrapNewsLine(value, targetLength = 36) {
+// 모바일 한 줄 범위 안에서 쉼표·문장 끝·접속어 같은 의미 경계를 우선해 줄을 나눈다.
+// 단어 중간과 굵게(**) 구간 안에서는 줄을 나누지 않는다.
+function wrapNewsLine(value, targetLength = 28) {
   const words = String(value || '').trim().split(/\s+/).filter(Boolean);
   const lines = [];
-  let current = [];
+  const minLength = Math.max(20, targetLength - 9);
+  const maxLength = targetLength + 6;
+  const connectiveStart = /^(?:그리고|하지만|그래서|때문에|반면|다만|특히|또한|즉|이런|이렇게|무엇보다|한편|반대로|여기에|덕분에)(?:$|[,.?!])/;
+  const visibleLength = (text) => text.replace(/\*\*/g, '').length;
+  const isSafeBoundary = (parts) => ((parts.join(' ').match(/\*\*/g) || []).length % 2) === 0;
+  let remaining = [...words];
 
-  for (const word of words) {
-    const currentText = current.join(' ');
-    const candidate = current.length ? `${currentText} ${word}` : word;
-    const visibleLength = candidate.replace(/\*\*/g, '').length;
-    const insideBold = ((currentText.match(/\*\*/g) || []).length % 2) === 1;
-
-    if (current.length && visibleLength > targetLength && !insideBold) {
-      lines.push(currentText);
-      current = [word];
-    } else {
-      current.push(word);
+  while (remaining.length) {
+    if (visibleLength(remaining.join(' ')) <= maxLength) {
+      lines.push(remaining.join(' '));
+      break;
     }
-  }
 
-  if (current.length) lines.push(current.join(' '));
+    let fallback = null;
+    let best = null;
+    for (let index = 1; index < remaining.length; index += 1) {
+      const left = remaining.slice(0, index);
+      const length = visibleLength(left.join(' '));
+      if (length <= targetLength && isSafeBoundary(left)) fallback = index;
+      if (length < minLength || length > maxLength || !isSafeBoundary(left)) continue;
+
+      const previous = remaining[index - 1];
+      const next = remaining[index] || '';
+      let boundaryScore = 0;
+      if (/[.!?…]$/.test(previous)) boundaryScore += 8;
+      else if (/[,;:]$/.test(previous)) boundaryScore += 6;
+      if (connectiveStart.test(next)) boundaryScore += 5;
+      const score = boundaryScore * 10 - Math.abs(targetLength - length);
+      if (!best || score > best.score) best = { index, score };
+    }
+
+    const firstSafeBoundary = remaining.findIndex((_, index) => index > 0 && isSafeBoundary(remaining.slice(0, index)));
+    const cut = best ? best.index : fallback || (firstSafeBoundary > 0 ? firstSafeBoundary : remaining.length);
+    lines.push(remaining.slice(0, cut).join(' '));
+    remaining = remaining.slice(cut);
+  }
   return lines;
 }
 
@@ -193,7 +215,7 @@ function formatNewsParagraphs(article) {
     if (block.type !== 'paragraph' || block.disclosure) return block;
     const lines = String(block.text || '')
       .split(/\n+/)
-      .flatMap((line) => wrapNewsLine(line))
+      .flatMap((line) => wrapNewsLine(line, 28))
       .map((line) => line.trim())
       .filter(Boolean);
     return { ...block, text: lines.join('\n') };
@@ -238,7 +260,7 @@ function formatNewsParagraphs(article) {
   return article;
 }
 
-function wrapProductLine(value, targetLength = 34) {
+function wrapProductLine(value, targetLength = 27) {
   const lines = wrapNewsLine(value, targetLength);
   const dependentStart = /^(?:뒤(?:까지)?|때(?:문에)?|경우|만큼|정도|후|전|중|위해|통해|따라|덕분에|사이|안에서)(?:\s|$|[,.?!])/;
 
@@ -262,7 +284,7 @@ function formatProductParagraphs(article) {
     if (block.type !== 'paragraph' || block.disclosure) return block;
     const lines = String(block.text || '')
       .split(/\n+/)
-      .flatMap((line) => wrapProductLine(line, 34))
+      .flatMap((line) => wrapProductLine(line, 27))
       .map((line) => line.trim())
       .filter(Boolean);
     return { ...block, text: lines.join('\n') };
@@ -273,6 +295,10 @@ function formatProductParagraphs(article) {
 const NEWS_TITLE_FORBIDDEN_RE = /충격|정체|결국|소름|전부\s*공개/;
 const NEWS_PREDICTION_RE =
   /시청률.{0,12}(?:오르|나오|기록|예상)|흥행.{0,12}(?:하|성공|예상)|관계.{0,12}(?:변하|달라질|발전)|향후\s*전개|앞으로.{0,16}(?:전개|관계)|될\s*것으로\s*보|기대해도\s*좋/;
+// 사실 뒤에 작가가 억지로 의미를 판정하는 AI식 마무리 문장.
+// 실제로 어색했던 문장 틀만 재작성 대상으로 삼아 정상적인 설명은 보존한다.
+const NEWS_AI_STYLE_RE =
+  /(?:이번\s*(?:뉴스|소식|근황)).{0,24}(?:핵심|중심).{0,12}(?:가깝습니다|입니다|보입니다)|(?:구분해서|나눠서|따로)\s*보는\s*편이\s*자연스럽습니다|(?:더|더욱)\s*(?:잘\s*어울립니다|또렷하게\s*드러났죠|돋보입니다)|(?:헤어\s*컬러|스타일|분위기)의\s*존재감(?:이|은)?\s*(?:더욱\s*)?(?:또렷하게\s*드러났죠|돋보입니다)/;
 
 // 생성 결과를 코드에서도 한 번 더 점검한다. 의미 판단은 프롬프트에 맡기되,
 // 글자 수·금지어·소제목·이미지·근거 없는 전망처럼 명확한 위반은 재작성을 요청한다.
@@ -296,6 +322,7 @@ function inspectNewsArticle(article, refs = []) {
   if (isTitleTooSimilarToAny(article.title, refs)) issues.push('기사 제목과 지나치게 유사');
   if (NEWS_TITLE_FORBIDDEN_RE.test(text)) issues.push('본문 금지 표현 포함');
   if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
+  if (NEWS_AI_STYLE_RE.test(text)) issues.push('사실을 해석형 종결어미로 마무리한 AI식 문장 포함');
   if (!(article.blocks || []).some((block) => block.type === 'paragraph')) issues.push('본문 문단 없음');
 
   return issues;
@@ -342,7 +369,7 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상 쓰세요. 독자가 기억할 짧은 quote 1~2개와 필요한 heading 0~1개를 사용하되 합계 1~3개를 지키고, 짧은 핵심 구절 1~3곳만 **굵게** 표시하세요. 같은 내용을 중복 강조하거나 강조 블록을 연달아 놓지 마세요. 이미지 슬롯은 기본 2~4개로 작성하고 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하세요. 관련 사진이 실제로 1장뿐이면 게시 단계에서 1장만 사용합니다. 모든 글은 왼쪽 정렬입니다. 내용이나 설명을 줄이지 말고, 완성된 문장을 약 25~40자의 자연스러운 의미 단위로 줄바꿈해 보여주세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
+핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상 쓰세요. 독자가 기억할 짧은 quote 1~2개와 필요한 heading 0~1개를 사용하되 합계 1~3개를 지키고, 짧은 핵심 구절 1~3곳만 **굵게** 표시하세요. 같은 내용을 중복 강조하거나 강조 블록을 연달아 놓지 마세요. 이미지 슬롯은 기본 2~4개로 작성하고 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하세요. 관련 사진이 실제로 1장뿐이면 게시 단계에서 1장만 사용합니다. 모든 글은 왼쪽 정렬입니다. 내용이나 설명을 줄이지 말고, 완성된 문장을 약 25~40자의 자연스러운 의미 단위로 줄바꿈해 보여주세요. 이미 일어난 사실은 "~했어요/~였어요/~로 알려졌어요"처럼 직접 말하고, "핵심에 더 가깝습니다/보는 편이 자연스럽습니다/더 잘 어울립니다/더 또렷하게 드러났죠" 같은 해석형 마무리는 쓰지 마세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {

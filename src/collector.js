@@ -25,6 +25,25 @@ function isBlogImage(url) {
   return !url || BLOG_IMG_HOSTS.test(url) || /blog\.naver\.com/i.test(url);
 }
 
+// 기사 CDN이 화면용 썸네일을 만들기 위해 붙인 크롭/리사이즈 옵션을 제거한다.
+// 파일 자체는 다시 가공하지 않고, 기사에 실린 원본 비율의 이미지 주소를 우선 사용한다.
+function originalArticleImageUrl(value) {
+  const raw = String(value || '').trim().replace(/&amp;/g, '&');
+  if (!/^https?:\/\//i.test(raw)) return '';
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    if (/(?:^|\.)pstatic\.net$|(?:^|\.)naver\.net$/.test(host)) {
+      ['type', 'width', 'height', 'w', 'h', 'crop', 'fit', 'resize'].forEach((key) =>
+        url.searchParams.delete(key)
+      );
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 /** 네이버 통합검색 뉴스 탭 + 블로그 탭에서 상위 결과 수집. recentNews=true면 최신순 */
 async function searchNaver(keyword, { recentNews = false } = {}) {
   return withBrowser(async (context) => {
@@ -172,18 +191,45 @@ async function extractArticle(context, url) {
             .filter((t) => t.length > 40)
             .join('\n');
         };
-        const imgs = new Set();
-        const og = document.querySelector('meta[property="og:image"]');
-        if (og && og.content) imgs.add(og.content);
+        const imgs = [];
+        const seen = new Set();
+        const add = (value) => {
+          const src = String(value || '').trim();
+          if (!src.startsWith('http') || seen.has(src)) return;
+          seen.add(src);
+          imgs.push(src);
+        };
+        const largestSrcset = (value) => {
+          const choices = String(value || '')
+            .split(',')
+            .map((part) => part.trim().split(/\s+/))
+            .filter((part) => part[0] && part[0].startsWith('http'))
+            .map((part) => ({ src: part[0], width: parseInt(part[1], 10) || 0 }));
+          choices.sort((a, b) => b.width - a.width);
+          return choices[0]?.src || '';
+        };
         const scope = document.querySelector('#dic_area, article') || document.body;
         scope.querySelectorAll('img').forEach((i) => {
-          const s = i.getAttribute('data-src') || i.src;
-          if (s && s.startsWith('http')) imgs.add(s);
+          add(
+            i.getAttribute('data-origin-src') ||
+              i.getAttribute('data-original') ||
+              i.getAttribute('data-lazy-src') ||
+              largestSrcset(i.getAttribute('data-srcset') || i.getAttribute('srcset')) ||
+              i.getAttribute('data-src') ||
+              i.currentSrc ||
+              i.src
+          );
         });
-        return { text: pickText(), imgs: Array.from(imgs) };
+        // og:image는 본문 사진이 없을 때만 쓰는 폴백이다. 언론사 대표 썸네일은
+        // 원본 사진을 가로형으로 잘라 둔 경우가 있어 본문 이미지보다 우선하지 않는다.
+        if (!imgs.length) {
+          const og = document.querySelector('meta[property="og:image"]');
+          if (og && og.content) add(og.content);
+        }
+        return { text: pickText(), imgs };
       });
       text = data.text;
-      images = data.imgs;
+      images = data.imgs.map(originalArticleImageUrl).filter(Boolean);
     }
 
     return {
@@ -301,11 +347,12 @@ async function downloadImages(imageList, destDir, { maxCount = 8 } = {}) {
     const seen = new Set();
     for (const item of imageList) {
       if (saved.length >= maxCount) break;
-      if (!item.url || seen.has(item.url)) continue;
-      seen.add(item.url);
-      if (isBlogImage(item.url)) continue; // 타인 블로그 이미지 차단 (안전장치)
+      const imageUrl = originalArticleImageUrl(item.url);
+      if (!imageUrl || seen.has(imageUrl)) continue;
+      seen.add(imageUrl);
+      if (isBlogImage(imageUrl)) continue; // 타인 블로그 이미지 차단 (안전장치)
       try {
-        const resp = await context.request.get(item.url, {
+        const resp = await context.request.get(imageUrl, {
           headers: { referer: item.referer || 'https://www.naver.com/', 'user-agent': UA },
           timeout: 15000,
         });
@@ -345,4 +392,14 @@ async function downloadImages(imageList, destDir, { maxCount = 8 } = {}) {
   });
 }
 
-module.exports = { searchNaver, collectReferences, downloadImages, withBrowser, extractArticle, searchNewsImages, searchImages, isBlogImage };
+module.exports = {
+  searchNaver,
+  collectReferences,
+  downloadImages,
+  withBrowser,
+  extractArticle,
+  searchNewsImages,
+  searchImages,
+  isBlogImage,
+  originalArticleImageUrl,
+};

@@ -50,6 +50,8 @@ const SHOPPING_CONNECT_DISCLOSURE =
 const PRODUCT_POST_FORBIDDEN_RE = /출처|공식\s*스토어/i;
 const PRODUCT_PRICE_BENEFIT_RE =
   /판매가|할인가|정가|가격|배송비|무료\s*배송|쿠폰|적립(?:금)?|할인율|할인\s*(?:금액|혜택)|사은품/i;
+// 실제 독자가 보는 모바일 폭을 기준으로 에디터를 열되, 데스크톱 에디터 기능과 셀렉터는 유지한다.
+const MOBILE_EDITOR_VIEWPORT = { width: 480, height: 900 };
 
 function cleanProductPostText(value) {
   return String(value || '')
@@ -397,10 +399,11 @@ async function publish(article, judgments, opts) {
     throw new Error('네이버 로그인이 필요합니다. 대시보드에서 로그인 후 다시 시도하세요.');
   }
 
-  const browser = await browserHelper.launch({ headless: false, args: ['--window-size=1440,960'] });
+  const browser = await browserHelper.launch({ headless: false, args: ['--window-size=520,960'] });
   const context = await browser.newContext({
     storageState: auth.STATE_PATH,
-    viewport: { width: 1400, height: 900 },
+    viewport: MOBILE_EDITOR_VIEWPORT,
+    screen: MOBILE_EDITOR_VIEWPORT,
   });
   const page = await context.newPage();
   const bySlot = new Map(judgments.map((j) => [j.slot, j]));
