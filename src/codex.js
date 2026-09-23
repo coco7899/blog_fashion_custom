@@ -70,7 +70,7 @@ function checkCli() {
  * codex exec를 호출해 마지막 텍스트 응답을 받는다.
  * 프롬프트는 stdin으로 전달하고, 이미지가 있으면 공식 --image 옵션으로 첨부한다.
  */
-function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal } = {}) {
+function invokeOnce(prompt, { timeoutMs = 180000, imagePaths = [], signal, model } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       const error = new Error('Codex 호출이 중지되었습니다.');
@@ -89,8 +89,9 @@ function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal } = {}) {
       '--cd',
       PROJECT_ROOT,
     ];
+    if (model) args.push('--model', model);
     const validImages = imagePaths.filter((file) => file && fs.existsSync(file));
-    if (validImages.length) args.push('--image', ...validImages);
+    for (const file of validImages) args.push('--image', file);
     args.push('-');
 
     const { cli, options } = spawnOptions({ cwd: PROJECT_ROOT });
@@ -135,7 +136,7 @@ function invoke(prompt, { timeoutMs = 180000, imagePaths = [], signal } = {}) {
       clearTimeout(timer);
       cleanup();
       if (code !== 0) {
-        return reject(new Error(`Codex 종료 코드 ${code}: ${(err || out).slice(-700)}`));
+        return reject(classifyFailure(err || out));
       }
       resolve(String(out).trim());
     });
@@ -183,18 +184,96 @@ async function invokeJson(prompt, opts = {}) {
 
 let authStatus = null;
 
+function checkLoginStatus() {
+  try {
+    const { cli, options } = spawnOptions({ encoding: 'utf8', timeout: 20000 });
+    const result = spawnSync(cli, ['login', 'status'], options);
+    const output = String(result.stdout || result.stderr || '').trim();
+    return {
+      ok: result.status === 0 && !/not logged in/i.test(output),
+      output,
+    };
+  } catch (error) {
+    return { ok: false, output: error.message };
+  }
+}
+
+function classifyFailure(output) {
+  // Only inspect CLI error lines: stderr also contains the entire user prompt.
+  const diagnostics = String(output).split(/\r?\n/).filter(line => /^\s*(?:ERROR:|error:)/.test(line)).join('\n');
+  let kind = 'FAILED';
+  let message = 'Codex AI 요청을 처리하지 못했습니다. 다시 시도해 주세요.';
+  if (/at capacity|overloaded|server busy|503/i.test(diagnostics)) {
+    kind = 'CAPACITY'; message = 'Codex AI가 혼잡하여 재시도 후에도 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  } else if (/stream disconnected|connection|timed out|502|504/i.test(diagnostics)) {
+    kind = 'CONNECTION'; message = 'Codex AI 연결이 불안정합니다. 잠시 후 다시 시도해 주세요.';
+  } else if (/401|authenticate|not logged|login/i.test(diagnostics)) {
+    kind = 'AUTH'; message = 'Codex 로그인이 필요합니다. 터미널에서 codex login을 실행해 주세요.';
+  } else if (/usage limit|rate limit|quota|429/i.test(diagnostics)) {
+    kind = 'LIMIT'; message = 'Codex 사용 한도에 도달했습니다. 한도가 회복된 뒤 다시 시도해 주세요.';
+  }
+  return Object.assign(new Error(message), { code: kind });
+}
+
+function waitForRetry(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      reject(Object.assign(new Error('Codex 호출이 중지되었습니다.'), { name: 'AbortError' }));
+    };
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+  });
+}
+
+async function invokeWithRetry(prompt, opts = {}, run = invokeOnce, wait = waitForRetry) {
+  const deadline = Date.now() + (opts.timeoutMs ?? 180000);
+  let model = opts.model;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await run(prompt, { ...opts, model, timeoutMs: Math.max(1, deadline - Date.now()) });
+    } catch (error) {
+      if (!['CAPACITY', 'CONNECTION'].includes(error.code) || attempt === 2 || deadline - Date.now() < 15000) throw error;
+      if (error.code === 'CAPACITY') model = model === 'gpt-5.6-sol' ? 'gpt-5.5' : 'gpt-5.6-sol';
+      console.warn(`[codex] ${error.code}: 자동 재시도 ${attempt + 1}/2${model ? ` (${model})` : ''}`);
+      await wait(2000 * (attempt + 1), opts.signal);
+    }
+  }
+}
+
+function invoke(prompt, opts) { return invokeWithRetry(prompt, opts); }
+
 async function checkAuth(force = false) {
-  if (!force && authStatus && Date.now() - authStatus.at < 30 * 60 * 1000) return authStatus;
+  if (!force && authStatus && Date.now() - authStatus.at < (authStatus.ok ? 30 * 60 * 1000 : 30000)) return authStatus;
+
+  // Avoid launching a network-backed `codex exec` when the CLI already knows
+  // there is no active subscription login. Besides being slow, that path can
+  // expose the CLI's retry diagnostics verbatim in the dashboard banner.
+  const login = checkLoginStatus();
+  if (!login.ok) {
+    authStatus = {
+      ok: false,
+      error: 'Codex 로그인이 필요합니다. 터미널에서 codex login을 실행해 주세요.',
+      at: Date.now(),
+    };
+    return authStatus;
+  }
+
   try {
     await invoke('다른 설명 없이 OK 한 단어로만 답하세요.', { timeoutMs: 120000 });
     authStatus = { ok: true, method: 'ChatGPT 구독 로그인', at: Date.now() };
   } catch (error) {
     const loginProblem = /401|authenticate|login|not logged/i.test(error.message);
+    const connectionProblem = /responses_retry|stream disconnected|reconnecting|connection/i.test(error.message);
     authStatus = {
       ok: false,
       error: loginProblem
         ? 'Codex 로그인이 필요합니다. 터미널에서 codex login을 실행해 ChatGPT로 로그인하세요.'
-        : error.message.slice(0, 300),
+        : connectionProblem
+          ? 'Codex 연결이 일시적으로 불안정합니다. 잠시 후 자동으로 다시 확인합니다.'
+          : 'Codex AI 연결을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
       at: Date.now(),
     };
   }
@@ -208,4 +287,7 @@ module.exports = {
   extractJson,
   checkAuth,
   getAuthStatus: () => authStatus,
+  classifyFailure,
+  invokeWithRetry,
+  waitForRetry,
 };

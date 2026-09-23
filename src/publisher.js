@@ -2,6 +2,7 @@
 const path = require('path');
 const browserHelper = require('./browser');
 const auth = require('./naverAuth');
+const { wrapText, formatArticle } = require('../public/article-format');
 
 // 스마트에디터 셀렉터 모음 — 네이버 UI 변경 시 여기만 수정
 const SEL = {
@@ -156,6 +157,9 @@ async function typeRich(page, text) {
     const bold = i % 2 === 1;
     if (bold) await page.keyboard.press('Control+b');
     await page.keyboard.insertText(seg);
+    // 스마트에디터가 입력 이벤트를 반영하기 전에 다음 Enter가 들어가면
+    // 한 줄 전체가 사라질 수 있다.
+    await sleep(120);
     if (bold) await page.keyboard.press('Control+b');
   }
 }
@@ -165,9 +169,12 @@ async function typeRich(page, text) {
 //   "이번 착장의 중심은 / 블랙 프린트 크롭 티셔츠와 / 블랙 랩 스커트였어요." ← 붙은 3줄
 //   그 다음 빈 줄 하나 → 다음 문단)
 async function typeParagraph(page, text) {
-  const lines = String(text).split('\n').map((s) => s.trim()).filter(Boolean);
+  const lines = wrapText(text).split('\n').map((s) => s.trim());
   for (let i = 0; i < lines.length; i++) {
-    if (i > 0) await page.keyboard.press('Enter'); // 줄바꿈만 (빈 줄 없음)
+    if (i > 0) {
+      await page.keyboard.press('Enter'); // 줄바꿈만 (빈 줄 없음)
+      await sleep(120);
+    }
     await typeRich(page, lines[i]);
   }
 }
@@ -196,23 +203,42 @@ async function setAlign(frame, page, which) {
 }
 
 async function insertHeading(frame, page, text) {
-  await page.keyboard.insertText(text);
-  // 방금 입력한 줄 전체 선택 → 크게 + 굵게
-  await page.keyboard.press('Shift+Home');
-  const sized = await setFontSize(frame, page, 24);
-  await sleep(200);
-  await page.keyboard.press('Control+b');
-  await page.keyboard.press('End');
+  // 입력 뒤 텍스트를 선택해 툴바에서 크기를 바꾸면 스마트에디터가
+  // 선택된 소제목 자체를 지우는 경우가 있다. 굵게 입력해 내용을 먼저 보장한다.
+  await typeParagraph(page, `**${wrapText(text).replace(/\n/g, '**\n**')}**`);
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter'); // 소제목 아래 여유 있는 빈 줄
-  // 다음 문단이 서식을 상속하므로 원복
-  await page.keyboard.press('Control+b');
-  if (sized) await setFontSize(frame, page, 15);
   await sleep(150);
 }
 
+function normalizeEditorText(value) {
+  return String(value || '')
+    .replace(/\*\*/g, '')
+    .replace(/[\u200B-\u200D\uFEFF\s]/g, '');
+}
+
+// 저장 토스트는 저장 요청의 성공만 알려준다. 미리보기의 모든 본문 블록이
+// 실제 에디터에 순서대로 들어갔는지 확인해야 누락된 글을 성공으로 처리하지 않는다.
+async function verifyBodyBlocks(frame, article) {
+  const editorText = normalizeEditorText(
+    (await frame.locator('.se-component').allInnerTexts()).join('\n')
+  );
+  let position = 0;
+  for (const block of article.blocks || []) {
+    if (!['heading', 'paragraph', 'quote'].includes(block.type)) continue;
+    const expected = normalizeEditorText(block.text);
+    if (!expected) continue;
+    const found = editorText.indexOf(expected, position);
+    if (found < 0) {
+      throw new Error(`네이버 에디터 본문 누락: ${block.type} "${String(block.text).split('\n')[0].slice(0, 35)}"`);
+    }
+    position = found + expected.length;
+  }
+  return true;
+}
+
 async function insertQuote(frame, page, text, { emphasize = false } = {}) {
-  const lines = String(text).split('\n').map((s) => s.trim()).filter(Boolean);
+  const lines = wrapText(text).split('\n').map((s) => s.trim()).filter(Boolean);
   const opened = await clickIfVisible(frame, SEL.quoteBtn, 2500);
   if (opened) {
     await sleep(300);
@@ -220,8 +246,11 @@ async function insertQuote(frame, page, text, { emphasize = false } = {}) {
     await sleep(400);
     // 여러 줄(스펙 요약 등)은 인용구 안에서 Shift+Enter(같은 인용구 내 줄바꿈)로 입력
     for (let i = 0; i < lines.length; i++) {
-      if (i > 0) await page.keyboard.press('Shift+Enter');
-      await page.keyboard.insertText(lines[i]);
+      if (i > 0) {
+        await page.keyboard.press('Shift+Enter');
+        await sleep(120);
+      }
+      await typeRich(page, lines[i]);
     }
     if (emphasize) {
       // 쇼핑 글의 핵심 구절은 본문보다 한 단계 크게 보이게 한다.
@@ -255,7 +284,8 @@ async function insertQuote(frame, page, text, { emphasize = false } = {}) {
     await sleep(250);
   } else {
     // 폴백: 따옴표로 감싼 굵은 문단
-    await typeRich(page, `**"${lines.join(' ')}"**`);
+    const plainQuote = lines.join('\n').replace(/\*\*/g, '');
+    await typeParagraph(page, `**"${plainQuote}"**`);
     await page.keyboard.press('Enter');
     await page.keyboard.press('Enter');
   }
@@ -377,7 +407,7 @@ async function insertImage(frame, page, filePath, captionLine, { alignLeft = fal
   await page.keyboard.press('ArrowDown');
   await sleep(200);
   if (captionLine) {
-    await page.keyboard.insertText(captionLine);
+    await typeParagraph(page, captionLine);
     await page.keyboard.press('Enter');
   }
 }
@@ -392,7 +422,7 @@ async function insertImage(frame, page, filePath, captionLine, { alignLeft = fal
 async function publish(article, judgments, opts) {
   const { mode = 'draft', visibility = 'public', imagesDir, errorShotPath, onStep = () => {}, sources = [], products = [] } = opts;
   const hasProducts = (products || []).some((product) => product && product.link);
-  const publishArticle = hasProducts ? cleanProductPostArticle(article, products) : article;
+  const publishArticle = formatArticle(hasProducts ? cleanProductPostArticle(article, products) : article);
 
   const status = await auth.verify(true);
   if (!status.loggedIn || !status.blogId) {
@@ -422,6 +452,13 @@ async function publish(article, judgments, opts) {
     await sleep(1500);
 
     // 팝업 정리
+    // 최근 에디터는 이전 글 이어쓰기 창을 alert-confirm 형태로도 표시한다.
+    const resumePopup = frame.locator('.se-popup-alert').filter({ hasText: '작성 중인 글이 있습니다' });
+    const resumeCancel = resumePopup.getByRole('button', { name: '취소', exact: true });
+    if (await resumeCancel.isVisible().catch(() => false)) {
+      await resumeCancel.click({ timeout: 5000 });
+      await resumePopup.waitFor({ state: 'hidden', timeout: 5000 });
+    }
     await clickIfVisible(frame, SEL.popupCancel, 3000);
     await clickIfVisible(frame, SEL.helpClose, 1500);
 
@@ -476,12 +513,15 @@ async function publish(article, judgments, opts) {
               alignLeft: hasProducts,
             });
           } catch (e) {
-            console.log(`[publisher] 이미지 슬롯 ${block.slot} 업로드 실패: ${e.message}`);
+            throw new Error(`네이버 에디터 이미지 ${block.slot} 누락: ${e.message}`);
           }
         }
       }
       await sleep(250);
     }
+
+    onStep('본문 누락 확인 중');
+    await verifyBodyBlocks(frame, publishArticle);
 
     // ── 해시태그 (본문 끝) ──────────────────────────
     const tagLine = (publishArticle.tags || [])
@@ -490,7 +530,7 @@ async function publish(article, judgments, opts) {
       .slice(0, 10)
       .join(' ');
     if (tagLine) {
-      await typeRich(page, tagLine);
+      await typeParagraph(page, tagLine);
       await page.keyboard.press('Enter');
       await page.keyboard.press('Enter');
     }
@@ -504,7 +544,7 @@ async function publish(article, judgments, opts) {
       await insertHeading(frame, page, '📌 출처');
       for (const s of linkSources) {
         if (s.title) {
-          await typeRich(page, `· ${String(s.title).replace(/\s+/g, ' ').trim()}`);
+          await typeParagraph(page, `· ${String(s.title).replace(/\s+/g, ' ').trim()}`);
           await page.keyboard.press('Shift+Enter');
         }
         await page.keyboard.insertText(s.url);
@@ -522,7 +562,7 @@ async function publish(article, judgments, opts) {
       await insertHeading(frame, page, '🛍 함께 보면 좋은 상품');
       for (const p of linkProducts) {
         const nameLine = String(p.name || '상품').replace(/\s+/g, ' ').trim().slice(0, 45);
-        await typeRich(page, `· ${nameLine}`);
+        await typeParagraph(page, `· ${nameLine}`);
         await page.keyboard.press('Shift+Enter');
         await page.keyboard.insertText(p.link);
         await page.keyboard.press('Enter'); // URL 뒤 Enter → 자동 링크화
@@ -593,4 +633,4 @@ async function publish(article, judgments, opts) {
   }
 }
 
-module.exports = { publish };
+module.exports = { publish, verifyBodyBlocks };

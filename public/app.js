@@ -8,7 +8,8 @@ const api = async (url, opts = {}) => {
       ...opts,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
-  } catch {
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
     throw new Error('사이트 서버 연결이 잠시 끊겼습니다. 잠시 후 다시 시도해주세요.');
   }
   const data = await res.json().catch(() => ({}));
@@ -158,21 +159,23 @@ $('logoutBtn').onclick = async () => {
 
 // ── 모드 1: 연예인 뉴스 글 — 글감 찾기 (중지 가능) ────────
 let topicsAbort = null;
-$('newsModeBtn').onclick = async () => {
-  const btn = $('newsModeBtn');
+async function findNewsTopics(realtime = false) {
+  if (topicsAbort) return;
+  const btn = $(realtime ? 'realtimeModeBtn' : 'newsModeBtn');
+  setTopicSearchBusy(true);
   const stopBtn = $('newsStopBtn');
   btn.disabled = true;
   stopBtn.hidden = false;
   const st = $('newsModeStatus');
   st.hidden = false;
   st.className = 'status';
-  st.textContent = '직전 글감과 겹치지 않는 새로운 주제를 찾는 중... (1~2분) — 오른쪽 중지 버튼으로 취소할 수 있어요.';
+  st.textContent = realtime ? '네이버 엔터의 오늘의 랭킹·최신뉴스를 실시간 수집하고 글감을 고르는 중입니다…' : '직전 글감과 겹치지 않는 새로운 주제를 찾는 중... (1~2분) — 오른쪽 중지 버튼으로 취소할 수 있어요.';
   topicsAbort = new AbortController();
   try {
-    const data = await api('/api/schedule/topics', { method: 'POST', signal: topicsAbort.signal });
+    const data = await api(realtime ? '/api/topics/realtime' : '/api/schedule/topics', { method: 'POST', signal: topicsAbort.signal });
     currentSearch = data;
     renderTopics(data);
-    st.textContent = `글감 ${data.topics.length}개를 찾았습니다. 아래에서 선택하세요.`;
+    st.textContent = realtime ? `실시간 이슈 글감 ${data.topics.length}개를 찾았습니다. 아래에서 선택하세요.` : `글감 ${data.topics.length}개를 찾았습니다. 아래에서 선택하세요.`;
   } catch (e) {
     if (e.name === 'AbortError') {
       st.className = 'status';
@@ -187,8 +190,14 @@ $('newsModeBtn').onclick = async () => {
     stopBtn.textContent = '글감 찾기 중지';
     stopBtn.hidden = true;
     topicsAbort = null;
+    setTopicSearchBusy(false);
   }
 };
+$('newsModeBtn').onclick = () => findNewsTopics(false);
+$('realtimeModeBtn').onclick = () => findNewsTopics(true);
+function setTopicSearchBusy(busy) {
+  for (const id of ['newsModeBtn', 'realtimeModeBtn', 'keywordModeBtn']) $(id).disabled = busy;
+}
 // 글감 찾기 중지 — 진행 중인 요청을 취소한다
 $('newsStopBtn').onclick = () => {
   if (!topicsAbort) return;
@@ -199,8 +208,10 @@ $('newsStopBtn').onclick = () => {
 
 // ── 모드 1-c: 키워드로 관련 기사 찾아 글감 만들기 ──────
 $('keywordModeBtn').onclick = async () => {
+  if (topicsAbort) return;
   const keyword = $('keywordInput').value.trim();
   if (!keyword) return alert('찾을 키워드를 입력하세요. (예: 아이유 공항패션)');
+  setTopicSearchBusy(true);
   const btn = $('keywordModeBtn');
   const stopBtn = $('newsStopBtn');
   btn.disabled = true;
@@ -230,6 +241,7 @@ $('keywordModeBtn').onclick = async () => {
     stopBtn.textContent = '글감 찾기 중지';
     stopBtn.hidden = true;
     topicsAbort = null;
+    setTopicSearchBusy(false);
   }
 };
 
@@ -261,10 +273,11 @@ $('linkModeBtn').onclick = async () => {
 
 // ── 모드 2: 상품 소개 글 — 반응 좋은 상품 자동 선정 ──
 $('productModeBtn').onclick = async () => {
+  const keyword = $('productKeywordInput').value.trim();
   const mode = $('runMode').value;
   const visibility = $('runVisibility').value;
   const actLabel = mode === 'publish' ? `바로 ${visibility === 'private' ? '비공개' : '공개'} 발행` : '임시저장';
-  if (!(await uiConfirm(`쇼핑커넥트에서 지금 반응 좋은 상품 1개를 자동으로 골라 소개 글을 쓰고 ${actLabel}까지 진행합니다.\n시작할까요?`))) return;
+  if (!(await uiConfirm(`쇼핑커넥트에서 지금 반응 좋은 상품 1개를 자동으로 골라 소개 글을 쓰고 ${actLabel}까지 진행합니다.${keyword ? `\n지정 키워드: ${keyword}` : ''}\n시작할까요?`))) return;
   const btn = $('productModeBtn');
   btn.disabled = true;
   const st = $('productModeStatus');
@@ -272,7 +285,7 @@ $('productModeBtn').onclick = async () => {
   st.className = 'status';
   st.textContent = '상품 선정 및 글 작성을 시작합니다...';
   try {
-    const { draftId } = await api('/api/run-product', { method: 'POST', body: { visibility, mode } });
+    const { draftId } = await api('/api/run-product', { method: 'POST', body: { visibility, mode, keyword } });
     st.textContent = '진행 중 — 아래 진행 상황에서 확인하세요.';
     watchDraft(draftId);
   } catch (e) {
@@ -296,6 +309,8 @@ $('productLinkInput').addEventListener('input', () => {
   clearProductHookChoices();
 });
 
+$('productKeywordInput').addEventListener('input', clearProductHookChoices);
+
 $('productLinkDeleteBtn').onclick = () => {
   const input = $('productLinkInput');
   input.value = '';
@@ -308,6 +323,7 @@ $('productLinkDeleteBtn').onclick = () => {
 
 $('productLinkBtn').onclick = async () => {
   const url = $('productLinkInput').value.trim();
+  const keyword = $('productKeywordInput').value.trim();
   if (!/^https?:\/\//.test(url)) return alert('상품 링크(쇼핑커넥트/스마트스토어, https://...)를 붙여넣어 주세요.');
   const btn = $('productLinkBtn');
   btn.disabled = true;
@@ -317,13 +333,13 @@ $('productLinkBtn').onclick = async () => {
   st.textContent = '제품을 분석해 고민형·키워드형 제목을 찾고 있어요...';
   clearProductHookChoices();
   try {
-    const data = await api('/api/product-hooks', { method: 'POST', body: { url } });
-    productHookPlan = { ...data, url };
+    const data = await api('/api/product-hooks', { method: 'POST', body: { url, keyword } });
+    productHookPlan = { ...data, url, keyword };
     const box = $('productHookChoices');
     box.hidden = false;
     const heading = document.createElement('div');
     heading.className = 'product-hook-heading';
-    heading.textContent = `${data.product?.name || '이 상품'}에 맞는 제목 4개를 찾았어요. 하나를 골라주세요.`;
+    heading.textContent = `${data.product?.name || '이 상품'}에 맞는 제목 4개를 찾았어요.${keyword ? ` 지정 키워드: ${keyword}` : ''} 하나를 골라주세요.`;
     box.appendChild(heading);
     data.choices.forEach((choice, index) => {
       if (index === 0 || index === 3) {
@@ -399,6 +415,7 @@ async function runSelectedProductHook(selectedIndex, choice) {
         url: productHookPlan.url,
         planId: productHookPlan.planId,
         selectedIndex,
+        keyword: productHookPlan.keyword || '',
         visibility,
         mode,
       },
@@ -450,6 +467,15 @@ function renderTopics(data, visOverride, { scroll = true } = {}) {
   runQueue = [];
   const list = $('topicsList');
   list.innerHTML = '';
+  if (data.mode === 'realtime') {
+    const info = document.createElement('p');
+    info.className = 'hint';
+    info.textContent = `네이버 엔터 · ${new Date(data.collectedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} 수집 (한국시간) · 랭킹 ${data.counts.ranking}건 / 최신뉴스 ${data.counts.latest}건`;
+    list.appendChild(info);
+    for (const warning of data.warnings || []) {
+      const note = document.createElement('p'); note.className = 'status'; note.textContent = warning; list.appendChild(note);
+    }
+  }
   data.topics.forEach((t, i) => {
     const div = document.createElement('div');
     div.className = 'topic';
@@ -480,6 +506,19 @@ function renderTopics(data, visOverride, { scroll = true } = {}) {
       d.className = 'badge badge-date';
       d.textContent = '📅 ' + t.date;
       badges.appendChild(d);
+    }
+    if (data.mode === 'realtime') {
+      const refs = (t.refs || []).map(index => data.sources[index]).filter(Boolean);
+      const labels = new Set(refs.flatMap(source => source.sections.map(section => section === 'ranking' ? `엔터 랭킹 ${source.rank}위` : '최신뉴스')));
+      for (const label of labels) { const badge = document.createElement('span'); badge.className = 'badge'; badge.textContent = label; badges.appendChild(badge); }
+      const details = document.createElement('details');
+      const summary = document.createElement('summary'); summary.textContent = '참고 기사 보기'; details.appendChild(summary);
+      for (const source of refs) {
+        const a = document.createElement('a'); a.href = source.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.textContent = `${source.source} · ${source.title}${source.publishedAt ? ' · ' + source.publishedAt.replace('T', ' ') : ''}`;
+        a.style.display = 'block'; details.appendChild(a);
+      }
+      div.firstElementChild.appendChild(details);
     }
     div.querySelector('.t-title').textContent = t.title;
     div.querySelector('.t-fact').textContent = t.fact ? '✓ ' + t.fact : '';
@@ -860,6 +899,7 @@ async function openPreview(id) {
     h1.textContent = isProductPost
       ? cleanProductText(article.title) || `${meta.products?.[0]?.name || '상품'} 구성과 사용 전 확인할 점`
       : article.title;
+    h1.textContent = ArticleFormat.wrapText(h1.textContent);
     body.appendChild(h1);
     if (article.titleAlternatives?.length) {
       const alternatives = isProductPost
@@ -885,14 +925,14 @@ async function openPreview(id) {
         const blockText = isProductPost ? cleanProductText(b.text) : b.text;
         if (!blockText) continue;
         const el = document.createElement('h3');
-        el.textContent = blockText;
+        el.textContent = ArticleFormat.wrapText(blockText);
         body.appendChild(el);
       } else if (b.type === 'paragraph') {
         const blockText = isProductPost ? cleanProductText(b.text) : b.text;
         if (!blockText) continue;
         const el = document.createElement('p');
         el.style.textAlign = 'left';
-        el.innerHTML = escapeHtml(blockText)
+        el.innerHTML = escapeHtml(ArticleFormat.wrapText(blockText))
           .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
           .replace(/\n/g, '<br>'); // 문단 안 줄은 붙여서 (실제 에디터와 동일)
         body.appendChild(el);
@@ -903,7 +943,8 @@ async function openPreview(id) {
         if (isProductPost) {
           el.className = blockText.includes('\n') ? 'product-summary' : 'product-point';
         }
-        el.innerHTML = escapeHtml(blockText).replace(/\n/g, '<br>');
+        el.innerHTML = escapeHtml(ArticleFormat.wrapText(blockText))
+          .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
         body.appendChild(el);
       } else if (b.type === 'divider') {
         body.appendChild(document.createElement('hr'));
@@ -926,6 +967,7 @@ async function openPreview(id) {
               ? `${j.caption}(출처:${sourceLabel})`
               : `(출처:${sourceLabel})`;
           }
+          cap.textContent = ArticleFormat.wrapText(cap.textContent);
           body.appendChild(cap);
         }
       }
@@ -946,7 +988,7 @@ async function openPreview(id) {
         a.href = r.url;
         a.target = '_blank';
         a.style.color = '#2563eb';
-        a.textContent = `· ${r.title || r.url}`;
+        a.textContent = ArticleFormat.wrapText(`· ${r.title || '참고 기사 보기'}`);
         line.appendChild(a);
         ul.appendChild(line);
       });
@@ -966,7 +1008,7 @@ async function openPreview(id) {
         a.href = p.link;
         a.target = '_blank';
         a.style.color = '#03c75a';
-        a.textContent = `· ${p.name || '상품'} → ${p.link}`;
+        a.textContent = ArticleFormat.wrapText(`· ${p.name || '상품'} → 상품 보기`);
         line.appendChild(a);
         body.appendChild(line);
       });
@@ -974,7 +1016,7 @@ async function openPreview(id) {
     if (article.tags?.length) {
       const tags = document.createElement('div');
       tags.className = 'tags';
-      tags.textContent = article.tags.map((t) => '#' + t).join(' ');
+      tags.textContent = ArticleFormat.wrapText(article.tags.map((t) => '#' + t).join(' '));
       body.appendChild(tags);
     }
     $('modal').hidden = false;

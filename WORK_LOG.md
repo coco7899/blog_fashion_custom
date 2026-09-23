@@ -1228,6 +1228,60 @@
 - 수정한 파일: `public/app.js`, `WORK_LOG.md`
 - 다음 작업: 글쓰기 실행 중 새 글감 목록을 찾은 뒤 이전 작업이 완료돼도 새 목록 버튼이 실행 가능한 상태로 유지되는지 확인한다.
 - 주의사항: 실제 임시저장·발행 기록은 변경하지 않으며 대시보드 버튼 표시와 실행 대기 상태만 바로잡았다.
+
+# 2026-09-20 자연스러운 말투와 모바일 28자 줄바꿈
+
+- 뉴스·쇼핑 작성 및 재작성 지침을 일상적인 해요체와 문맥 연결 중심으로 변경했다. 반복 해석·가짜 체험·의무적인 마무리 요약을 줄였다.
+- 제목의 주제 적합성을 우선해 프레임을 고르며, OTT 추천은 장르별 작품 안내형을 사용한다.
+- public/article-format.js를 작성·미리보기·네이버 입력에서 공유한다. 공백/문장부호 포함 최대 28자를 보장하고 굵게·이모지·명시적 문단 간격을 보존한다. 제목 원문과 링크 주소는 보존한다.
+- 캡션, 태그, 소제목과 출처의 표시 제목에도 줄바꿈을 적용하고 모바일 미리보기의 단어 중간 끊김을 줄였다.
+- 테스트 원고: mu9uxsqfqpry. 원본 mu9ufk3ub7no는 유지했다. 생성 결과 본문 75줄, 최대18자, 28자 초과0줄. 원제목 동일.
+- node --test tests/article-format.test.js: 9개 통과. node --test tests/news-review.test.js: 2개 통과. 관련 JavaScript 구문검사 통과.
+- 저장 중 발견한 네이버 alert-confirm 형식의 이전 글 이어쓰기 팝업에 대한 취소 처리를 추가했다.
+- 테스트 텍스트와 수치: D:/1CODEX/.codex-artifacts/blog-natural-28-20260920.
+- 최종 확인: 팝업 보완 후 저장 재시도 성공(status=saved, mode=draft, visibility=private, error=null). 390px 모바일 화면에서 본문과 굵게·문단 간격을 확인했고, 원래 화면 크기로 복원한 뒤 최신 미리보기를 열어두었다.
+# 2026-09-21 참조이미지 기반 숏폼 장면 프롬프트
+
+- 숏폼 편집기에 참조이미지 5개 슬롯과 실제 이미지 분석 기반 장면별 9:16 이미지·영상 프롬프트를 추가했다. 기존 대본과 자막은 변경하지 않는다.
+- 개별 복사, 전체 복사, TXT 다운로드를 제공한다. 전체 복사 마지막에는 사용자가 지정한 순차 이미지 생성·다운로드 폴더 저장 요청을 붙인다. 외부 채팅의 저장을 직접 실행하는 기능은 아니다.
+- 참조 업로드·삭제와 생성 결과를 초안별로 저장하며, 생성 중 참조 변경을 막고 대본 수정 시 재생성을 안내한다.
+- 검증: 단위·라우트 및 기존 글쓰기 테스트 총 15개 통과. 실제 6장면 생성, 별도 초안에서 이미지 2장 분석·장면별 참조 배정 성공. 브라우저에서 개별/전체 복사, 마지막 문구, 대본 변경 시 복사 비활성화를 확인했다.
+
+# 2026-09-21 숏폼 편집기 레이아웃 정리
+
+- 기존 컨트롤과 ID를 유지한 채 대본·이미지 프롬프트·디자인·오디오·내보내기 탭으로 재배치했다. 미리보기와 영상 다운로드는 별도 고정 영역으로 유지한다.
+- 숏폼 전용 CSS로 여백·색상·버튼과 모바일 배치를 정리했다. 대시보드와 블로그 스타일은 변경하지 않는다.
+- 실제 브라우저에서 5개 탭, 키보드 Home/End 이동, ID 중복 없음, 콘솔 오류 없음, 390px 화면 가로 넘침 없음을 확인했다.
+
+
+## 2026-09-21 AI capacity failure recovery
+- Codex requests retry temporary capacity/connection failures up to twice within the original timeout budget. Capacity retries use gpt-5.6-sol, then gpt-5.5; global user configuration is unchanged.
+- CLI errors return concise Korean messages rather than prompt/stderr contents. Login and usage limits are not retried; cancellation interrupts retry delays.
+- Failed auth probes cache for 30 seconds instead of 30 minutes.
+- Validation: node --test tests/codex-retry.test.js tests/scene-prompts.test.js (7 passed). Restarted only server-custom.js on port 4000 and initiated actual topic discovery in the existing browser.
+- Live verification completed: automatic topic discovery returned five new topic cards in the existing browser; button re-enabled and prior raw error cleared.
+
+## 2026-09-23 네이버 엔터 실시간 이슈 글감
+- Added a separate real-time topic button using public data endpoints observed in the live Naver Enter home and latest-news bundles. Fetches home ranking and today's latest 50 stories on every click, using Korean calendar date.
+- Canonical article URLs deduplicate ranking/latest overlap; source category, rank, actual publication timestamp and collection timestamp retained. Partial failures explicitly reported; total failure does not use old results.
+- Existing topic generation/writing flow retained; realtime prompts include source summaries and rank context. Cards expose referenced articles and collection counts/time; persisted search restores metadata.
+- Search actions are mutually exclusive, cancellation propagates through collection and AI. Fixed frontend API helper swallowing AbortError.
+- Verified real collection: ranking 6 + latest 50, no warnings. Unit tests cover KST boundary, deduplication, date filtering, partial/total failures and cancellation. Browser verified button presence and stop behavior.
+- End-to-end browser success: 2026-09-23 12:57:28 KST snapshot, ranking 6/latest 50, five generated topics, rank/latest badges and expandable source links verified, no console errors. Tests: 13 passed.
+
+## 2026-09-23 쇼핑커넥트 사용자 문체 예시 반영
+- Shared product-style instructions now used in drafting, automatic review and revision: analyze actual product before choosing headings; concrete everyday introduction, specifications, product-specific sections, brief key-point list, natural ending.
+- Removed conflicting no-heading/no-summary rules and product frame enforcement. Removed keyword-only intro rejection that forced unnatural problem words into otherwise natural prose.
+- Retained factuality, disclosure, non-fabricated experience, 28-character mobile wrapping; example editor placeholders are forbidden.
+- Updated site-local shopping skill. No global personal skill modified. Syntax check passed; 13 formatting/news regression tests passed. Applied by restarting only port 4000 app.
+- 2026-09-23 shopping title rule: short product name/product category + one buyer question; target 25-35 chars, normally max 38, keyword exception. Four proposed titles validate/retry once for length, duplicates, empty filler, keyword; automatic product final title receives a focused rewrite when invalid. Local shopping skill and article audit/revision prompt aligned. Tests: product title 2 + article formatting/news review 13 passed; site returned HTTP 200 after scoped restart. Live Codex sample call timed out at 600 seconds, so live AI content was not confirmed.
+
+## 2026-09-23 쇼핑커넥트 간결한 구성·구매 연결
+- 사용자가 승인한 찜질기 예시를 기준으로 반복 설명과 의무적인 요점정리 목록을 제거하고, 필요한 상품 정보와 2~4개 소제목 뒤에 짧고 구체적인 구매 문단을 쓰도록 프롬프트·공통 스타일·로컬 스킬을 맞췄다.
+- 자동 상품 검수에서도 반복 목록을 감점하고, 마지막 CTA가 필요한 사람·구매 이유·실제 확인 조건·상품 링크 행동을 연결하는지 확인한다.
+- 네이버 에디터 입력 시 간헐적으로 줄이 빠지는 문제를 입력 간격과 저장 전 본문 검증으로 보완했다. 재저장한 찜질기 글을 다시 열어 전체 본문과 이미지 5장을 확인했다.
+- 전체 테스트 30개 통과, 4000번 서버 재시작 후 HTTP 200 확인.
+
 # 2026-08-09 모바일 에디터 작성과 의미 단위 줄바꿈 강화
 
 - 완료한 작업: 네이버 에디터를 모바일 화면 폭으로 열도록 변경하고, 문장을 단순 글자 수가 아니라 문장 끝·쉼표·접속어 같은 의미 경계를 우선해 줄바꿈하도록 개선했다. 연예·쇼핑커넥트 프로젝트 스킬과 개인 스킬에도 같은 기준을 반영했다.

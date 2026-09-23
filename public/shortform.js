@@ -444,6 +444,7 @@ async function doSave() {
   }
 }
 function scheduleSave() {
+  ScenePrompts.refresh();
   setSaveState('편집 중…');
   clearTimeout(saveTimer);
   saveTimer = setTimeout(doSave, 800);
@@ -574,6 +575,7 @@ async function openEditor(data) {
   $('makeCard').hidden = true;
   $('editor').hidden = false;
   fillEditor();
+  ScenePrompts.open(draftId, () => sf);
   await SF.ensureFont();
   await preloadAll();
   playT = 0.35;

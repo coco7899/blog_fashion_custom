@@ -18,6 +18,7 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 app.use(express.json({ limit: '30mb' })); // 장면 배경 이미지 업로드(base64)를 받기 위해 넉넉히
 app.use(express.static(path.join(__dirname, 'public')));
+require('./src/scene-prompts').mount(app);
 
 // ── 환경/로그인 상태 ─────────────────────────────────────────
 app.get('/api/status', (req, res) => {
@@ -161,11 +162,12 @@ app.post('/api/run', async (req, res) => {
 // ── 상품 링크 분석: 고민형 3개 + 키워드형 1개 제목을 먼저 제안 ──
 app.post('/api/product-hooks', async (req, res) => {
   const url = String((req.body && req.body.url) || '').trim();
+  const keyword = String((req.body && req.body.keyword) || '').trim().slice(0, 100);
   if (!/^https?:\/\/.+/.test(url)) {
     return res.status(400).json({ error: '올바른 상품 링크(https://...)를 입력하세요.' });
   }
   try {
-    const result = await pipeline.prepareProductChoices(url);
+    const result = await pipeline.prepareProductChoices(url, keyword);
     res.json(result);
   } catch (e) {
     const message = String(e.message || '상품의 구매 고민을 만드는 중 오류가 발생했습니다.').split('\n')[0];
@@ -182,6 +184,7 @@ app.post('/api/run-product', async (req, res) => {
     const url = req.body && typeof req.body.url === 'string' ? req.body.url.trim() : '';
     const planId = req.body && typeof req.body.planId === 'string' ? req.body.planId.trim() : '';
     const selectedIndex = Number(req.body && req.body.selectedIndex);
+    const keyword = String((req.body && req.body.keyword) || '').trim().slice(0, 100);
     if (url && !/^https?:\/\//.test(url)) {
       return res.status(400).json({ error: '올바른 상품 링크(https://...)를 입력하세요.' });
     }
@@ -194,12 +197,13 @@ app.post('/api/run-product', async (req, res) => {
       return res.status(401).json({ error: '네이버 로그인이 필요합니다. 먼저 로그인해주세요.' });
     }
 
-    const meta = store.createDraft({ type: 'product', keyword: '쇼핑커넥트 상품', visibility, mode, sourceUrl: url || undefined });
+    const meta = store.createDraft({ type: 'product', keyword: keyword || '쇼핑커넥트 상품', visibility, mode, sourceUrl: url || undefined });
     pipeline.runProduct(meta.id, visibility, {
       mode,
       productUrl: url || undefined, // 지정 링크가 있으면 그 상품으로
       planId: planId || undefined,
       selectedIndex,
+      requestedKeyword: keyword || undefined,
     }).catch((error) => {
       console.error('[run-product] 백그라운드 실행 실패:', error.message);
       store.updateDraft(meta.id, { status: 'error', step: '실패: ' + error.message, error: error.message });
@@ -259,6 +263,28 @@ app.post('/api/run-link', async (req, res) => {
     const message = String(e.message || '기사 링크 처리 중 오류가 발생했습니다.').split('\n')[0];
     console.error('[run-link] 실패:', message);
     if (!res.headersSent) res.status(500).json({ error: message });
+  }
+});
+
+// Button-triggered fresh snapshot of Naver Enter ranking + latest news.
+app.post('/api/topics/realtime', async (req, res) => {
+  const controller = new AbortController();
+  req.on('aborted', () => controller.abort());
+  res.on('close', () => { if (!res.writableEnded) controller.abort(); });
+  try {
+    const snapshot = await require('./src/enter-news').collectEnter({ signal: controller.signal });
+    const keyword = '네이버 엔터 실시간 이슈';
+    const list = await topics.suggestTopics(keyword, snapshot.sources, {
+      avoidTitles: scheduler.recentTitles(30), signal: controller.signal, realtime: true,
+    });
+    controller.signal.throwIfAborted();
+    const data = { ...snapshot, keyword, topics: list, mode: 'realtime', at: snapshot.collectedAt, visibility: scheduler.getStatus().settings.visibility };
+    const searchId = store.saveSearch(data);
+    res.json({ ...data, searchId });
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    console.error('[topics/realtime]', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

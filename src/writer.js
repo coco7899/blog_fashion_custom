@@ -1,8 +1,10 @@
+const PRODUCT_STYLE = require('./product-style');
 // 참고자료 → Codex로 자연스러운 블로그 글 재작성 (구조화 블록 출력)
 const codex = require('./codex');
 const skills = require('./skills');
 const frames = require('./frames');
 const { isTitleTooSimilarToAny } = require('./titleSimilarity');
+const { wrapText, formatArticle } = require('../public/article-format');
 
 const BLOCK_TYPES = new Set(['heading', 'paragraph', 'quote', 'divider', 'image']);
 
@@ -15,7 +17,7 @@ const MIN_IMAGES = 2;           // 기본 슬롯은 2개, 실제 관련 사진�
 
 function buildPrompt(topic, refText, frame, retryNote) {
   const skill = skills.loadSkill('01-celebrity-news-blog');
-  return `아래는 블로그 글쓰기 "형식 참고용" 스킬 지침입니다. **말투·문단 길이·구간 나누기 같은 '형식'만 참고**하고,
+  return `아래는 블로그 글쓰기 "형식 참고용" 스킬 지침입니다. 형식은 참고하되, **아래의 일상적인 말투와 공백 포함 28자 줄바꿈 규칙이 스킬보다 우선**합니다.
 글의 **주제와 내용 흐름은 아래 【글 작성 방식】과 【참고자료(뉴스)】에 충실히** 따르세요.
 (스킬의 패션·뷰티 예시에 억지로 끼워 맞추지 마세요.)
 
@@ -28,31 +30,37 @@ ${skill}
 - 이미지는 시스템이 뉴스에서 수집해 image 블록 순서대로 배치합니다. 이미지 다운로드·ZIP·목록·표는 생략하세요.
 - 출처 링크는 시스템이 글 끝에 자동으로 정리합니다. 본문에 출처 목록을 넣지 마세요.
 - image desc/caption은 **그 뉴스에 실제로 있을 법한 사진**만 묘사하세요(뉴스 속 인물·현장·장면). 연출 상품 컷은 금지.
+- 스킬에 다른 줄 길이나 고정된 마무리 형식이 있어도 적용하지 마세요. 본문·소제목·인용구·캡션의 한 줄은 공백과 문장부호를 포함해 최대 28자입니다. 긴 제목은 문구를 유지하고 표시할 때만 줄을 나눕니다.
 
 【글 작성 방식 — 홈판용 뉴스 큐레이션】 ★가장 중요
 글을 쓰기 전에 내부적으로만 다음 네 가지를 정하세요. 별도 기획표로 출력하지는 마세요.
-- 기사 전체가 아니라 사용할 핵심 사실 2~3개
-- 글 전체를 이끌 한 줄 관점 하나
-- 독자가 얻을 맥락·관전 포인트 1개 이상
-- 무엇이 새롭고 읽을 이유가 있는지 보여 주는 제목 방향
+- 독자가 이 제목을 보고 궁금해할 내용
+- 그 궁금증에 답하는 확인된 사실과 필요한 배경
+- 앞 문단을 읽은 사람이 다음에 궁금해할 내용
+- 마지막 정보까지 읽고 자연스럽게 끝낼 지점
 
-1. **하나의 관점으로 큐레이션하세요.** 이번에 선택된 구성 프레임을 중심축으로 삼고 다른 관점을 한 글에 섞지 마세요.
-2. 도입에서는 인물의 대표 이미지·대표작·활동 맥락을 짧게 짚은 뒤 이번 소식이 왜 새로운지 연결하세요. 상투적인 "오늘은 알아볼게요", "정리해드릴게요"로 시작하지 마세요.
-3. 본문에는 참고자료에서 확인된 핵심 사실 2~3개만 사용하세요. 기자의 말, 행사 순서, 인물 이력을 빠짐없이 옮기지 말고 독자가 원문 없이도 맥락을 이해할 수 있게 새 흐름으로 엮으세요.
+1. **제목이 약속한 내용을 중심으로 쓰세요.** 구성 프레임은 참고 순서일 뿐입니다. 실제 자료와 맞지 않는 도입·단계·해석을 억지로 넣지 마세요.
+2. 첫 문단은 이번 기사가 나왔다는 소식부터 바로 꺼내세요. "○○가 이런 이야기를 했다는 기사가 나왔어요", "○○의 새 소식이 전해졌어요", "○○가 근황을 공개했어요"처럼 주어와 실제 소식을 평범하게 말하세요. 매출·몸무게·나이 같은 숫자를 보고 독자가 어떻게 느낄지 상상하거나, 일반적인 상황을 길게 만들지 마세요. 작품 추천처럼 기사 한 건을 소개하는 글이 아닐 때만 주제에 맞는 구체적인 상황으로 시작하세요. "오늘은 알아볼게요", "정리해드릴게요" 같은 진행 멘트는 생략하세요.
+3. 핵심 이야기 2~3개를 골라 필요한 사실과 배경을 이어 쓰세요. 장르별 기대작처럼 여러 작품을 소개하는 글은 작품명·장르·기본 설정·확인된 공개 정보를 충분히 설명하세요. 사실 개수를 맞추느라 제목에 약속한 정보를 빼지 마세요. 자료에 없는 작품이나 공개 일정은 채워 넣지 마세요.
 4. 기사 내용을 시간순으로 옮기지 마세요. 기사 문장·문단 구조를 따라가지 말고 완전히 새 문장으로 쓰며 인용문을 여러 개 이어 붙이지 마세요.
-5. 핵심 사실 뒤에는 왜 그 지점을 볼 만한지 독자 관점의 맥락을 설명하세요. 시청률·흥행·관계 변화·향후 전개는 예측하지 마세요.
-6. 마지막 2~4문장에 글쓴이의 짧은 생각을 자연스럽게 녹이세요. 별도 소제목을 붙이지 말고 의견을 사실처럼 단정하지 마세요.
-7. 친근한 존댓말로 문단당 1~3문장을 쓰고 같은 어미 반복을 줄이세요. 과한 감탄·확신을 피하며 직접 보거나 사용한 것처럼 쓰지 마세요.
-   - 이미 일어난 뉴스의 사실은 "~했어요", "~였어요", "~로 알려졌어요", "~라고 했어요"처럼 직접 말하세요. 사실을 소개한 뒤 "이번 뉴스의 핵심에 더 가깝습니다", "구분해서 보는 편이 자연스럽습니다", "더 잘 어울립니다", "더 또렷하게 드러났죠"처럼 작가가 판정을 내리는 문장으로 끝내지 마세요.
-   - "~에 가깝습니다", "~보는 편이 자연스럽습니다", "~더 잘 어울립니다", "~또렷하게 드러났죠" 같은 해석형 종결어미는 쓰지 마세요. 독자가 볼 지점이 필요하면 평가하지 말고 기사에서 확인된 장면·발언·변화 자체를 한 문장으로 말하세요.
-   - **굵게** 표시하는 짧은 구절도 "헤어 컬러의 존재감", "이번 뉴스의 핵심", "관전 포인트"처럼 평가를 담은 표제가 아니라 기사에 나온 인물·작품·장면·변화처럼 확인 가능한 말만 사용하세요.
+5. 앞에서 꺼낸 내용의 다음 이야기를 이어 가세요. 사실마다 의미·교훈·평가를 붙이거나 매 문단을 "그래서", "반면", "이런 점에서"로 연결하지 마세요. 작품을 고르는 데 필요한 차이는 설정과 분위기 등 확인된 내용으로 설명하고, 흥행·전개·시청 소감은 지어내지 마세요.
+6. 마지막 작품이나 소식의 필요한 정보를 전하면 그대로 끝내도 됩니다. 마무리 문단을 억지로 만들거나 앞의 작품들을 다시 비교·분류하지 마세요. "결국 중요한 건", "어떤 선택이든", "작은 즐거움이 되길" 같은 교훈·응원 문구나 글쓴이의 감상을 의무적으로 넣지 마세요.
+7. **평소 지인에게 이야기하듯 쉽고 담백한 해요체**로 쓰세요. "~예요", "~했어요", "~있어요"를 기본으로 하고, "~죠", "~거든요"는 앞뒤 맥락에 맞을 때만 쓰세요. 어미를 바꾸기 위해 매 문장에 다른 어미를 끼우지 마세요.
+   - "관전 포인트를 짚어보면", "선택의 기준이 됩니다", "눈길을 끄는 지점", "서사의 결", "분위기를 환기해요", "단순히 A가 아닌 B" 같은 해설·보고서 문장틀을 쓰지 마세요. 어렵거나 추상적인 말을 일상어로 풀어주세요.
+   - 예를 들어 "장르의 다채로움이 선택의 폭을 넓혀줍니다" 대신 "코미디도 있고 스릴러도 있어요"처럼 구체적으로 쓰세요. 이는 말투 예시일 뿐, 자료에 없는 장르나 작품을 만들라는 뜻이 아닙니다.
+   - "~더라고요", "저도 처음엔", "보다 보니", "다들 궁금하시죠?"로 본 적 없는 경험이나 독자의 반응을 꾸미지 마세요. 직접 시청·사용했다는 근거가 없으면 설정과 확인된 정보만 설명하세요.
+   - 소리 내어 읽었을 때 사람이 잘 하지 않을 말을 고치세요. 문장 끝만 해요체로 바꾸는 데 그치지 말고, 겹치는 설명과 뜬금없는 감상을 덜어 문단이 이어지게 만드세요.
+   - "성격이 다른 신작이 마련됐어요", "이야기의 범위를 넓혔다는 점도 확인됐어요", "비교하며 고를 수 있는 작품이에요", "선택이 분명하게 나뉘어요" 같은 문장은 쓰지 마세요. "이번엔 사극과 예능이 있어요", "두 인물의 관계를 새로 그렸다고 해요"처럼 구체적인 사실을 바로 말하세요. 이 예시는 말투만 참고하고 그대로 반복하지 마세요.
+   - "선택지예요", "가장 새로운 선택지예요", "살펴볼 수 있어요", "확인하면 돼요", "이어질 차례예요"처럼 독자에게 고르라고 설명하는 말을 쓰지 마세요. 작품명·장르·설정·출연진·공개일을 평범한 말로 바로 전하세요.
+   - 작품명·설정·출연진을 설명한 뒤 그 작품의 의미나 추천 이유를 덧붙이지 않아도 됩니다. 매 문단을 "~싶다면", "~찾는다면", "~할 수 있어요"로 시작하거나 끝내지 마세요. 한 작품 소개가 끝나면 다음 작품의 구체적인 이야기로 넘어가세요.
+   - 출력 직전에 마지막 문단부터 다시 읽고, 앞에서 한 말의 재분류·요약이나 정보 없는 평가 문장은 덜어내세요. 분량이 부족하면 원작·출연진·공개 정보의 필요한 설명을 보완하고 같은 말을 늘리지 마세요.
    - 제목, 소제목, 본문은 모두 왼쪽 정렬입니다.
    - 한 paragraph에는 하나의 내용만 담고, 인물의 출연 상태·작품 설정·배역·관전 포인트처럼 중심 내용이 바뀌면 새 paragraph로 나누세요.
    - 한 문단을 1~3문장으로 구성하되 문장 수를 맞추려고 서로 다른 내용을 한 문단에 묶지 마세요.
    - **내용을 줄이려고 문장을 억지로 간결하게 다시 쓰지 마세요.** 필요한 설명과 자연스러운 문장 흐름은 그대로 유지하세요.
-   - 완성된 한 문장이 길면 같은 paragraph 안에서 의미 단위로 줄바꿈(\\n)해 2~3줄로 보여주세요.
-   - 한 줄은 약 25~40자를 권장하지만 이는 화면 배치 기준일 뿐, 본문 분량이나 정보량을 줄이는 기준이 아닙니다.
-   - 단어·조사·수식어 중간을 자르지 말고 띄어쓰기나 쉼표처럼 자연스러운 지점에서 줄바꿈하세요.
+   - 문장이 길면 같은 paragraph 안에서 의미 단위로 줄바꿈(\\n)하세요. 한 문장에 필요한 줄 수를 제한하지 마세요.
+   - **한 줄은 공백·문장부호 포함 최대 28자**입니다. 보통 18~28자 안에서 읽기 좋은 곳을 고르되, 28자를 채우려 하지 마세요. 굵게 표시하는 ** 기호는 화면에 보이는 글자 수에서 제외합니다.
+   - 띄어쓰기나 쉼표에서 줄을 나누고, 단어와 조사·수식어와 명사를 가능하면 붙여 읽게 하세요. 한 줄이 28자를 넘는다면 바로 앞의 자연스러운 경계에서 줄을 바꾸세요. 줄 길이를 맞추기 위해 정보를 빼거나 문장을 토막 내지 마세요.
 8. 글의 리듬을 위해 **짧은 quote 1~2개**를 핵심 전환점에 사용하세요. heading은 정말 필요할 때만 0~1개 쓰고, quote와 heading 합계는 1~3개로 제한하세요.
    - quote는 8~24자의 짧은 구절로 쓰고, 독자가 기억할 변화·장면·관전 포인트를 담으세요. 기사 문장이나 긴 사실 설명을 그대로 넣지 마세요.
    - 중요한 인물 변화, 작품 설정, 스타일 포인트 가운데 **짧은 핵심 구절 1~3곳만 굵게** 표시하세요. 문장 전체나 한 문단 전체를 굵게 만들지 마세요.
@@ -71,7 +79,7 @@ ${topic.title}
 위 제목을 최종 JSON의 title에 글자 하나까지 그대로 사용하세요.` : ''}
 
 ${frames.renderFrameInstruction(frame, 'celeb')}
-※ 위 구성 프레임은 이번 글에만 적용됩니다. 상투적 도입("오늘은 ~에 대해 알아볼게요") 대신 뉴스 소개 흐름에 맞게 새로 지으세요.
+※ 구성 프레임의 순서보다 제목에 맞는 내용과 자연스러운 문맥이 우선입니다. 단계 이름은 본문에 드러내지 마세요.
 
 【글감】
 제목: ${topic.title}
@@ -87,11 +95,11 @@ ${retryNote || ''}
   "tags": ["태그1", "태그2"],
   "blocks": [
     {"type": "image", "slot": 1, "caption": "뉴스 속 장면 설명", "desc": "이 뉴스에 실제로 있을 법한 사진 — 인물/현장"},
-    {"type": "paragraph", "text": "인물의 대표 이미지나 활동 맥락을 짚고 이번 소식의 새로운 지점으로 자연스럽게 연결합니다."},
-    {"type": "paragraph", "text": "확인된 핵심 사실과 **이번 소식의 중요한 변화**를 새로운 문장과 흐름으로 풀어 씁니다."},
+    {"type": "paragraph", "text": "누가 어떤 말을 했거나 무엇을 공개했다는\\n기사 소식을 바로 꺼내는 문단"},
+    {"type": "paragraph", "text": "앞 문단에서 꺼낸 이야기에\\n확인된 사실을 이어 주는 문단"},
     {"type": "quote", "text": "독자가 기억할 짧은 전환 구절"},
     {"type": "image", "slot": 2, "caption": "관련 장면", "desc": "뉴스 속 다른 사진"},
-    {"type": "paragraph", "text": "기사에 나온 배경과 경과를 연결해 설명하고, 필요하면 마지막에 개인적인 생각을 짧게 덧붙입니다."}
+    {"type": "paragraph", "text": "주제에 필요한 이야기를 마친 뒤\\n자연스럽게 끝내는 문단"}
   ]
 }
 각 paragraph에는 하나의 중심 내용만 담고 내용이 바뀌면 새 paragraph로 나누세요. 짧은 quote 1~2개와 필요한 경우 heading 0~1개를 사용하되 합계는 1~3개여야 합니다. 짧은 핵심 구절 1~3곳만 **굵게** 표시하세요. image 블록은 기본 ${MIN_IMAGES}개 이상 최대 4개를 사용하세요. 첫 image 블록은 반드시 blocks 배열의 맨 앞에 대표 이미지로 놓고, 나머지는 관련 내용의 단락 사이에 놓으세요. 최종 사진 판정에서는 관련 사진이 실제로 1장뿐이면 1장만 게시될 수 있습니다. tags 5~10개. 모두 왼쪽 정렬.`;
@@ -166,60 +174,13 @@ function simplifyNewsStructure(article) {
   return article;
 }
 
-// 모바일 한 줄 범위 안에서 쉼표·문장 끝·접속어 같은 의미 경계를 우선해 줄을 나눈다.
-// 단어 중간과 굵게(**) 구간 안에서는 줄을 나누지 않는다.
+// 공백 포함 28자 상한. 굵은 구절도 각 줄에서 서식을 닫고 다시 연다.
 function wrapNewsLine(value, targetLength = 28) {
-  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
-  const lines = [];
-  const minLength = Math.max(20, targetLength - 9);
-  const maxLength = targetLength + 6;
-  const connectiveStart = /^(?:그리고|하지만|그래서|때문에|반면|다만|특히|또한|즉|이런|이렇게|무엇보다|한편|반대로|여기에|덕분에)(?:$|[,.?!])/;
-  const visibleLength = (text) => text.replace(/\*\*/g, '').length;
-  const isSafeBoundary = (parts) => ((parts.join(' ').match(/\*\*/g) || []).length % 2) === 0;
-  let remaining = [...words];
-
-  while (remaining.length) {
-    if (visibleLength(remaining.join(' ')) <= maxLength) {
-      lines.push(remaining.join(' '));
-      break;
-    }
-
-    let fallback = null;
-    let best = null;
-    for (let index = 1; index < remaining.length; index += 1) {
-      const left = remaining.slice(0, index);
-      const length = visibleLength(left.join(' '));
-      if (length <= targetLength && isSafeBoundary(left)) fallback = index;
-      if (length < minLength || length > maxLength || !isSafeBoundary(left)) continue;
-
-      const previous = remaining[index - 1];
-      const next = remaining[index] || '';
-      let boundaryScore = 0;
-      if (/[.!?…]$/.test(previous)) boundaryScore += 8;
-      else if (/[,;:]$/.test(previous)) boundaryScore += 6;
-      if (connectiveStart.test(next)) boundaryScore += 5;
-      const score = boundaryScore * 10 - Math.abs(targetLength - length);
-      if (!best || score > best.score) best = { index, score };
-    }
-
-    const firstSafeBoundary = remaining.findIndex((_, index) => index > 0 && isSafeBoundary(remaining.slice(0, index)));
-    const cut = best ? best.index : fallback || (firstSafeBoundary > 0 ? firstSafeBoundary : remaining.length);
-    lines.push(remaining.slice(0, cut).join(' '));
-    remaining = remaining.slice(cut);
-  }
-  return lines;
+  return wrapText(value, targetLength).split('\n').filter(Boolean);
 }
 
 function formatNewsParagraphs(article) {
-  article.blocks = (article.blocks || []).map((block) => {
-    if (block.type !== 'paragraph' || block.disclosure) return block;
-    const lines = String(block.text || '')
-      .split(/\n+/)
-      .flatMap((line) => wrapNewsLine(line, 28))
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return { ...block, text: lines.join('\n') };
-  });
+  article.blocks = formatArticle(article).blocks;
 
   // 어떤 생성 결과에서도 최소 대표 이미지 자리는 유지한다.
   if (!article.blocks.some((block) => block.type === 'image')) {
@@ -260,43 +221,25 @@ function formatNewsParagraphs(article) {
   return article;
 }
 
-function wrapProductLine(value, targetLength = 27) {
-  const lines = wrapNewsLine(value, targetLength);
-  const dependentStart = /^(?:뒤(?:까지)?|때(?:문에)?|경우|만큼|정도|후|전|중|위해|통해|따라|덕분에|사이|안에서)(?:\s|$|[,.?!])/;
-
-  for (let index = 1; index < lines.length; index += 1) {
-    if (!dependentStart.test(lines[index])) continue;
-    const previousWords = lines[index - 1].split(/\s+/).filter(Boolean);
-    if (previousWords.length < 2) continue;
-    const moved = previousWords.pop();
-    // 굵은 구절 경계를 옮기면 마크다운 범위가 깨질 수 있으므로 그대로 둔다.
-    if (((moved.match(/\*\*/g) || []).length % 2) === 1) continue;
-    lines[index - 1] = previousWords.join(' ');
-    lines[index] = `${moved} ${lines[index]}`;
-  }
-  return lines.filter(Boolean);
+function wrapProductLine(value, targetLength = 28) {
+  return wrapNewsLine(value, targetLength);
 }
 
 // 쇼핑 글도 내용은 줄이지 않고 모바일에서 읽기 좋은 의미 단위로 줄을 나눈다.
-// 공백에서만 자르며 **굵게** 구간 중간에는 줄바꿈을 만들지 않는다.
+// 광고 고지·소제목·요약도 동일한 상한을 적용한다.
 function formatProductParagraphs(article) {
-  article.blocks = (article.blocks || []).map((block) => {
-    if (block.type !== 'paragraph' || block.disclosure) return block;
-    const lines = String(block.text || '')
-      .split(/\n+/)
-      .flatMap((line) => wrapProductLine(line, 27))
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return { ...block, text: lines.join('\n') };
-  });
+  article.blocks = formatArticle(article).blocks;
   return article;
 }
 
 const NEWS_TITLE_FORBIDDEN_RE = /충격|정체|결국|소름|전부\s*공개/;
 const NEWS_PREDICTION_RE =
   /시청률.{0,12}(?:오르|나오|기록|예상)|흥행.{0,12}(?:하|성공|예상)|관계.{0,12}(?:변하|달라질|발전)|향후\s*전개|앞으로.{0,16}(?:전개|관계)|될\s*것으로\s*보|기대해도\s*좋/;
-// 사실 뒤에 작가가 억지로 의미를 판정하는 AI식 마무리 문장.
-// 실제로 어색했던 문장 틀만 재작성 대상으로 삼아 정상적인 설명은 보존한다.
+const NEWS_AI_SPEECH_RE =
+  /(?:가장\s*새로운\s*)?선택지(?:예요|입니다)|살펴볼\s*수\s*있어요|확인하면\s*돼요|이어질\s*차례예요/;
+const NEWS_ARTIFICIAL_INTRO_RE =
+  /(?:숫자|매출|몸무게|나이).{0,25}(?:만\s*보면|보면).{0,35}(?:느껴질|생각할|보일)\s*수\s*있어요/;
+// 확인된 사실 뒤에 작가의 판정을 덧붙이는 부자연스러운 종결어미도 걸러낸다.
 const NEWS_AI_STYLE_RE =
   /(?:이번\s*(?:뉴스|소식|근황)).{0,24}(?:핵심|중심).{0,12}(?:가깝습니다|입니다|보입니다)|(?:구분해서|나눠서|따로)\s*보는\s*편이\s*자연스럽습니다|(?:더|더욱)\s*(?:잘\s*어울립니다|또렷하게\s*드러났죠|돋보입니다)|(?:헤어\s*컬러|스타일|분위기)의\s*존재감(?:이|은)?\s*(?:더욱\s*)?(?:또렷하게\s*드러났죠|돋보입니다)/;
 
@@ -307,7 +250,7 @@ function inspectNewsArticle(article, refs = []) {
   const text = (article.blocks || []).map((block) => block.text || '').join(' ');
   const issues = [];
   const emphasisCount = m.headings + m.quotes;
-  const boldCount = (text.match(/\*\*(.+?)\*\*/g) || []).length;
+  const boldCount = (text.replace(/\*\*\n\*\*/g, ' ').match(/\*\*(.+?)\*\*/g) || []).length;
 
   if (m.chars < MIN_CHARS) issues.push(`본문 ${m.chars}자(최소 ${MIN_CHARS}자)`);
   if (m.images < MIN_IMAGES || m.images > 4) issues.push(`이미지 슬롯 ${m.images}개(기본 2~4개, 관련 사진이 1장뿐이면 게시 단계에서 1장 허용)`);
@@ -320,9 +263,14 @@ function inspectNewsArticle(article, refs = []) {
   )) issues.push('강조 블록이 연속으로 배치됨');
   if (NEWS_TITLE_FORBIDDEN_RE.test(article.title || '')) issues.push('제목 금지 표현 포함');
   if (isTitleTooSimilarToAny(article.title, refs)) issues.push('기사 제목과 지나치게 유사');
-  if (NEWS_TITLE_FORBIDDEN_RE.test(text)) issues.push('본문 금지 표현 포함');
-  if (NEWS_PREDICTION_RE.test(text)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
-  if (NEWS_AI_STYLE_RE.test(text)) issues.push('사실을 해석형 종결어미로 마무리한 AI식 문장 포함');
+  const plainText = text.replace(/\*\*/g, '').replace(/\s+/g, ' ');
+  if (NEWS_TITLE_FORBIDDEN_RE.test(plainText)) issues.push('본문 금지 표현 포함');
+  if (NEWS_PREDICTION_RE.test(plainText)) issues.push('흥행·관계·향후 전개 예측 표현 포함');
+  if (NEWS_AI_SPEECH_RE.test(plainText)) issues.push('사람이 잘 쓰지 않는 선택·추천 해설 표현 포함');
+  if (NEWS_AI_STYLE_RE.test(plainText)) issues.push('사실을 해석형 종결어미로 마무리한 AI식 문장 포함');
+  const firstParagraph = (article.blocks || []).find((block) => block.type === 'paragraph');
+  const introText = String(firstParagraph?.text || '').replace(/\*\*/g, '').replace(/\s+/g, ' ');
+  if (NEWS_ARTIFICIAL_INTRO_RE.test(introText)) issues.push('독자 반응을 추측하는 인위적인 서론 포함');
   if (!(article.blocks || []).some((block) => block.type === 'paragraph')) issues.push('본문 문단 없음');
 
   return issues;
@@ -349,7 +297,7 @@ async function writeArticle(topic, refs) {
     .join('\n\n');
 
   // 이번 글의 구성 프레임 선택 (부적합 제외 → 최근 사용 회피 → 가중 랜덤)
-  const frame = frames.pickFrame('celeb', { refText });
+  const frame = frames.pickFrame('celeb', { refText, topic });
 
   let article = await codex.invokeJson(buildPrompt(topic, refText, frame), { timeoutMs: WRITE_TIMEOUT_MS });
   if (!article || !article.title || !Array.isArray(article.blocks)) {
@@ -369,7 +317,7 @@ async function writeArticle(topic, refs) {
       `[writer] 뉴스 글 QA 미달(${qaIssues.join(', ')}) → 재작성`
     );
     const note = `\n※ QA 검수에서 다음 문제가 발견됐습니다: ${qaIssues.join(', ')}.
-핵심 사실 2~3개와 하나의 관점만 유지하고 기사 순서·문장을 따라 쓰지 마세요. 본문은 ${MIN_CHARS}자 이상 쓰세요. 독자가 기억할 짧은 quote 1~2개와 필요한 heading 0~1개를 사용하되 합계 1~3개를 지키고, 짧은 핵심 구절 1~3곳만 **굵게** 표시하세요. 같은 내용을 중복 강조하거나 강조 블록을 연달아 놓지 마세요. 이미지 슬롯은 기본 2~4개로 작성하고 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하세요. 관련 사진이 실제로 1장뿐이면 게시 단계에서 1장만 사용합니다. 모든 글은 왼쪽 정렬입니다. 내용이나 설명을 줄이지 말고, 완성된 문장을 약 25~40자의 자연스러운 의미 단위로 줄바꿈해 보여주세요. 이미 일어난 사실은 "~했어요/~였어요/~로 알려졌어요"처럼 직접 말하고, "핵심에 더 가깝습니다/보는 편이 자연스럽습니다/더 잘 어울립니다/더 또렷하게 드러났죠" 같은 해석형 마무리는 쓰지 마세요. 마지막 2~4문장에는 근거 없는 전망이 아닌 짧은 개인 생각을 소제목 없이 넣고, 금지 표현 "충격/정체/결국/소름/전부 공개"를 쓰지 마세요.\n`;
+제목이 약속한 핵심 이야기를 유지하고 기사 순서·문장을 따라 쓰지 마세요. 장르별 안내라면 작품마다 필요한 확인 정보를 빼지 마세요. 본문은 ${MIN_CHARS}자 이상 쓰되 같은 사실과 감상을 반복해 늘리지 마세요. 독자가 기억할 짧은 quote 1~2개와 필요한 heading 0~1개를 사용하되 합계 1~3개를 지키고, 짧은 핵심 구절 1~3곳만 **굵게** 표시하세요. 같은 내용을 중복 강조하거나 강조 블록을 연달아 놓지 마세요. 이미지 슬롯은 기본 2~4개로 작성하고 첫 이미지는 본문 맨 위, 나머지는 관련 단락 사이에 배치하세요. 관련 사진이 실제로 1장뿐이면 게시 단계에서 1장만 사용합니다. 모든 글은 왼쪽 정렬입니다. 필요한 설명을 유지하고 공백·문장부호 포함 한 줄 최대 28자로 의미 단위에서 줄바꿈하세요. 쉬운 해요체로 문단을 자연스럽게 잇고 추상적인 평가·보고서 표현·가짜 경험을 덜어내세요. 마지막은 앞의 내용을 반복하지 않는 1~2문장으로 끝내며 개인 감상이나 교훈을 억지로 넣지 마세요. 금지 표현 "충격/정체/결국/소름/전부 공개"도 쓰지 마세요.\n`;
     try {
       let retry = await codex.invokeJson(buildPrompt(topic, refText, frame, note), { timeoutMs: WRITE_TIMEOUT_MS });
       if (retry && retry.title && Array.isArray(retry.blocks)) {
@@ -421,10 +369,15 @@ const PRODUCT_PRICE_BENEFIT_RE =
 
 // 쇼핑커넥트 글에는 출처와 변동 가격·혜택 정보가 남지 않도록 마지막 안전망을 적용한다.
 function sanitizeProductArticle(article, product) {
+  const removeSpecHeading = (value) => String(value || '').replace(/한눈에\s*보는\s*상품\s*스펙/g, '').trim();
   const cleanLines = (value) =>
     String(value || '')
       .split('\n')
-      .map((line) => line.replace(/\s*\(출처\s*[:：][^)]+\)\s*/gi, '').trim())
+      .map((line) => line
+        .replace(/\s*\(출처\s*[:：][^)]+\)\s*/gi, '')
+        .replace(/한눈에\s*보는\s*상품\s*스펙/g, '')
+        .replace(/^\*\*\s*\*\*$/, '')
+        .trim())
       .filter(
         (line) =>
           line &&
@@ -445,9 +398,10 @@ function sanitizeProductArticle(article, product) {
   if (PRODUCT_POST_FORBIDDEN_RE.test(article.title || '')) {
     article.title = `${deriveProductName(product.name)} 구성과 사용 전 확인할 점`;
   }
+  article.title = removeSpecHeading(article.title);
   article.titleAlternatives = (article.titleAlternatives || []).filter(
     (title) => !PRODUCT_POST_FORBIDDEN_RE.test(title)
-  );
+  ).map(removeSpecHeading).filter(Boolean);
   article.tags = (article.tags || []).filter((tag) => !PRODUCT_POST_FORBIDDEN_RE.test(tag));
   return article;
 }
@@ -476,11 +430,11 @@ function enforceShoppingConnectDisclosure(article) {
 function enforceSpecQuote(article, product) {
   const blocks = article.blocks;
   const isSpec = (b) =>
-    b.type === 'quote' && (/상품\s*스펙|핵심만\s*보기/.test(b.text) || /·\s*상품명/.test(b.text));
+    b.type === 'quote' && (b.spec === true || /상품\s*스펙|핵심만\s*보기|·\s*(상품명|제품\s*형태|형태|소재|크기|용량|색상|사이즈|사용\s*방식|선택\s*옵션)/.test(b.text || ''));
   const derived = deriveProductName(product.name);
   const idx = blocks.findIndex(isSpec);
   if (idx >= 0) {
-    // 이미 스펙 인용구가 있으면 첫 줄 형식만 "{상품명} 상품 스펙" 으로 정규화
+    // 이미 상품 정보 인용구가 있으면 첫 줄을 상품명만으로 정규화
     const lines = blocks[idx].text.split('\n');
     let head = String(lines[0] || '').trim();
     head = head
@@ -488,8 +442,9 @@ function enforceSpecQuote(article, product) {
       .replace(/\s*(상품\s*스펙|핵심만\s*보기)\s*$/, '')
       .trim();
     if (!head || /^·/.test(head)) head = derived; // 첫 줄이 항목(·)이면 파생 상품명 사용
-    lines[0] = `${head} 한눈에 보는 상품 스펙`;
+    lines[0] = head;
     blocks[idx].text = lines.join('\n');
+    blocks[idx].spec = true;
     // 대표 이미지 뒤 공감형 도입 문단 2개가 나온 다음으로 위치 이동
     const spec = blocks.splice(idx, 1)[0];
     const imgIdx = blocks.findIndex((b) => b.type === 'image');
@@ -505,7 +460,7 @@ function enforceSpecQuote(article, product) {
     blocks.splice(insertAt, 0, spec);
   } else {
     // 스펙 인용구가 아예 없으면 상품 정보로 최소 스펙을 만들어 삽입
-    const specText = [`${derived} 한눈에 보는 상품 스펙`, `· 상품명: ${derived}`].join('\n');
+    const specText = derived;
     const imgIdx = blocks.findIndex((b) => b.type === 'image');
     let insertAt = imgIdx >= 0 ? imgIdx + 1 : 0;
     let paragraphs = 0;
@@ -516,7 +471,7 @@ function enforceSpecQuote(article, product) {
         break;
       }
     }
-    blocks.splice(insertAt, 0, { type: 'quote', text: specText });
+    blocks.splice(insertAt, 0, { type: 'quote', text: specText, spec: true });
   }
   return article;
 }
@@ -526,7 +481,7 @@ function enforceSpecQuote(article, product) {
 function preservePurchaseReasonContext(article, purchaseReason) {
   const reason = String(purchaseReason || '').replace(/\s+/g, ' ').trim();
   const spec = article.blocks.find(
-    (block) => block.type === 'quote' && /(핵심만\s*보기|상품\s*스펙)/.test(block.text || '')
+    (block) => block.type === 'quote' && (block.spec === true || /(핵심만\s*보기|상품\s*스펙)/.test(block.text || ''))
   );
   if (spec) {
     spec.text = String(spec.text || '')
@@ -570,6 +525,8 @@ ${String(detail.description || '').slice(0, 6000)}
 초안 JSON:
 ${JSON.stringify(article)}
 
+${PRODUCT_STYLE}
+
 검수 질문(하나라도 부족하면 passed=false):
 1. 경제적 이해관계 문구가 본문 최상단에 정확히 한 번 있는가?
 2. 첫 3개 일반 문단 안에 독자의 문제가 구체적으로 제시됐는가?
@@ -579,26 +536,28 @@ ${JSON.stringify(article)}
 6. 상품이 없을 때 생기는 불편이 보이는가?
 7. 구매 후 언제, 어디서, 어떻게 사용하는지 떠오르는가?
 8. 생활 속 편의성과 활용성이 강조됐는가?
-9. 같은 장점이 3회 이상 반복되지 않았는가?
+9. 상단 상품 정보, 본문, 마무리에서 같은 장점이나 선택 기준을 목록으로 되풀이하지 않았는가?
 10. 각 인용구와 구간 전환마다 새로운 정보가 있는가?
 11. 상단 상품 스펙에 가격·배송·쿠폰·적립·기본 수량·수량별 옵션이 빠져 있는가?
 12. 기존 방법의 불편과 이 상품만의 차이가 생활 언어로 구분되는가?
-13. 잘 맞는 사람과 다른 방식이 더 맞을 수 있는 사람이 함께 제시됐는가?
-14. CTA가 독자의 반복 불편, 다른 선택, 상품 페이지에서 확인할 구체적인 항목을 연결하는가?
+13. 해당 상품이 필요한 상황과 실제로 중요한 선택 조건을 자연스럽게 설명했는가?
+14. 마지막 CTA가 이 상품이 필요한 사람과 구매 이유를 짧게 잇고, 주문 전 확인할 실제 조건과 상품 링크를 누를 행동까지 분명히 안내하는가?
 15. 직접 사용한 것처럼 꾸민 문장과 치료·개선·예방 단정이 없는가?
-16. 제목에 구체적인 타깃의 고민·상황, 상품명, 사이즈·호환·용량·사용법·구성 같은 명확한 구매 판단 요소가 보이는가?
+16. 제목에 검색할 만한 상품명·제품군과 구매 전 궁금증 하나가 짧고 정확하게 담겼는가? 불필요한 조건을 이어 붙이지 않았는가?
 17. 제목이 '선택 포인트' 같은 막연한 말이나 같은 핵심 명사의 반복, 억지 검색어 나열로 끝나지 않는가?
+18. 상품을 이해한 뒤 정한 구체적인 소제목과 각 구간의 내용이 맞고, 불필요한 요점정리 없이 마무리되는가?
+19. 앞 문단에서 꺼낸 내용이 다음 문단으로 이어지고, 쉬운 해요체로 읽히며, 의미·평가·구매 이유를 매번 덧붙이는 문장틀이 없는가?
 
 100점 배점:
 - 제목의 클릭 유도력 10
 - 독자 문제의 구체성 15
 - 상품과 생활 문제 연결의 자연스러움 10
-- 상품 구매 이유의 명확성 25
+- 상품 구매 이유의 명확성 20
 - 실제 활용 장면 10
 - 대상 독자의 구체성 10
 - 정보 신뢰성과 과장 방지 10
 - 반복과 늘어지는 문장 제거 5
-- CTA의 자연스러움 5
+- CTA의 구체성과 구매 연결 10
 
 최종 질문: 상품 링크를 지워도 독자가 이 상품을 직접 검색해서 사고 싶을 만큼 구매 이유가 충분히 설득됐는가?
 
@@ -627,25 +586,30 @@ ${JSON.stringify(article)}
 검수 결과:
 ${JSON.stringify(audit)}
 
+${PRODUCT_STYLE}
+
 필수 수정 기준:
 - 첫 3문단 안에서 한 명확한 독자 문제를 구체적인 생활 장면으로 보여주세요.
 - 제품이 없을 때의 불편과 제품을 산 뒤 언제·어디서·어떻게 쓰는지 대비되게 쓰세요.
-- 확인된 특징마다 "그래서 왜 살 만한가"를 실제 편의와 연결하되 같은 장점을 반복하지 마세요.
+- 구매에 중요한 특징만 생활 속 편의와 연결하세요. 특징마다 구매 이유를 붙이거나 같은 장점을 다른 말로 반복하지 마세요.
 - 가장 큰 구매 이유를 한 문장으로 분명히 쓰고 purchaseReason에도 담으세요.
-- CTA 직전 문장은 링크를 누를 이유를 완성하고, 마지막 문단은 시스템이 붙일 상품 링크로 자연스럽게 이어지게 쓰세요.
+- 마무리에 요점정리 목록을 다시 넣지 마세요. 마지막 2~4문장은 처음 불편을 짧게 받고, 이 상품이 맞는 사람과 실제 확인할 크기·사용법·옵션을 짚은 뒤 시스템이 붙일 상품 링크로 곧장 이어가세요.
 - 리뷰·평점·과장 표현·상세페이지 해설체·직접 사용한 척하는 표현은 금지합니다.
 - 본문 최상단에는 정확한 쇼핑커넥트 경제적 이해관계 문구를 한 번 넣으세요.
+- 제목은 상품을 식별할 수 있는 짧은 상품명·제품군과 구매 전 궁금증 하나로 쓰세요. 공백 포함 25~35자 안팎을 목표로 하고 보통 38자를 넘기지 마세요. 사용자가 고른 제목은 그대로 유지하세요.
 - 상단 스펙에는 확인된 선택 정보만 쓰고 가격·배송·쿠폰·적립·기본 수량·수량별 옵션은 넣지 마세요.
-- 기존 방법의 불편, 상품만의 차이, 사용 장면, 잘 맞는 사람과 맞지 않는 사람, 구체적인 CTA를 빠뜨리지 마세요.
+- 기존 방법의 불편, 상품만의 차이, 사용 장면, 상품에 맞는 선택 조건, 구체적인 CTA를 빠뜨리지 마세요.
 - image 블록은 글 내용과 직접 연결되는 역할로 ${imgCount}개 넣으세요.
+- 쉬운 해요체로 앞 문단의 이야기를 이어 가세요. 설명을 늘리기 위한 문단과 반복 목록을 덜고, "저도 써보니", "~더라고요" 같은 경험은 만들지 마세요.
+- 본문·인용구·캡션은 공백·문장부호 포함 한 줄 최대 28자로 줄바꿈하세요. 문장과 필요한 정보는 유지하고 띄어쓰기·쉼표 등 의미가 이어지는 곳에서 나누세요. 굵게 표시 기호는 글자 수에서 제외합니다.
 
 JSON 형식:
 {
-  "title":"후킹 제목",
+  "title":"짧은 상품명·제품군 + 구매 전 궁금증 하나",
   "titleAlternatives":["대안1","대안2","대안3"],
   "purchaseReason":"현실적인 핵심 구매 이유 한 문장",
   "tags":["태그1"],
-  "blocks":[{"type":"paragraph","text":"${SHOPPING_CONNECT_DISCLOSURE}"},{"type":"image","slot":1,"caption":"사진 설명","desc":"대표"},{"type":"paragraph","text":"본문"},{"type":"quote","text":"상품명 한눈에 보는 상품 스펙\\n· 제품 형태: ...\\n· 사용 방식: ..."}]
+  "blocks":[{"type":"paragraph","text":"${SHOPPING_CONNECT_DISCLOSURE}"},{"type":"image","slot":1,"caption":"사진 설명","desc":"대표"},{"type":"paragraph","text":"본문"},{"type":"quote","text":"상품명\\n· 제품 형태: ...\\n· 사용 방식: ..."}]
 }`;
 }
 
@@ -663,12 +627,11 @@ async function selfReviewAutomaticProductArticle(article, product, detail, imgCo
     const firstThree = paragraphs.slice(0, 3).map((block) => block.text || '').join(' ');
     const lastParagraph = [...current.blocks].reverse().find((block) => block.type === 'paragraph');
     const localChecksPassed =
-      /고민|불편|번거|어렵|부담|헷갈|필요/.test(firstThree) &&
       Boolean(current.purchaseReason) &&
       /링크|확인|살펴|골라|선택/.test(lastParagraph?.text || '') &&
       current.blocks.filter((block) => block.type === 'image').length >= imgCount &&
       current.blocks[0]?.text === SHOPPING_CONNECT_DISCLOSURE &&
-      current.blocks.some((block) => block.type === 'quote' && /상품\s*스펙/.test(block.text || ''));
+      current.blocks.some((block) => block.type === 'quote' && block.spec === true);
     const passed =
       Number(audit?.score) >= 90 &&
       audit?.passed === true &&
@@ -709,7 +672,7 @@ async function selfReviewAutomaticProductArticle(article, product, detail, imgCo
  * @param {object} detail {description, images}
  * @returns {object} {title, titleAlternatives, tags, blocks}
  */
-function buildProductPrompt(product, detail, frame, imgCount, retryNote, selectedHook) {
+function buildProductPrompt(product, detail, frame, imgCount, retryNote, selectedHook, requestedKeyword = '') {
   const skill = skills.loadSkill('02-naver-shopping-connect-blog');
   if (!skill) throw new Error('쇼핑커넥트 스킬(skills/02-naver-shopping-connect-blog/SKILL.md)을 찾을 수 없습니다.');
 
@@ -726,12 +689,15 @@ ${skill}
 - 본문 최상단 첫 paragraph는 반드시 "${SHOPPING_CONNECT_DISCLOSURE}"로 정확히 쓰세요. 다른 광고 고지 문구를 덧붙이지 마세요.
 - 출처·공식 스토어·상세페이지 주소는 제목·본문·요약·캡션에 쓰지 마세요.
 - 가격·판매가·할인가·배송비·쿠폰·적립·무료배송·사은품처럼 변동 가능한 금액과 혜택은 본문 어디에도 쓰지 마세요.
+- 스킬의 줄 길이 기준보다 **공백·문장부호 포함 한 줄 최대 28자**가 우선입니다. 본문·인용구·캡션에 적용하고 긴 제목은 문구를 유지해 표시할 때 나눕니다. 광고 고지 문구의 내용은 바꾸지 마세요.
+
+${PRODUCT_STYLE}
 
 【생활밀착형 소개 글 스타일 — 반드시 이 형태로 쓸 것】
 1. 첫 문단은 상품 설명이 아니라 **이 상품이 필요한 사람의 실제 고민과 생활 장면**으로 시작하세요.
-   - "이런 거 필요하신 분들 계시죠?", "정품과 호환품 사이에서 헷갈리는 분들 많으시죠?", "막상 사려니 뭘 봐야 할지 어렵더라고요"처럼 독자가 자기 이야기라고 느끼는 자연스러운 질문을 활용하세요.
+   - 그 상품을 찾는 구체적인 상황을 바로 꺼내세요. "필요하신 분들 계시죠?", "헷갈리는 분들 많으시죠?"처럼 독자의 반응을 정해 놓는 질문으로 매번 시작하지 마세요.
    - 직접 사용한 척하거나 효과를 경험한 척하지 마세요. 조사하며 알게 된 선택 기준을 친근하게 소개하는 입장으로 쓰세요.
-   - 그렇다고 "직접 사용한 후기가 아니라", "확인된 자료를 토대로"처럼 글쓴이의 작성 방식을 해명하지 마세요. 직접 써봤다는 표현만 피하고, "저도 뭐가 다른지 궁금해서 구성을 하나씩 봤는데요"처럼 바로 이야기하세요.
+   - "직접 사용한 후기가 아니라", "확인된 자료를 토대로"처럼 작성 방식을 해명할 필요는 없습니다. "저도 처음엔", "하나씩 찾아봤는데요"처럼 개인 경험을 꾸미지 말고, 독자가 궁금해할 특징과 조건을 바로 설명하세요.
 2. **절대 금지 표현**: "상세페이지에는", "상세페이지에서는", "안내됩니다/안내됐습니다", "표시됩니다/표시돼 있습니다", "소개됩니다", "기재되어 있습니다".
    - 사실 근거를 밝힐 필요가 있을 때는 "상세페이지에서 확인되는 특징은"을 한 번 정도 사용할 수 있지만, 페이지를 읽어주는 식으로 반복하지 마세요.
    - 상품 정보를 출처 화면의 문구처럼 설명하지 말고, "10장이 한 묶음이라 여유분을 두고 싶은 분에게 맞아요", "A9·A9S 올인원타워를 쓴다면 먼저 모델을 확인해보세요"처럼 **생활 속 의미와 선택 기준**으로 바꾸세요.
@@ -740,38 +706,38 @@ ${skill}
    - 리뷰에서 발견한 주의점이 있더라도 리뷰를 인용하거나 경험담처럼 소개하지 마세요. 확인이 필요한 내용만 "호환품은 정품과 모양이나 장착감이 다를 수 있으니 처음 끼운 뒤 잘 고정됐는지 봐주세요"처럼 **가능성과 확인 방법**으로 짧게 바꾸세요.
    - 본문은 상품의 구성, 수량, 호환 모델, 형태, 선택 옵션, 교체 방법처럼 공식 상품 자료에서 확인되는 특징을 중심으로 풀어주세요.
 3. 블록 순서: ① 경제적 이해관계 paragraph → ② image slot 1(대표) → ③ 공감형 도입 paragraph 2~3개 → ④ **quote 블록 하나에 상품 스펙**.
-   - 스펙 첫 줄은 반드시 "{상품명} 한눈에 보는 상품 스펙"으로 쓰세요.
+   - 상품 정보의 첫 줄에는 상품명만 쓰세요. 상투적인 설명형 제목은 붙이지 마세요.
    - 스펙 안에는 "· 구매 이유:" 항목을 넣지 마세요. 구매 이유는 도입과 본문에서 자연스럽게 설명하세요.
-   - 형태·소재·크기/용량·색상·사이즈·사용 방식·선택 옵션·핵심 기능·추천 환경·구매 전 확인사항 중 실제 구매 판단에 필요한 항목 4~7개만 고르세요.
+    - 형태·소재·크기/용량·색상·사이즈·사용 방식·선택 옵션·핵심 기능·구매 전 확인사항 중 실제 구매 판단에 필요한 항목만 고르세요. 단순한 상품은 3~4개면 충분합니다.
    - 확인되지 않은 항목은 만들지 말고 "사이즈 옵션은 판매 페이지에서 확인"처럼 표시하세요.
    - 가격·배송비·쿠폰·적립·기본 구성 수량·세트별 개수·수량별 구매 옵션은 상단 스펙에 넣지 마세요. 기본 구성이나 수량이 핵심이라면 본문 중간에서 한 번만 자연스럽게 설명하세요.
-4. **소제목(heading) 블록을 쓰지 마세요.** 구간 전환은 **quote 블록(8~20자 짧은 구절)**로 합니다.
+4. 상품을 파악한 뒤 각 구간의 내용에 맞는 **소제목(heading)**을 정하세요. 상품별 특성에 맞춰 보통 2~4개만 쓰고, 정보가 적으면 더 줄이세요.
    예: "섬유항균제는 세탁세제와 역할이 달라요", "공간에 따라 다르게 쓸 수 있는 2in1 구조"
-   핵심 요약을 포함해 quote는 전체 3~4개만 사용하세요.
-5. 문단은 **1~3문장**으로 자연스럽게 이어 쓰세요. 짧은 문장을 기계적으로 잘라 나열하지 말고, 전체 paragraph 블록은 10~15개 정도면 충분합니다.
-6. 상품 특징을 말할 때마다 "그래서 어떤 사람에게 편한지", "어떤 생활 상황에서 선택 이유가 되는지"를 함께 설명하세요.
-   - 본문 흐름은 고객의 문제 → 기존 방법의 한계 → 상품만의 차이 → 실제 활용 장면 → 구매 전 확인사항 → 잘 맞는 사람과 다른 방식이 더 맞을 수 있는 사람 순서를 기본으로 합니다.
-   - 기능 이름만 적지 말고 "기능 → 쓰는 장면 → 얻는 편의" 순서로 생활 언어로 바꾸세요.
+   quote는 상단 스펙에 사용하고, 본문 구간 전환은 heading으로 구분하세요.
+5. 문단은 **1~3문장**으로 자연스럽게 이어 쓰세요. 짧은 문장을 기계적으로 잘라 나열하거나 문단 수를 맞추려고 설명을 늘리지 마세요. 앞 문단에서 꺼낸 이야기를 이어 받고, 내용이 달라질 때 새 문단으로 나누세요.
+6. 핵심 특징이 어떤 상황에서 도움이 되는지 알 수 있게 설명하되, 특징마다 같은 구매 이유를 덧붙이지 마세요.
+   - 독자의 궁금증을 따라 상황, 상품 특징, 쓰는 장면, 구매 전 조건을 이어 가세요. 고정된 설득 단계에 맞춰 문단을 하나씩 채우지 마세요. 다른 방식과의 차이는 자료로 설명할 수 있을 때만 다루세요.
+   - 기능 이름만 나열하지 말고 뜻과 용도를 쉬운 생활 언어로 설명하세요. 모든 문장을 "기능 → 장면 → 편의" 틀로 쓰지는 마세요.
    - 자연스러운 생활형 흐름은 유지하면서, 상세 자료로 확인된 핵심 사양·수치·기능 2~4개는 구체적으로 쓰세요. 용량·크기·모델명·작동 방식·충전 방식처럼 실제 선택에 도움이 되는 정보만 고르세요.
-   - 핵심 사양 바로 뒤에는 그 정보가 어떤 사람과 생활 장면에서 왜 중요한지 연결하세요. 사양을 별도 목록으로 반복하지 마세요.
+    - 중요한 사양이 실제 사용과 연결될 때만 짧게 설명하세요. 상단 상품 정보에 쓴 사실을 끝에서 다시 목록으로 반복하지 마세요.
    - 사용 후 관리나 주의점은 꼭 필요한 1~2개만 본문에 자연스럽게 넣고, 사용설명서처럼 길게 나열하지 마세요.
    - "Pro Tip", "중요 참고", "FAQ", "자주 묻는 질문" 섹션을 만들지 마세요.
    - "혁신적/획기적/전문가 수준/극대화/필수템/패러다임/체력 소모 제로/만능 해결사/검증된 내구성" 같은 과장 광고 표현을 쓰지 마세요.
 7. 이미지는 대표 1장 + 구간 사이사이 배치.
-8. 제목: 이번 글의 구성 프레임 성격에 맞게 짓되 상품명이 들어가게 하세요. 매번 같은 "~라면, 상품명" 틀을 반복하지 말고 프레임에 맞춰 변형하세요.
-   (문제 해결형 예: "실내건조 빨래 냄새가 고민이라면, 랩신 섬유항균제 사용법과 구성" / 비교·선택형 예: "○○ 사이즈 어떤 걸 골라야 할까, 모델별 차이 정리" / 체크리스트형 예: "○○ 구매 전 확인할 5가지")
-9. 말투는 **친한 사람에게 알아본 내용을 설명해 주는 대화체**로 쓰세요.
-   - "~다고 해요 / ~더라고요 / ~하면 좋겠습니다 / ~봐주세요 / ~거든요 / ~죠"를 문맥에 맞게 섞으세요.
-   - 같은 어미를 연달아 반복하지 말고, 지나치게 조심스러운 "~할 수 있어요 / ~될 수 있어요"도 반복하지 마세요.
-   - 상품을 평가하는 해설자 말투보다 "저도 처음엔 헷갈렸는데 하나씩 보니 어렵지 않았어요", "이 부분만 먼저 봐주세요"처럼 사람이 옆에서 알려주는 느낌을 내세요.
+8. 제목: 상품을 식별할 짧은 이름·제품군을 앞에 두고 구매 전 궁금증 하나만 붙이세요. 공백 포함 25~35자 안팎을 목표로 하고 보통 38자를 넘기지 마세요. 정확한 모델명이나 사용자 지정 키워드가 길 때만 예외로 하세요.
+   상황·소재·사이즈·호환·사용법을 한 제목에 모두 붙이지 마세요. "살펴봤어요", "선택 포인트", "구성 확인"처럼 질문에 답하지 않는 말은 빼세요.
+9. 말투는 **지인에게 이야기하듯 쉽고 담백한 해요체**로 쓰세요.
+   - "~예요", "~있어요", "~하면 돼요"를 기본으로 하고, "~죠", "~거든요"는 앞뒤 문맥에 맞을 때만 쓰세요. 어미를 다양하게 보이려고 억지로 섞지 마세요.
+   - 같은 어미와 문장틀의 반복은 덜어내되, "~더라고요", "~해봤는데"로 사용하지 않은 경험을 꾸미지 마세요. "~할 수 있어요 / ~될 수 있어요"도 습관적으로 붙이지 마세요.
+   - "선택의 기준이 됩니다", "이 지점에 주목", "단순히 A가 아닌 B", "생활의 질을 높여줘요" 같은 해설·광고 표현을 구체적인 일상어로 바꾸세요. 문장 끝만 해요체로 고치는 것으로 끝내지 마세요.
    - "정리하면 세 가지만 기억하세요"처럼 글 전체를 보고서식으로 요약하며 끝내지 마세요. 마지막에는 이 상품이 필요한 사람을 한 번 더 떠올려주고 자연스럽게 링크로 이어주세요.
-   - 글 마지막에 "마지막 체크", "구매 전 체크", "체크리스트" 같은 인용구나 글머리표 요약을 만들지 마세요. 이미 본문에서 설명한 모델명·구성·사용법·주의점을 다시 나열하지 말고, 마지막 1~2문단은 이 상품이 필요한 생활 장면과 독자의 마음을 자연스럽게 이어 마무리하세요.
+    - "{상품명} 요점정리" 같은 의무적인 재요약 섹션은 넣지 마세요. 필요한 정보를 설명했으면 바로 마지막 문단으로 넘어가세요.
    - 핵심 구성, 꼭 확인할 조건, 독자가 기억해야 할 선택 기준 가운데 1~3곳은 반드시 **굵게** 표시하세요.
-   - 문장 전체를 계속 굵게 만들지 말고 짧은 핵심 구절만 강조하세요. 핵심 요약과 내용 전환은 quote 3~4개로 구분하고, 같은 내용을 굵게와 quote로 중복 강조하지 마세요.
+   - 문장 전체를 계속 굵게 만들지 말고 짧은 핵심 구절만 강조하세요. 내용 전환은 상품별 heading으로 구분하고, 같은 내용을 굵게와 quote로 중복 강조하지 마세요.
    - 짧은 quote는 편집기에서 본문보다 큰 글자로 표시되므로, 독자가 기억할 핵심을 8~20자의 자연스러운 구절로 쓰세요. 여러 줄 핵심 요약에는 긴 문장을 넣지 마세요.
-   - 마지막 CTA는 반복되는 불편 → 기존 방식과 다른 선택 → 상품 페이지에서 바로 확인할 옵션이나 조건 순서로 1~2문단만 쓰세요. "한번 살펴보세요"처럼 모호하게 끝내지 마세요.
+    - 마지막 CTA는 2~4문장으로 끝내세요. 처음의 불편을 짧게 떠올린 다음 왜 이 상품이 맞는지 한 번만 말하고, 실제 구매 전에 볼 크기·사용법·옵션 가운데 중요한 것만 짚어 상품 링크로 이어가세요. "관심 있다면 살펴보세요"만으로 끝내지 마세요.
 10. 본문 글자 수에는 최소·목표·최대 제한이 없습니다. 상품 정보가 단순하면 간결하게 쓰고, 사이즈·색상·옵션·구성·기능·사용법이 많으면 구매 판단에 필요한 정보가 충분히 전달될 때까지 유연하게 쓰세요. 숫자 목표에 맞추려고 내용을 늘리거나 줄이지 말고 같은 설명을 반복하지 마세요. 제목·이미지·인용구·본문·캡션·해시태그·상품 링크를 포함한 포스팅 전체를 왼쪽 정렬합니다.
-   - 문장 내용은 줄이지 말고 약 25~40자의 자연스러운 의미 단위로 줄바꿈하세요. 띄어쓰기·쉼표·접속 표현처럼 호흡이 쉬는 곳에서 나누고, 단어·조사·**굵은 구절** 중간은 자르지 마세요.
+   - 문장 내용은 유지하고 **한 줄 공백·문장부호 포함 최대 28자**로 줄바꿈하세요. 보통 18~28자 안에서 띄어쓰기·쉼표 등 읽는 호흡이 쉬는 곳을 고르되 억지로 줄을 채우지 마세요. 단어와 조사는 붙이고, 굵게 표시하는 기호는 글자 수에서 제외합니다. 굵은 구절도 길면 자연스러운 경계에서 줄을 나누세요.
 
 ${selectedHook ? `【사용자가 고른 고민과 제목 — 다른 제목으로 바꾸지 말 것】
 - 최종 제목: ${selectedHook.title}
@@ -783,15 +749,22 @@ ${selectedHook ? `【사용자가 고른 고민과 제목 — 다른 제목으�
 - 글의 중심 방향: ${selectedHook.angle}
 제목은 위 최종 제목을 글자 하나까지 그대로 사용하고, 도입과 본문 전체를 선택된 고민·상황에 맞춰 쓰세요. 다른 고민을 중심으로 바꾸거나 제목 대안을 새로 만들지 마세요.` : ''}
 
+${requestedKeyword ? `【사용자가 직접 지정한 핵심 키워드 — 최우선 적용】
+- 지정 키워드: ${requestedKeyword}
+- 최종 제목에 위 키워드를 띄어쓰기까지 그대로 자연스럽게 한 번 포함하세요.
+- 본문 첫 3개 일반 문단 안에 한 번 넣고, 이후에도 문맥상 필요한 곳에만 자연스럽게 사용하세요.
+- 키워드와 무관한 방향으로 글을 넓히거나 다른 유사어로 바꿔 제목의 검색 의도를 흐리지 마세요.
+- 같은 문장이나 문단에서 억지로 반복하지 말고, 제목이 약속한 궁금증을 본문에서 실제로 풀어주세요.` : ''}
+
 【구매 이유를 명확하게 쓰는 기준 — 반드시 적용】
 - 독자가 글을 읽고 "그래서 왜 이 제품을 사야 하지?"라는 의문이 남지 않게 하세요.
 - 구매 이유는 막연한 편리함이 아니라 "확인된 제품 특징 → 줄어드는 불편 또는 얻는 실용성 → 잘 맞는 사람·상황" 순서로 설명하세요.
-- 글 초반 2~4문단 안에서 가장 큰 구매 이유를 한 번 분명히 말하고, 본문에는 서로 겹치지 않는 구체적인 구매 이유 2~4개를 제품 정보와 함께 풀어주세요.
+- 글 초반에 가장 큰 구매 이유를 한 번 분명히 말하세요. 본문에는 그 이유를 뒷받침할 서로 다른 선택 정보만 더하고, 이유의 개수를 맞추려고 설명을 늘리지 마세요.
 - "무조건 사야 해요", "필수예요"처럼 밀어붙이지 말고, 다른 제품에도 붙일 수 있는 두루뭉술한 장점은 쓰지 마세요.
 - 구매 이유는 상단 스펙에 별도 항목으로 반복하지 말고 도입과 본문 흐름에서 자연스럽게 전달하세요.
 
 ${frames.renderFrameInstruction(frame, 'product')}
-※ 위 구성 프레임은 이번 글에만 적용됩니다. 도입 문구·구간 구절·마무리 표현을 상투적인 틀 대신 이 프레임 흐름에 맞게 새로 지으세요.
+※ 구성 프레임은 참고 순서입니다. 단계마다 내용을 억지로 채우지 말고 독자의 궁금증과 실제 상품 정보에 맞게 문단을 연결하세요.
 ※ 상세페이지에서 확인되지 않는 성능·효과·수치는 단정하지 마세요.
 
 【상품 정보 (상세페이지에서 수집)】
@@ -804,21 +777,21 @@ ${String(detail.description || '').slice(0, 6000)}
 
 【출력 형식 — 이 JSON으로만】
 {
-  "title": "독자 문제 + 해결 실마리, 상품명 흐름의 제목",
+  "title": "짧은 상품명·제품군 + 구매 전 궁금증 하나",
   "titleAlternatives": ["제목 대안1", "제목 대안2", "제목 대안3"],
   "purchaseReason": "확인된 제품 특징과 구매자의 고민을 연결한 핵심 구매 이유 한 문장",
   "tags": ["해시태그1", "해시태그2"],
   "blocks": [
     {"type":"paragraph","text":"${SHOPPING_CONNECT_DISCLOSURE}"},
     {"type":"image","slot":1,"caption":"자연스러운 사진 설명","desc":"대표"},
-    {"type":"paragraph","text":"정품과 호환품 사이에서 헷갈리는 분들 많으시죠? 내 생활 속 고민을 먼저 꺼내는 도입입니다."},
-    {"type":"paragraph","text":"왜 이 상품을 찾아보게 되는지 공감하며 선택 기준을 자연스럽게 예고합니다."},
-    {"type":"quote","text":"○○○ 한눈에 보는 상품 스펙\\n· 형태: ...\\n· 크기/용량: ...\\n· 선택 옵션: ...\\n· 이런 분께: ..."},
-    {"type":"quote","text":"구간을 여는 짧은 구절"},
+    {"type":"paragraph","text":"이 상품을 찾는 구체적인 상황을\\n바로 꺼내는 문단"},
+    {"type":"paragraph","text":"앞 문단의 궁금증에 이어\\n상품의 특징을 설명하는 문단"},
+    {"type":"quote","text":"○○○\\n· 형태: ...\\n· 크기/용량: ...\\n· 선택 옵션: ...\\n· 이런 분께: ..."},
+    {"type":"heading","text":"상품 특징에 맞춰 정한 소제목"},
     {"type":"paragraph","text":"본문 1~2문장.\\n다음 줄."},
     {"type":"image","slot":2,"caption":"사진 설명","desc":"핵심 특징"},
     {"type":"paragraph","text":"..."},
-    {"type":"quote","text":"생활 속 사용 장면을 여는 짧은 구절"},
+    {"type":"heading","text":"상품별 사용 장면을 여는 소제목"},
     {"type":"paragraph","text":"이 상품이 필요한 사람과 실제 생활 장면을 자연스럽게 풀어 쓴 문단"},
     {"type":"paragraph","text":"마무리와 링크 유도 문단"}
   ]
@@ -842,7 +815,7 @@ async function writeProductArticle(product, detail, selectedHook = null, options
   const frame = frames.pickFrame('product', { detailText });
 
   const run = async (note) => {
-    const raw = await codex.invokeJson(buildProductPrompt(product, detail, frame, imgCount, note, selectedHook), {
+    const raw = await codex.invokeJson(buildProductPrompt(product, detail, frame, imgCount, note, selectedHook, options.requestedKeyword), {
       timeoutMs: WRITE_TIMEOUT_MS,
     });
     if (!raw || !raw.title || !Array.isArray(raw.blocks)) {
@@ -869,7 +842,7 @@ async function writeProductArticle(product, detail, selectedHook = null, options
 
   // 프레임·문체 요건 미달 시에만 1회 보강 재작성한다. 글자 수 자체는 재작성 조건이 아니다.
   const m = measure(article);
-  const frameIssue = frame.check ? frame.check(article) : null;
+  const frameIssue = null; // 상품별 소제목과 흐름이 고정 프레임 검사보다 우선
   const text = article.blocks.map((block) => block.text || '').join(' ');
   const paragraphText = article.blocks
     .filter((block) => block.type === 'paragraph')
@@ -896,12 +869,10 @@ async function writeProductArticle(product, detail, selectedHook = null, options
       ? 'FAQ·Pro Tip 등 사용설명서형 구조 포함'
     : promotionalLanguage
       ? '근거 없는 과장 광고 표현 포함'
-    : !empatheticIntro
-      ? '독자 고민에 공감하는 도입 부족'
-      : null;
+    : null;
   if (frameIssue || styleIssue) {
     console.log(`[writer] 상품 글 기준 미달(글자 ${m.chars}${frameIssue ? `, ${frameIssue}` : ''}${styleIssue ? `, ${styleIssue}` : ''}) → 재작성`);
-    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(본문 ${m.chars}자${frameIssue ? `, ${frameIssue}` : ''}${styleIssue ? `, ${styleIssue}` : ''}). 본문 최상단에는 지정된 쇼핑커넥트 경제적 이해관계 문구를 정확히 한 번 넣고, 그 다음 대표 이미지와 독자의 구체적인 생활 고민으로 시작하세요. "상세페이지에는/상세페이지에서는/안내됩니다/표시됩니다/소개됩니다", "직접 사용한 후기가 아니라", "확인된 자료를 토대로", "선택 이유가 될 수 있어요", "~라고 전했어요", "생활 패턴에 어울려요" 같은 해설·보고서 표현은 쓰지 마세요. 리뷰·평점·구매자 반응·자주 묻는 질문·FAQ·Pro Tip과 과장 광고 표현은 모두 제외하세요. 가격·배송·할인·쿠폰·적립·사은품은 쓰지 마세요. 상품의 사이즈·색상·옵션·구성·기능·사용법·관리법 중 확인된 정보를 구매 판단에 충분하도록 생활 장면과 연결하세요. 기존 방법의 불편, 상품만의 차이, 실제 활용 장면, 잘 맞는 사람과 맞지 않는 사람, 구체적인 CTA를 빠뜨리지 마세요. 본문 분량은 상품 정보량에 따라 정하고 반복해서 늘리지 마세요.\n`;
+    const note = `\n※ 이전 결과가 기준에 못 미쳤습니다(본문 ${m.chars}자${frameIssue ? `, ${frameIssue}` : ''}${styleIssue ? `, ${styleIssue}` : ''}). 본문 최상단에는 지정된 쇼핑커넥트 경제적 이해관계 문구를 정확히 한 번 넣고, 그 다음 대표 이미지와 독자의 구체적인 생활 고민으로 시작하세요. "상세페이지에는/상세페이지에서는/안내됩니다/표시됩니다/소개됩니다", "직접 사용한 후기가 아니라", "확인된 자료를 토대로", "선택 이유가 될 수 있어요", "~라고 전했어요", "생활 패턴에 어울려요" 같은 해설·보고서 표현은 쓰지 마세요. 리뷰·평점·구매자 반응·자주 묻는 질문·FAQ·Pro Tip과 과장 광고 표현은 모두 제외하세요. 가격·배송·할인·쿠폰·적립·사은품은 쓰지 마세요. 상품의 사이즈·색상·옵션·구성·기능·사용법·관리법 중 확인된 정보를 구매 판단에 충분하도록 생활 장면과 연결하세요. 기존 방법의 불편, 상품만의 차이, 실제 활용 장면, 상품에 맞는 선택 조건, 구체적인 CTA를 빠뜨리지 마세요. 본문 분량은 상품 정보량에 따라 정하고 반복해서 늘리지 마세요.\n`;
     try {
       const retry = await run(note);
       const rm = measure(retry);
@@ -915,13 +886,27 @@ async function writeProductArticle(product, detail, selectedHook = null, options
   // 어떤 프레임으로 썼는지 기록 (이력 표시 + 다음 글의 중복 회피에 사용)
   article.frameKey = frame.key;
   article.frameLabel = frame.label;
-  article = formatProductParagraphs(article);
   if (options.selfReview) {
     article = await selfReviewAutomaticProductArticle(article, product, detail, minimumImages);
     article.frameKey = frame.key;
     article.frameLabel = frame.label;
-    article = formatProductParagraphs(article);
   }
+  // 자동 선정 상품은 제목 선택 단계가 없으므로 최종 원고에서도 길이를 확인한다.
+  if (!selectedHook?.title && productTitleIssue(article.title, options.requestedKeyword)) {
+    const result = await codex.invokeJson(`다음 쇼핑커넥트 원고의 제목만 다시 쓰세요.
+상품명: ${product.name || ''}
+현재 제목: ${article.title}
+본문에서 다룬 내용: ${article.blocks.filter(b => b.type === 'paragraph').map(b => b.text).join(' ').slice(0, 1200)}
+상품을 식별할 짧은 이름·제품군을 앞에 두고 구매 전 궁금증 하나만 붙이세요. 공백 포함 25~35자 안팎, 보통 38자 이하입니다. 확인된 모델명과 사실을 지키고 '살펴봤어요', '선택 포인트', '추천 제품', '알아보기'는 쓰지 마세요.
+${options.requestedKeyword ? `지정 키워드 "${options.requestedKeyword}"를 정확히 포함하세요.` : ''}
+JSON 형식: {"title":"새 제목"}`, { timeoutMs: WRITE_TIMEOUT_MS });
+    if (productTitleIssue(result?.title, options.requestedKeyword)) {
+      throw new Error('짧고 자연스러운 상품 제목을 만들지 못했습니다. 다시 시도해 주세요.');
+    }
+    article.title = String(result.title).trim();
+    article.titleAlternatives = [];
+  }
+  article = formatProductParagraphs(article);
   return article;
 }
 
@@ -929,32 +914,36 @@ async function writeProductArticle(product, detail, selectedHook = null, options
  * 상품 링크를 받은 뒤 글을 쓰기 전에 고민형 제목 3개와 키워드형 제목 1개를 만든다.
  * 제품 특성에 가장 잘 맞는 제목 하나도 함께 추천하며, 사용자가 고른 뒤 본문 생성을 시작한다.
  */
-async function suggestProductHooks(product, detail) {
+async function suggestProductHooks(product, detail, requestedKeyword = '') {
   const prompt = `아래 상품을 분석해 네이버 블로그용 제목 전략을 세우세요.
-서로 다른 구매 고민을 다룬 고민형 제목 3개와, 실제 검색 의도를 반영한 키워드형 제목 1개를 제안하세요.
+상품의 실제 이름·제품군·특징을 먼저 파악해 사람들이 검색할 핵심어와 구매 전에 궁금해할 점을 고르세요.
+서로 다른 구매 고민을 다룬 짧은 제목 3개와, 실제 검색 의도를 반영한 제목 1개를 제안하세요.
 네 제목 가운데 이 제품에 가장 잘 맞을 것으로 판단되는 제목 하나도 추천하세요.
 
 상품명: ${product.name || '상품'}
 카테고리: ${product.query || ''}
 확인된 상품 정보:
 ${String(detail.description || '').slice(0, 5000)}
+${requestedKeyword ? `\n사용자가 직접 지정한 핵심 키워드: ${requestedKeyword}\n이 키워드를 네 개 제목 모두에 띄어쓰기까지 그대로 자연스럽게 포함하고, 각 제목의 검색 의도와 본문 방향에도 최우선으로 반영하세요.` : ''}
 
 규칙:
 - choices의 1~3번은 concern 유형, 4번은 keyword 유형으로 정확히 구성하세요.
 - 고민형 세 제목은 고민과 사용 상황이 서로 달라야 합니다.
-- 이 제품이 왜 필요한지 또는 어떤 상황에서 선택하는지가 제목에 보여야 합니다.
-- 제목은 '구체적인 타깃의 고민·상황 + 상품명 + 명확한 구매 판단 요소'가 한눈에 보이게 만드세요.
-- 타깃은 막연한 연령·성별이 아니라 발볼·발등, 설치 공간, 호환 모델, 사용 장소처럼 이 상품을 실제로 찾는 사람의 조건으로 좁히세요.
-- 제목 끝에는 막연한 '선택 포인트', '추천 제품', '알아보기'보다 상품에 맞는 '사이즈 선택', '호환 확인', '용량 비교', '사용법', '구성 확인'처럼 구체적인 판단 요소를 쓰세요.
-- 예시 형식: "발볼 넓고 발등 높다면? 밸롭 마무링 지압 슬리퍼 사이즈 선택"
+- 제목 공식은 '검색할 만한 상품명·제품군 + 궁금한 점 하나'입니다. 이름과 제품군 중 검색에 필요한 말은 앞쪽에 두세요.
+- 고민·상황·사이즈·호환·용량·사용법을 한 제목에 전부 넣지 마세요. 가장 중요한 한 가지만 제목에 남기고 나머지는 concern·situation·angle과 본문에서 설명하세요.
+- 공백과 문장부호를 포함해 25~35자 안팎을 목표로 하고, 보통 38자를 넘기지 마세요. 정확한 모델명이나 사용자 지정 키워드가 길면 필요한 만큼만 예외로 두세요. 무조건 25자 이상 채울 필요는 없습니다.
+- 상품명이 긴 판매처 문구라면 브랜드·모델·제품군처럼 식별에 필요한 부분만 사용하세요. 확인된 모델명을 바꾸거나 다른 상품을 만들어서는 안 됩니다.
+- 예시: "불스원 EZ클린 TPE 카매트, 코일매트 청소가 번거롭다면" / "불스원 EZ클린 TPE 카매트, 세척법과 차종 선택". 카매트가 아닌 상품에 이 문구를 복사하지 마세요.
+- 제목은 사람이 검색창에 입력할 법한 말로 자연스럽게 쓰세요. 사용자가 실제로 궁금해할 한 가지를 본문이 답해야 합니다.
+- '살펴봤어요', '선택 포인트', '추천 제품', '알아보기', '구성 확인'처럼 제목만 늘리고 구매 질문에는 답하지 않는 표현은 빼세요. 단, 실제 구성 차이를 설명하는 글이라면 '구성'을 쓸 수 있습니다.
 - 같은 핵심 명사를 반복하거나 검색어를 나열하지 말고, 확인되지 않은 타깃 고민·기능·효과는 만들지 마세요.
 - 각 방향마다 확인된 제품 특징과 고민을 연결한 핵심 구매 이유를 한 문장으로 쓰세요.
 - 구매 이유는 "편리해서", "실용적이라서"처럼 두루뭉술하게 쓰지 말고, 구체적인 구성·크기·기능·사용 방식이 어떤 불편을 줄이는지 밝혀야 합니다.
-- 상품명을 자연스럽게 포함하세요.
+- 상품을 식별할 수 있는 짧고 정확한 상품명을 자연스럽게 포함하세요.
 - 과장, 공포 조장, 확인되지 않은 효과, 가격, 리뷰, 평점은 쓰지 마세요.
 - 직접 사용한 것처럼 쓰지 마세요.
 - '충격', '정체', '결국', '소름', '전부 공개' 같은 낚시 표현은 금지합니다.
-- 키워드형 제목은 상품명, 제품군, 모델·용량·사이즈·호환·사용법처럼 상세 정보에서 확인된 핵심 검색어와 구매 판단 의도를 자연스러운 문장으로 조합하세요.
+- 키워드형 제목도 핵심 검색어와 구매 전 궁금증 하나만 자연스러운 문장으로 조합하세요.
 - 키워드형 제목은 핵심 검색어를 앞쪽에 두되 같은 단어를 반복하거나 검색어를 쉼표로 나열하지 마세요. 확인되지 않은 인기 키워드나 검색량 수치를 만들지 마세요.
 - recommendedIndex는 제품의 검색 방식과 정보 구조를 보고 0~3 중 하나를 고르세요. 모델명·규격·호환·용량처럼 명확한 검색어가 중요한 상품은 keyword 유형을 우선 검토하고, 생활 불편이 구매를 촉발하는 상품은 concern 유형을 우선 검토하세요.
 - recommendationReason에는 왜 그 제목 전략이 이 제품에 적합한지 한 문장으로 설명하세요.
@@ -964,13 +953,18 @@ JSON 형식:
   "recommendedIndex": 3,
   "recommendationReason": "이 제품은 모델명과 호환 여부를 함께 찾는 구매자가 많을 유형이라 핵심 검색어가 앞에 오는 제목이 적합합니다.",
   "choices": [
-    {"type":"concern", "title":"고민이 포함된 후킹 제목", "concern":"구매자의 구체적인 고민", "situation":"이 제품을 선택하는 생활 상황", "purchaseReason":"확인된 특징이 이 고민을 해결해 구매할 이유", "angle":"글에서 풀어갈 중심 방향", "keywords":[]},
+    {"type":"concern", "title":"짧은 상품명 + 궁금증 하나", "concern":"구매자의 구체적인 고민", "situation":"이 제품을 선택하는 생활 상황", "purchaseReason":"확인된 특징이 이 고민을 해결해 구매할 이유", "angle":"글에서 풀어갈 중심 방향", "keywords":[]},
     {"type":"concern", "title":"...", "concern":"...", "situation":"...", "purchaseReason":"...", "angle":"...", "keywords":[]},
     {"type":"concern", "title":"...", "concern":"...", "situation":"...", "purchaseReason":"...", "angle":"...", "keywords":[]},
     {"type":"keyword", "title":"핵심 검색어가 자연스럽게 들어간 제목", "concern":"이 검색을 하는 구매자의 확인 목적", "situation":"검색 후 구매를 판단하는 상황", "purchaseReason":"검색어와 연결되는 확인된 제품 특징과 구매 이유", "angle":"키워드에서 구매 판단으로 이어지는 글의 중심 방향", "keywords":["핵심키워드", "구매의도키워드"]}
   ]
 }`;
-  const raw = await codex.invokeJson(prompt, { timeoutMs: WRITE_TIMEOUT_MS });
+  let raw;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const retryNote = attempt ? '\n\n직전 제목이 길거나 검색어·구매 질문이 흐렸습니다. 4개 모두 짧고 서로 다른 자연스러운 제목으로 다시 작성하세요. 제품명·사용자 지정 키워드와 JSON 항목은 유지하세요.' : '';
+    raw = await codex.invokeJson(prompt + retryNote, { timeoutMs: WRITE_TIMEOUT_MS });
+    if (!productTitleIssues(raw?.choices, requestedKeyword).length) break;
+  }
   const choices = Array.isArray(raw && raw.choices) ? raw.choices : [];
   const normalized = choices
     .map((choice, index) => ({
@@ -987,6 +981,11 @@ JSON 형식:
     .filter((choice) => choice.title && choice.concern && choice.situation && choice.purchaseReason)
     .slice(0, 4);
   if (normalized.length !== 4) throw new Error('고민형 제목 3개와 키워드형 제목 1개를 만들지 못했습니다. 다시 시도해주세요.');
+  if (requestedKeyword && normalized.some((choice) => !choice.title.includes(requestedKeyword))) {
+    throw new Error(`지정 키워드 "${requestedKeyword}"가 제목에 정확히 반영되지 않았습니다. 제목 뽑기를 다시 눌러주세요.`);
+  }
+  const titleIssues = productTitleIssues(normalized, requestedKeyword);
+  if (titleIssues.length) throw new Error('짧고 자연스러운 상품 제목을 만들지 못했습니다. 제목 뽑기를 다시 눌러주세요.');
   const requestedIndex = Number(raw && raw.recommendedIndex);
   const recommendedIndex = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < 4
     ? requestedIndex
@@ -998,10 +997,33 @@ JSON 형식:
   };
 }
 
+function productTitleIssues(choices, requestedKeyword = '') {
+  if (!Array.isArray(choices) || choices.length !== 4) return ['제목 4개 필요'];
+  const titles = choices.map(choice => String(choice?.title || '').replace(/\s+/g, ' ').trim());
+  const issues = [];
+  if (titles.some(title => !title)) issues.push('빈 제목');
+  if (titles.some(title => productTitleIssue(title, requestedKeyword))) issues.push('제목 품질');
+  if (new Set(titles).size !== 4) issues.push('중복 제목');
+  return issues;
+}
+
+function productTitleIssue(value, requestedKeyword = '') {
+  const title = String(value || '').replace(/\s+/g, ' ').trim();
+  const keyword = String(requestedKeyword || '').trim();
+  const maxLength = Math.max(38, [...keyword].length + 18);
+  if (!title) return '빈 제목';
+  if ([...title].length > maxLength) return '제목 길이';
+  if (keyword && !title.includes(keyword)) return '지정 키워드 누락';
+  if (/살펴봤어요|선택\s*포인트|추천\s*제품|알아보기|한눈에\s*보기/.test(title)) return '빈 설명 표현';
+  return null;
+}
+
 module.exports = {
   writeArticle,
   writeProductArticle,
   suggestProductHooks,
+  productTitleIssues,
+  productTitleIssue,
   measure,
   inspectNewsArticle,
   wrapNewsLine,

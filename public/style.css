@@ -190,6 +190,11 @@ input[type="text"], select {
 
 .preview { text-align: left; }
 .preview > * { text-align: left; }
+.preview { word-break: keep-all; overflow-wrap: anywhere; }
+.preview h1, .preview h3, .preview .caption, .preview .tags, .preview a {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .preview h1 { font-size: 24px; margin-bottom: 18px; text-align: left; }
 .preview h3 { font-size: 19px; margin: 22px 0 8px; text-align: left; }
 .preview p {
@@ -217,6 +222,11 @@ input[type="text"], select {
 .preview img { max-width: 100%; border-radius: 8px; display: block; margin: 14px 0 4px; }
 .preview .caption { font-size: 12px; color: #999; text-align: left; margin-bottom: 14px; }
 .preview .tags { margin-top: 20px; font-size: 13px; color: #2563eb; text-align: left; }
+@media (max-width: 480px) {
+  .modal-box { width: 94vw; padding: 24px 18px; }
+  .preview h1 { font-size: 21px; }
+  .preview p { font-size: 15px; line-height: 1.8; }
+}
 .preview.preview-product blockquote.product-point {
   color: #333;
   font-size: 19px;
@@ -286,7 +296,7 @@ input[type="text"], select {
 .sf-scene.active { border-color: #7c3aed; box-shadow: 0 0 0 2px #ede9fe; background: #faf8ff; }
 .sf-scene textarea, .sf-scene input, .sf-scene button { cursor: auto; }
 .sf-thumb { position: relative; width: 62px; height: 110px; flex: 0 0 62px; border-radius: 8px; overflow: hidden; background: #eef1f4; cursor: pointer; }
-.sf-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sf-thumb img, .sf-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .sf-thumb .sf-thumb-no { position: absolute; top: 4px; left: 4px; font-size: 11px; font-weight: 800; color: #fff; background: rgba(0,0,0,.55); border-radius: 6px; padding: 1px 6px; }
 .sf-badge { position: absolute; left: 4px; bottom: 4px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; }
 .sf-badge-ai { background: #7c3aed; }
@@ -320,3 +330,11 @@ textarea#captionInput { border: 1px solid #d5dade; border-radius: 8px; padding: 
 .sf-modal-box { width: min(440px, 94vw); padding: 20px; }
 .sf-modal-stage { background: #0b0d10; border-radius: 12px; overflow: hidden; display: flex; justify-content: center; padding: 8px 0; }
 .sf-modal-stage canvas { width: min(360px, 82vw); height: auto; display: block; border-radius: 8px; }
+:root { --prompt-border: #e1e5eb; }
+.prompt-references { display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:8px; }
+.prompt-reference { display:flex; flex-direction:column; gap:8px; min-width:0; padding:10px; border:1px solid var(--prompt-border); border-radius:10px; }
+.prompt-reference img { width:100%; height:100px; object-fit:contain; background:#f5f6f8; border-radius:6px; }
+.prompt-reference small { overflow-wrap:anywhere; }
+.prompt-scene { margin-top:12px; border-top:1px solid var(--prompt-border); padding-top:12px; }
+.prompt-scene summary { cursor:pointer; font-weight:600; overflow-wrap:anywhere; }
+.prompt-scene textarea { width:100%; box-sizing:border-box; margin:10px 0; resize:vertical; line-height:1.6; }

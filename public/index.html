@@ -37,8 +37,9 @@
         <div class="mode-box">
           <h3>📰 연예인 뉴스 글</h3>
           <p class="hint">최신 연예인 패션·뷰티·생활용품·건강·방송/SNS 화제에서 AI가 글감을 찾아 글을 씁니다.<br />글 맨 아래에 <b>출처 링크</b>가 달립니다.</p>
-          <div class="row" style="gap:8px">
+          <div class="row" style="gap:8px;flex-wrap:wrap">
             <button id="newsModeBtn" class="btn btn-primary">🎲 자동 글감 찾기</button>
+            <button id="realtimeModeBtn" class="btn btn-primary" type="button">🔥 실시간 이슈 글감 찾기</button>
             <button id="newsStopBtn" class="btn btn-danger" type="button" hidden>글감 찾기 중지</button>
           </div>
           <div class="row" style="margin-top:10px; width:100%">
@@ -56,6 +57,10 @@
           <h3>🛒 쇼핑커넥트 소개 글</h3>
           <p class="hint">쇼핑커넥트에서 <b>지금 반응 좋은 상품 1개</b>를 자동 선정해 소개 글을 씁니다.<br />상세페이지 사진 사용, 맨 아래 <b>제휴 링크</b>가 달립니다.</p>
           <button id="productModeBtn" class="btn btn-green">상품 자동 선정 글쓰기</button>
+          <div class="row" style="margin-top:10px; width:100%">
+            <input id="productKeywordInput" type="text" placeholder="내가 지정할 핵심 키워드 (예: 원룸 제습기, 발 편한 슬리퍼)" style="flex:1; min-width:180px" />
+          </div>
+          <p class="hint" style="margin-top:5px">키워드를 입력하면 제목과 본문을 이 키워드에 맞춰 작성해요. 비워두면 AI가 상품에 맞는 키워드를 정합니다.</p>
           <div class="row" style="margin-top:10px; width:100%">
             <input id="productLinkInput" type="text" placeholder="또는 상품 링크 붙여넣기 (쇼핑커넥트/스마트스토어)" style="flex:1; min-width:180px" />
             <button id="productLinkBtn" class="btn btn-ghost">제목 뽑기</button>
@@ -186,6 +191,7 @@
   </div>
 
   <script src="shortform-render.js"></script>
+  <script src="article-format.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

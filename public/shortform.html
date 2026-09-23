@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>숏폼 생성기 (커스텀 · 4000)</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="shortform-layout.css" />
 </head>
-<body>
+<body class="shortform-studio">
   <header>
     <div class="wrap sf-wrap header-inner">
-      <h1>🎬 숏폼 생성기</h1>
+      <h1>숏폼 스튜디오</h1>
       <div class="login-area">
         <span id="sfTitle" class="hint" style="margin:0"></span>
         <a href="/" class="btn btn-ghost" style="text-decoration:none">← 대시보드</a>
@@ -171,6 +172,21 @@
           <div id="scenesList" class="sf-scenes"></div>
         </div>
 
+        <section class="card" id="promptCard" aria-labelledby="promptHeading">
+          <h2 id="promptHeading">장면별 이미지 프롬프트 <span class="hint-inline">9:16</span></h2>
+          <p class="hint">인물·상품 참조이미지를 최대 5장 올려 주세요. 이미지를 분석해 현재 대본에 맞는 프롬프트를 만듭니다. 참조 없이도 만들 수 있습니다.</p>
+          <div id="promptReferences" class="prompt-references"></div>
+          <div class="row" style="margin-top:12px">
+            <button id="promptGenerate" class="btn btn-primary">참조 분석 · 프롬프트 만들기</button>
+            <button id="promptCopyAll" class="btn btn-green" disabled>전체 프롬프트 복사</button>
+            <button id="promptDownload" class="btn btn-ghost" disabled>프롬프트 TXT</button>
+          </div>
+          <p class="hint">복사한 프롬프트와 참조이미지를 함께 채팅창에 첨부하세요. 전체 복사에는 “위 프롬프트를 이해하고 순차적으로 이미지를 생성하여 다운로드 폴더에 저장해줘.”가 마지막에 붙습니다.</p>
+          <p id="promptStatus" class="status" role="status" aria-live="polite">준비 중…</p>
+          <div id="promptAnalysis"></div>
+          <div id="promptResults"></div>
+        </section>
+
         <div class="card">
           <h2>업로드용 캡션</h2>
           <textarea id="captionInput" rows="4" style="width:100%"></textarea>
@@ -185,6 +201,8 @@
   </main>
 
   <script src="shortform-render.js"></script>
+  <script src="shortform-prompts.js"></script>
+  <script src="shortform-layout.js"></script>
   <script src="shortform.js"></script>
 </body>
 </html>

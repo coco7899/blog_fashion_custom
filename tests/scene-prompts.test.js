@@ -1,0 +1,53 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const data = fs.mkdtempSync(path.join(os.tmpdir(), 'scene-prompts-'));
+process.env.BLOG_FASHION_DATA_DIR = data;
+const store = require('../src/store');
+const codex = require('../src/codex');
+const { mount, makeResult, finishLine } = require('../src/scene-prompts');
+const scenes = [{ text: '상품 전체 모습', narration: '상품을 살펴봐요.', imageDesc: '' }, { text: '디테일', narration: '옆면을 확인해요.', imageDesc: '' }];
+test('individual and batch prompts preserve reference slots and exact final instruction', () => {
+  const refs = [{ slot: 2, name: '상품.jpg' }, { slot: 5, name: '인물.png' }];
+  const result = makeResult({ references: refs.map(r => ({ slot:r.slot,description:'파란 의상과 둥근 손잡이' })), scenes: scenes.map(() => ({referenceSlots:[2],imagePrompt:'자연광 아래 제품 전체 모습',videoPrompt:'천천히 접근'})) }, scenes, refs);
+  assert.deepEqual(result.prompts[0].referenceSlots, [2]);
+  assert.match(result.prompts[0].prompt, /참조 2 \(상품.jpg\)/);
+  assert.match(result.prompts[1].prompt, /scene-02.png/);
+  assert.ok(result.allText.endsWith(finishLine));
+  assert.match(result.allText, /참조 5: 인물.png/);
+  assert.throws(() => makeResult({ scenes:[] },scenes,refs), /수가 맞지/);
+  assert.throws(() => makeResult({ scenes:scenes.map(()=>({imagePrompt:'x',referenceSlots:[6]})) },scenes,[]), /존재하지 않는/);
+});
+test('reference upload, five-image attachment, locking, persisted result and invalidation', async () => {
+  const express = require('express');
+  const app = express(); app.use(express.json({limit:'30mb'})); mount(app);
+  store.saveShortform('test', { title:'상품 테스트', scenes });
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening',resolve));
+  const base = `http://127.0.0.1:${server.address().port}/api/drafts/test/shortform/prompts`;
+  const call = (suffix='',method='GET',body) => fetch(base+suffix,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  const original = codex.invokeJson;
+  let complete, attached;
+  codex.invokeJson = async (prompt, options) => { attached=options.imagePaths; return new Promise(resolve => { complete=resolve; }); };
+  try {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5L8AAAAASUVORK5CYII=';
+    for(let slot=1;slot<=5;slot++) assert.equal((await call('/references/'+slot,'PUT',{name:`ref-${slot}.png`,dataUrl:png})).status,200);
+    assert.equal((await call('/references/6','PUT',{dataUrl:png})).status,400);
+    assert.equal((await call('/references/1','PUT',{dataUrl:'data:image/png;base64,ZmFrZQ=='})).status,400);
+    assert.equal((await call('','POST',{scenes})).status,202);
+    assert.equal(attached.length,5); attached.forEach(file=>assert.ok(fs.existsSync(file)));
+    assert.equal((await call('/references/1','DELETE')).status,409);
+    assert.equal((await call('','POST',{scenes})).status,409);
+    complete({references:[1,2,3,4,5].map(slot=>({slot,description:'참조 특징'})),scenes:scenes.map(()=>({referenceSlots:[1,5],imagePrompt:'참조 형태를 유지하는 장면'}))});
+    await new Promise(resolve=>setTimeout(resolve,20));
+    const result = await (await call()).json();
+    assert.equal(result.status,'ready'); assert.ok(result.result.allText.endsWith(finishLine));
+    assert.deepEqual(store.getShortform('test').scenes, scenes);
+    assert.equal((await call('/references/1')).status,200);
+    const removed = await (await call('/references/1','DELETE')).json();
+    assert.equal(removed.references.length,4); assert.equal(removed.result,undefined);
+    assert.equal((await call('/references/1')).status,404);
+  } finally { codex.invokeJson=original; await new Promise(resolve=>server.close(resolve)); }
+});

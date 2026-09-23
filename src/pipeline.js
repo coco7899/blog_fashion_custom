@@ -16,7 +16,7 @@ const imageZip = require('./imageZip');
 const productPlans = new Map();
 const PRODUCT_PLAN_TTL_MS = 30 * 60 * 1000;
 
-async function prepareProductChoices(productUrl) {
+async function prepareProductChoices(productUrl, requestedKeyword = '') {
   const now = Date.now();
   for (const [id, plan] of productPlans) {
     if (now - plan.createdAt > PRODUCT_PLAN_TTL_MS) productPlans.delete(id);
@@ -26,7 +26,8 @@ async function prepareProductChoices(productUrl) {
   const product = resolved.product;
   const detail = resolved.detail || {};
   if (!product || !product.name) throw new Error('상품 정보를 확인하지 못했습니다. 링크를 확인해주세요.');
-  const titlePlan = await writer.suggestProductHooks(product, detail);
+  const cleanKeyword = String(requestedKeyword || '').trim().slice(0, 100);
+  const titlePlan = await writer.suggestProductHooks(product, detail, cleanKeyword);
   const choices = titlePlan.choices;
   const planId = crypto.randomUUID();
   productPlans.set(planId, {
@@ -38,6 +39,7 @@ async function prepareProductChoices(productUrl) {
     choices,
     recommendedIndex: titlePlan.recommendedIndex,
     recommendationReason: titlePlan.recommendationReason,
+    requestedKeyword: cleanKeyword,
   });
   return {
     planId,
@@ -45,6 +47,7 @@ async function prepareProductChoices(productUrl) {
     choices,
     recommendedIndex: titlePlan.recommendedIndex,
     recommendationReason: titlePlan.recommendationReason,
+    requestedKeyword: cleanKeyword,
   };
 }
 
@@ -217,6 +220,7 @@ async function runProduct(draftId, visibility, opts = {}) {
       link = plan.link;
       detail = plan.detail || {};
       selectedHook = plan.choices[selectedIndex];
+      selectedHook.requestedKeyword = plan.requestedKeyword || String(opts.requestedKeyword || '').trim();
       console.log(`[pipeline] 사용자가 고른 상품 제목: ${selectedHook.title.slice(0, 60)}`);
     } else if (opts.productUrl) {
       // 1-b. 사용자가 지정한 상품 링크로
@@ -256,7 +260,7 @@ async function runProduct(draftId, visibility, opts = {}) {
 
     store.updateDraft(draftId, {
       product,
-      keyword: product.query || '쇼핑커넥트 상품',
+      keyword: selectedHook?.requestedKeyword || String(opts.requestedKeyword || '').trim() || product.query || '쇼핑커넥트 상품',
       title: selectedHook?.title || (product.name || '상품').slice(0, 40),
       selectedProductHook: selectedHook || undefined,
     });
@@ -276,6 +280,7 @@ async function runProduct(draftId, visibility, opts = {}) {
     const article = await writer.writeProductArticle(product, detail, selectedHook, {
       minImages: automaticSelection ? 4 : 2,
       selfReview: automaticSelection,
+      requestedKeyword: selectedHook?.requestedKeyword || String(opts.requestedKeyword || '').trim(),
     });
     store.saveArticle(draftId, article);
     store.updateDraft(draftId, {
